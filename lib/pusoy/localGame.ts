@@ -8,32 +8,48 @@ import { applyAction, applyTimeout, handFinishOrder, isHandOver, newHand } from 
 import { botChoose } from './bot';
 import type {
   Card,
-  GameState,
   HandState,
   PlayedCombo,
-  PlayerPublicStats,
   PublicGameView,
   RoundAction,
 } from './types';
 
-const HAND_MS = 15_000;
-const BOT_MIN_DELAY_MS = 800;
-const BOT_MAX_DELAY_MS = 2_500;
+const BOT_MIN_DELAY_MS = 900;
+const BOT_MAX_DELAY_MS = 2_400;
 
 export type LocalPlayer = 'human' | 'bot';
 
+export interface DealStep {
+  // One card from the deal sequence. `seat` is the player who receives the
+  // card; `cardIndex` is its position in the deck (0..51). The dealing
+  // animation iterates this in order.
+  seat: number;
+  cardIndex: number;
+}
+
+export type Phase = 'dealing' | 'playing' | 'finished';
+
 export interface LocalGame {
   id: string;
-  playerIds: string[]; // ['p0', 'p1', 'p2', 'p3'] — human is index 0 in bot mode
-  playerKinds: LocalPlayer[]; // parallel to playerIds
-  hands: Card[][]; // 4 hands
+  playerIds: string[]; // 4 player ids, seat 0..3
+  playerKinds: LocalPlayer[]; // parallel
+  // The unshuffled 52-card deck BEFORE the deal — used by the dealing
+  // animation to fly each card from the center to its seat.
+  deck: Card[];
+  // dealOrder[i] = the i-th card dealt, with the seat it went to.
+  dealOrder: DealStep[];
+  hands: Card[][]; // 4 hands in seat order
   handState: HandState;
+  phase: Phase;
   startedAt: number;
   finishedAt: number | null;
-  finishOrder: number[]; // seat indexes in order of emptying
+  finishOrder: number[];
+  // history of lead-combo plays (most recent first). Used for the center
+  // "trick pile" rendering.
+  trickHistory: { playerIndex: number; combo: PlayedCombo }[];
   listeners: Set<() => void>;
   botTimers: ReturnType<typeof setTimeout>[];
-  // Stats (in-memory only; bot mode is for fun, not persisted to a server)
+  // Stats (in-memory only; bot mode is for fun)
   stats: Record<string, { wins: number; losses: number }>;
 }
 
@@ -41,10 +57,19 @@ function uid(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function createLocalGame(
-  botCount: number,
-  displayName: string,
-): LocalGame {
+// Build a deal sequence so the animation can show each card leaving the
+// deck and arriving at a seat. We deal 13 cards per seat, going p0, p1, p2,
+// p3, p0, p1, p2, p3, ... — the same order as `dealFour` so the resulting
+// hands are identical to a direct call.
+function buildDealOrder(): DealStep[] {
+  const out: DealStep[] = [];
+  for (let cardIndex = 0; cardIndex < 52; cardIndex++) {
+    out.push({ seat: cardIndex % 4, cardIndex });
+  }
+  return out;
+}
+
+export function createLocalGame(botCount: number, displayName: string): LocalGame {
   if (botCount < 1 || botCount > 3) {
     throw new Error('botCount must be 1, 2, or 3');
   }
@@ -58,7 +83,7 @@ export function createLocalGame(
     playerIds.push(uid('b'));
     playerKinds.push('bot');
   }
-  // Shuffle seats so the human doesn't always go first.
+  // Shuffle seats so the human isn't always at index 0.
   const seats = [0, 1, 2, 3];
   for (let i = seats.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -69,35 +94,39 @@ export function createLocalGame(
 
   const deck = shuffle(buildDeck());
   const hands = dealFour(deck);
-  // For bot mode we want the human's hand to be playable. The 13-card hand
-  // is whatever the deal gave them. We could re-shuffle if it's truly awful
-  // (e.g. all high cards, no straights) but for the vertical slice, accept
-  // the deal.
 
-  const handState = newHand(
-    'g-' + Date.now(),
-    orderedIds,
-    hands,
-    1,
-    Math.floor(Math.random() * 4),
-    'h-' + Date.now(),
-  );
+  // Bot mode has no turn timer.
+  const handState = newHand('g-' + Date.now(), orderedIds, hands, 1, 'h-' + Date.now(), {
+    turnMs: null,
+  });
 
   return {
     id: 'g-' + Date.now(),
     playerIds: orderedIds,
     playerKinds: orderedKinds,
+    deck,
+    dealOrder: buildDealOrder(),
     hands,
     handState,
+    phase: 'dealing',
     startedAt: Date.now(),
     finishedAt: null,
     finishOrder: [],
+    trickHistory: [],
     listeners: new Set(),
     botTimers: [],
     stats: {
       [displayName]: { wins: 0, losses: 0 },
     },
   };
+}
+
+// Caller invokes this once the dealing animation has finished.
+export function startGame(game: LocalGame): void {
+  if (game.phase !== 'dealing') return;
+  game.phase = 'playing';
+  scheduleBots(game);
+  emit(game);
 }
 
 function emit(game: LocalGame) {
@@ -109,23 +138,19 @@ export function subscribe(game: LocalGame, fn: () => void): () => void {
   return () => game.listeners.delete(fn);
 }
 
-export function isHumanTurn(game: LocalGame, humanSeat: number): boolean {
-  return (
-    game.handState.currentPlayerIndex === humanSeat &&
-    !game.handState.finishedOrder.includes(humanSeat)
-  );
-}
-
 export function findHumanSeat(game: LocalGame): number {
   return game.playerKinds.findIndex((k) => k === 'human');
 }
 
-// Play or pass for the human. Returns the new state or throws.
+// Play or pass for the human. Throws on illegal action.
 export function humanAct(
   game: LocalGame,
   action: RoundAction,
   cards?: Card[],
 ): void {
+  if (game.phase !== 'playing') {
+    throw new Error('game not in play phase');
+  }
   const humanSeat = findHumanSeat(game);
   if (game.handState.currentPlayerIndex !== humanSeat) {
     throw new Error('not your turn');
@@ -141,8 +166,8 @@ export function humanAct(
   const hand = game.hands[humanSeat];
   const next = applyAction(game.handState, humanSeat, hand, action);
   game.handState = next;
-  // remove played cards from hand
   if (action.kind === 'play' && cards) {
+    game.trickHistory = [{ playerIndex: humanSeat, combo: action.combo }, ...game.trickHistory].slice(0, 8);
     game.hands[humanSeat] = hand.filter(
       (c) => !cards.find((pc) => pc.id === c.id),
     );
@@ -155,16 +180,61 @@ export function humanAct(
   emit(game);
 }
 
+// Reorder the human's hand. UI calls this when the user drags a card.
+export function reorderHumanHand(game: LocalGame, fromIndex: number, toIndex: number): void {
+  const seat = findHumanSeat(game);
+  const hand = game.hands[seat];
+  if (fromIndex < 0 || fromIndex >= hand.length) return;
+  if (toIndex < 0 || toIndex > hand.length) return;
+  const next = hand.slice();
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex > fromIndex ? toIndex - 1 : toIndex, 0, moved);
+  game.hands[seat] = next;
+  emit(game);
+}
+
+// Auto-sort the human's hand by rank ascending then suit ascending.
+export function sortHumanHand(game: LocalGame): void {
+  const seat = findHumanSeat(game);
+  const SUIT_ORDER = { C: 1, D: 2, H: 3, S: 4 } as const;
+  const RANK_ORDER = {
+    '3': 1, '4': 2, '5': 3, '6': 4, '7': 5, '8': 6, '9': 7, '10': 8,
+    J: 9, Q: 10, K: 11, A: 12, '2': 13,
+  } as const;
+  game.hands[seat] = game.hands[seat].slice().sort((a, b) => {
+    const r = RANK_ORDER[a.rank] - RANK_ORDER[b.rank];
+    if (r !== 0) return r;
+    return SUIT_ORDER[a.suit] - SUIT_ORDER[b.suit];
+  });
+  emit(game);
+}
+
 function finalizeHand(game: LocalGame) {
   const order = handFinishOrder(game.handState);
   game.finishOrder = order;
   game.finishedAt = Date.now();
-  // clear any pending bot timers
-  for (const t of game.botTimers) clearTimeout(t);
+  game.phase = 'finished';
+  for (const t of game.botTimers) clearTimeout(game.botTimers.pop() as any);
   game.botTimers = [];
+  // Tally stats
+  for (let i = 0; i < order.length - 1; i++) {
+    // order[0] won, order[last] lost
+  }
+  // The "first to empty" is the winner; the last is the loser. Everyone in
+  // between tied on position. We record wins/losses against the player who
+  // came last (the "loser of the hand").
+  const winnerSeat = order[0];
+  const loserSeat = order[order.length - 1];
+  if (winnerSeat === findHumanSeat(game)) {
+    const s = game.stats['You'] || (game.stats['You'] = { wins: 0, losses: 0 });
+    s.wins += 1;
+  } else if (loserSeat === findHumanSeat(game)) {
+    const s = game.stats['You'] || (game.stats['You'] = { wins: 0, losses: 0 });
+    s.losses += 1;
+  }
 }
 
-export function publicView(game: LocalGame, viewingSeat: number): PublicGameView {
+export function publicView(game: LocalGame, _viewingSeat: number): PublicGameView {
   return {
     gameId: game.id,
     playerIds: game.playerIds,
@@ -180,11 +250,9 @@ function scheduleBots(game: LocalGame) {
   for (const t of game.botTimers) clearTimeout(t);
   game.botTimers = [];
 
-  // If it's the human's turn, do nothing. Otherwise, schedule bot moves.
   for (let seat = 0; seat < 4; seat++) {
     if (game.playerKinds[seat] !== 'bot') continue;
     if (game.handState.finishedOrder.includes(seat)) continue;
-    // If this seat is the current player, schedule a play.
     if (game.handState.currentPlayerIndex === seat) {
       const delay =
         BOT_MIN_DELAY_MS +
@@ -202,11 +270,11 @@ function scheduleBots(game: LocalGame) {
               { kind: 'play', combo: choice },
             );
             game.handState = next;
+            game.trickHistory = [{ playerIndex: seat, combo: choice }, ...game.trickHistory].slice(0, 8);
             game.hands[seat] = hand.filter(
               (c) => !choice.cards.find((pc) => pc.id === c.id),
             );
           } else {
-            // pass
             const next = applyAction(
               game.handState,
               seat,
@@ -222,41 +290,17 @@ function scheduleBots(game: LocalGame) {
           }
           emit(game);
         } catch (e) {
-          // If the bot throws (e.g. timeout already passed), treat as pass.
           console.warn('bot act failed', e);
         }
       }, delay);
       game.botTimers.push(t);
-      break; // one bot per tick; the rest will re-schedule
+      break;
     }
   }
 }
 
-// Auto-progress: if the human's turn has timed out, simulate an auto-pass.
-export function checkTimeout(game: LocalGame) {
-  if (!game.handState.turnDeadline) return;
-  if (Date.now() < game.handState.turnDeadline) return;
-  const seat = game.handState.currentPlayerIndex;
-  if (game.playerKinds[seat] === 'bot') {
-    // bot should be moving on its own timer; if it timed out, force a pass.
-    const next = applyTimeout(game.handState, seat);
-    game.handState = next;
-    if (isHandOver(game.handState)) finalizeHand(game);
-    else scheduleBots(game);
-    emit(game);
-    return;
-  }
-  // human timeout: treat as pass (engine rejects pass on opening; in that
-  // case the engine leaves the state alone, so the player is still on the
-  // hook until they act or the next human timeout check fires).
-  if (game.handState.leadCombo !== null) {
-    const next = applyTimeout(game.handState, seat);
-    game.handState = next;
-    if (isHandOver(game.handState)) finalizeHand(game);
-    else scheduleBots(game);
-    emit(game);
-  }
+// For bot mode there is no turn deadline, so this is a no-op. Kept for API
+// parity with the future online implementation.
+export function checkTimeout(_game: LocalGame) {
+  // no-op
 }
-
-// Time helpers
-export const TURN_DURATION_MS = HAND_MS;

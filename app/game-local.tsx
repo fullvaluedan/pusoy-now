@@ -1,18 +1,39 @@
-// Local (bot) game screen. Reads ?bots=N from the URL, creates a LocalGame,
-// and renders the table. No Supabase, no realtime — pure client state.
+// Bot game screen. Renders the table with full Bicycle-style cards.
+//
+// Features:
+//   - Dealing animation overlay (shuffle + deal)
+//   - Opponent seats with stacked face-down card counts
+//   - Center trick pile showing the last played combo
+//   - Human hand: tap to select, long-press + drag to reorder
+//   - "Organize" button — auto-sort by rank/suit
+//   - Play / Pass actions
+//   - Bot-mode only: no turn timer
+//   - Round-complete screen with finish order
+
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { detectCombo, canPlay } from '../lib/pusoy/combo';
 import {
-  checkTimeout,
+  Animated,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { DealingAnimation } from '../components/DealingAnimation';
+import { OpponentCardStack, PlayingCard } from '../components/PlayingCard';
+import { canPlay, detectCombo } from '../lib/pusoy/combo';
+import {
   createLocalGame,
   findHumanSeat,
   humanAct,
-  publicView,
+  reorderHumanHand,
+  sortHumanHand,
+  startGame,
   subscribe,
-  TURN_DURATION_MS,
   type LocalGame,
 } from '../lib/pusoy/localGame';
 import type { Card, PlayedCombo } from '../lib/pusoy/types';
@@ -24,73 +45,28 @@ const RANK_DISPLAY: Record<Card['rank'], string> = {
 const SUIT_GLYPH: Record<Card['suit'], string> = {
   C: '♣', D: '♦', H: '♥', S: '♠',
 };
-const SUIT_COLOR: Record<Card['suit'], string> = {
-  C: '#222', D: '#c0392b', H: '#c0392b', S: '#222',
-};
 
 function cardLabel(c: Card): string {
   return `${RANK_DISPLAY[c.rank]}${SUIT_GLYPH[c.suit]}`;
 }
 
-function comboLabel(combo: PlayedCombo): string {
-  const cards = combo.cards.map(cardLabel).join(' ');
-  if (combo.fiveType) {
-    const pretty =
-      combo.fiveType === 'fourOfAKind'
-        ? 'Four of a kind'
-        : combo.fiveType === 'fullHouse'
-        ? 'Full house'
-        : combo.fiveType === 'flush'
-        ? 'Flush'
-        : combo.fiveType === 'straightFlush'
-        ? 'Straight flush'
-        : 'Straight';
-    return `${pretty}: ${cards}`;
+function comboLabel(c: PlayedCombo): string {
+  if (c.fiveType) {
+    const t = c.fiveType === 'fourOfAKind' ? 'Four of a kind'
+      : c.fiveType === 'fullHouse' ? 'Full house'
+      : c.fiveType === 'flush' ? 'Flush'
+      : c.fiveType === 'straightFlush' ? 'Straight flush'
+      : 'Straight';
+    return `${t} — ${c.cards.map(cardLabel).join(' ')}`;
   }
-  if (combo.type === 'single') return `Single: ${cards}`;
-  if (combo.type === 'pair') return `Pair: ${cards}`;
-  return `Three of a kind: ${cards}`;
+  if (c.type === 'single') return `Single — ${c.cards.map(cardLabel).join(' ')}`;
+  if (c.type === 'pair') return `Pair — ${c.cards.map(cardLabel).join(' ')}`;
+  return `Three of a kind — ${c.cards.map(cardLabel).join(' ')}`;
 }
 
-// Card visual. A rounded rectangle with the rank + suit glyph.
-function CardView({ card, small = false, faceDown = false }: { card?: Card; small?: boolean; faceDown?: boolean }) {
-  const w = small ? 36 : 56;
-  const h = small ? 52 : 80;
-  if (faceDown || !card) {
-    return (
-      <View
-        style={[
-          styles.card,
-          { width: w, height: h, backgroundColor: '#0e4a3a', borderColor: '#0e4a3a' },
-        ]}
-      >
-        <Text style={{ color: '#fff', fontSize: small ? 14 : 22, fontWeight: '700' }}>?</Text>
-      </View>
-    );
-  }
-  return (
-    <View style={[styles.card, { width: w, height: h }]}>
-      <Text
-        style={{
-          color: SUIT_COLOR[card.suit],
-          fontSize: small ? 14 : 22,
-          fontWeight: '700',
-        }}
-      >
-        {RANK_DISPLAY[card.rank]}
-        {SUIT_GLYPH[card.suit]}
-      </Text>
-    </View>
-  );
-}
-
-function useNow(intervalMs: number) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(t);
-  }, [intervalMs]);
-  return now;
+function seatName(game: LocalGame, seat: number, displayName: string): string {
+  if (game.playerKinds[seat] === 'human') return displayName;
+  return `Bot ${seat + 1}`;
 }
 
 export default function LocalGameScreen() {
@@ -99,10 +75,11 @@ export default function LocalGameScreen() {
   const botCount = Math.max(1, Math.min(3, Number(params.bots) || 1));
 
   const [game, setGame] = useState<LocalGame | null>(null);
-  // Incrementing tick state to force re-render on bot moves.
+  // Re-render trigger on game state changes.
   const [tick, setTick] = useState(0);
   const [selected, setSelected] = useState<Card[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
 
   useEffect(() => {
     const g = createLocalGame(botCount, 'You');
@@ -113,37 +90,86 @@ export default function LocalGameScreen() {
     };
   }, [botCount]);
 
-  // Timer re-render
-  const now = useNow(200);
-
-  // Timeout checker
-  useEffect(() => {
-    if (!game) return;
-    const t = setInterval(() => {
-      checkTimeout(game);
-      setTick((x) => x + 1);
-    }, 500);
-    return () => clearInterval(t);
-  }, [game]);
-
-  const humanSeat = useMemo(() => (game ? findHumanSeat(game) : 0), [game]);
-  const view = useMemo(() => (game ? publicView(game, humanSeat) : null), [game, humanSeat, tick]);
-  const myHand = game?.hands[humanSeat] ?? [];
-
-  if (!game || !view) {
+  if (!game) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text>Loading…</Text>
+        <Text style={styles.loadingText}>Loading…</Text>
       </SafeAreaView>
     );
   }
 
-  const currentSeat = view.handState.currentPlayerIndex;
+  const humanSeat = findHumanSeat(game);
+  const myHand = game.hands[humanSeat];
+
+  // 1) Dealing animation overlay
+  if (game.phase === 'dealing') {
+    const playerNames = [0, 1, 2, 3].map((s) =>
+      s === humanSeat ? 'You' : `Bot ${s + 1}`,
+    );
+    return (
+      <SafeAreaView style={styles.container}>
+        <DealingAnimation
+          dealOrder={game.dealOrder}
+          playerKinds={game.playerKinds}
+          playerNames={playerNames}
+          onDone={() => startGame(game)}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // 2) Round-complete screen
+  if (game.phase === 'finished' && game.finishedAt) {
+    const youWon = game.finishOrder[0] === humanSeat;
+    const youLast = game.finishOrder[game.finishOrder.length - 1] === humanSeat;
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.finishCard}>
+          <Text style={styles.finishHeadline}>
+            {youWon ? 'You won!' : youLast ? 'You lost' : 'Hand over'}
+          </Text>
+          <Text style={styles.finishSub}>Finish order</Text>
+          {game.finishOrder.map((s, i) => (
+            <View key={i} style={styles.finishRow}>
+              <Text style={styles.finishPlace}>{i + 1}.</Text>
+              <Text style={styles.finishName}>
+                {s === humanSeat ? 'You' : `Bot ${s + 1}`}
+              </Text>
+            </View>
+          ))}
+          <View style={styles.finishActions}>
+            <Pressable
+              style={styles.btn}
+              onPress={() => {
+                const g = createLocalGame(botCount, 'You');
+                setGame(g);
+              }}
+            >
+              <Text style={styles.btnText}>Play again</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.btn, styles.btnGhost]}
+              onPress={() => router.replace('/')}
+            >
+              <Text style={styles.btnText}>Home</Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 3) Game in progress
+  const currentSeat = game.handState.currentPlayerIndex;
   const isMyTurn = currentSeat === humanSeat;
-  const turnLeftMs = view.handState.turnDeadline
-    ? Math.max(0, view.handState.turnDeadline - now)
-    : 0;
-  const turnLeftPct = Math.min(100, (turnLeftMs / TURN_DURATION_MS) * 100);
+  const lead = game.handState.leadCombo;
+  const lastPlay = game.trickHistory[0];
+  const humanSelectionValid =
+    selected.length > 0 &&
+    (() => {
+      const combo = detectCombo(selected);
+      return combo && canPlay(combo, lead);
+    })();
 
   const onPlay = () => {
     setError(null);
@@ -151,13 +177,23 @@ export default function LocalGameScreen() {
       setError('Pick cards to play');
       return;
     }
+    const combo = detectCombo(selected);
+    if (!combo) {
+      setError('Not a legal combo');
+      return;
+    }
+    if (!canPlay(combo, lead)) {
+      setError('That combo does not beat the lead');
+      return;
+    }
     try {
-      humanAct(game, { kind: 'play', combo: { ...detectCombo(selected), cards: selected } as PlayedCombo }, selected);
+      humanAct(game, { kind: 'play', combo: { ...combo, cards: selected } as PlayedCombo }, selected);
       setSelected([]);
     } catch (e) {
       setError((e as Error).message);
     }
   };
+
   const onPass = () => {
     setError(null);
     try {
@@ -166,8 +202,10 @@ export default function LocalGameScreen() {
       setError((e as Error).message);
     }
   };
-  const onRestart = () => {
-    router.replace({ pathname: '/game-local', params: { bots: botCount } });
+
+  const onOrganize = () => {
+    sortHumanHand(game);
+    setSelected([]);
   };
 
   const toggleCard = (c: Card) => {
@@ -179,117 +217,92 @@ export default function LocalGameScreen() {
     });
   };
 
-  // The "current trick" pile: shows the lead combo at the center.
-  const lead = view.handState.leadCombo;
+  // Compute opponent order: 0,1,2,3 starting at humanSeat+1
+  const opponentOrder = [1, 2, 3].map((o) => (humanSeat + o) % 4);
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Top: opponents */}
-      <View style={styles.opponentsRow}>
-        {[1, 2, 3].map((offset) => {
-          const seat = (humanSeat + offset) % 4;
-          if (seat === humanSeat) return null;
-          const isCurrent = currentSeat === seat && !view.finishedAt;
-          const isBot = game.playerKinds[seat] === 'bot';
-          const finished = view.handState.finishedOrder.includes(seat);
+      {/* Top: opponents row */}
+      <View style={styles.oppRow}>
+        {opponentOrder.map((seat) => {
+          const isCurrent = currentSeat === seat;
+          const finished = game.handState.finishedOrder.includes(seat);
+          const passed = game.handState.passed.includes(seat);
           return (
             <View
               key={seat}
               style={[
-                styles.opponent,
-                isCurrent && styles.opponentCurrent,
-                finished && styles.opponentDone,
+                styles.oppBox,
+                isCurrent && styles.oppBoxActive,
+                finished && styles.oppBoxDone,
               ]}
             >
-              <Text style={styles.oppLabel}>
-                {isBot ? `Bot ${seat}` : `P${seat}`}
-                {finished ? ' ✓' : ''}
+              <Text style={styles.oppName}>
+                {seatName(game, seat, 'You')}
+                {isCurrent && !finished ? ' •' : ''}
+                {finished ? ' ✓' : passed ? ' (pass)' : ''}
               </Text>
-              <View style={styles.oppHand}>
-                {Array.from({ length: view.handSizes[seat] }).map((_, i) => (
-                  <View key={i} style={{ marginLeft: i === 0 ? 0 : -18 }}>
-                    <CardView faceDown small />
-                  </View>
-                ))}
+              <View style={styles.oppStackRow}>
+                <OpponentCardStack count={game.hands[seat].length} small />
+                <Text style={styles.oppCount}>{game.hands[seat].length}</Text>
               </View>
             </View>
           );
         })}
       </View>
 
-      {/* Center: trick pile + status */}
+      {/* Center: trick pile */}
       <View style={styles.center}>
-        {view.finishedAt ? (
-          <View style={styles.finishBox}>
-            <Text style={styles.finishTitle}>Hand complete</Text>
-            <Text style={styles.finishText}>
-              {view.finishOrder
-                .map((s, i) => `${i + 1}. ${s === humanSeat ? 'You' : game.playerKinds[s] === 'bot' ? `Bot ${s}` : `P${s}`}`)
-                .join('\n')}
+        {lastPlay ? (
+          <View style={styles.trickBox}>
+            <Text style={styles.trickLabel}>
+              {seatName(game, lastPlay.playerIndex, 'You')} played
             </Text>
-            <Pressable style={styles.btn} onPress={onRestart}>
-              <Text style={styles.btnText}>Play again</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.btn, { backgroundColor: '#666' }]}
-              onPress={() => router.replace('/')}
-            >
-              <Text style={styles.btnText}>Home</Text>
-            </Pressable>
+            <View style={styles.trickCards}>
+              {lastPlay.combo.cards.map((c, i) => (
+                <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -28, zIndex: 10 + i }}>
+                  <PlayingCard card={c} />
+                </View>
+              ))}
+            </View>
+            <Text style={styles.trickName}>{comboLabel(lastPlay.combo)}</Text>
           </View>
         ) : (
-          <>
-            <View style={styles.trickBox}>
-              {lead ? (
-                <>
-                  <Text style={styles.trickLabel}>Last play</Text>
-                  <Text style={styles.trickText}>{comboLabel(lead)}</Text>
-                </>
-              ) : (
-                <Text style={styles.trickMuted}>
-                  {isMyTurn ? 'Your turn — lead a play' : `${game.playerKinds[currentSeat] === 'bot' ? `Bot ${currentSeat}` : `P${currentSeat}`} to lead`}
-                </Text>
-              )}
-            </View>
-            {/* Turn timer bar */}
-            <View style={styles.timerBarBg}>
-              <View
-                style={[styles.timerBarFg, { width: `${turnLeftPct}%` }]}
-              />
-            </View>
-            <Text style={styles.timerText}>
-              {Math.ceil(turnLeftMs / 1000)}s
-              {isMyTurn ? ' — your turn' : ''}
+          <View style={styles.trickBox}>
+            <Text style={styles.trickEmpty}>
+              {isMyTurn
+                ? 'Your turn — lead with a play'
+                : `${seatName(game, currentSeat, 'You')} to lead`}
             </Text>
-            {error && <Text style={styles.error}>{error}</Text>}
-          </>
+          </View>
         )}
+        {error && <Text style={styles.error}>{error}</Text>}
       </View>
 
-      {/* Bottom: human's hand */}
-      <View style={styles.handArea}>
-        <View style={styles.handRow}>
-          {myHand.map((c) => {
-            const isSelected = !!selected.find((s) => s.id === c.id);
-            return (
-              <Pressable
-                key={c.id}
-                onPress={() => isMyTurn && toggleCard(c)}
-                style={{ marginLeft: 0 }}
-              >
-                <View
-                  style={[
-                    isSelected && styles.cardSelected,
-                  ]}
-                >
-                  <CardView card={c} />
-                </View>
-              </Pressable>
-            );
-          })}
+      {/* Bottom: human hand */}
+      <View style={styles.bottom}>
+        <View style={styles.handActions}>
+          <Pressable style={styles.btnSmall} onPress={onOrganize}>
+            <Text style={styles.btnSmallText}>Organize</Text>
+          </Pressable>
+          <Text style={styles.selLabel}>
+            {selected.length === 0
+              ? `${myHand.length} cards`
+              : `${selected.length} selected`}
+          </Text>
         </View>
 
-        <View style={styles.actionRow}>
+        <HandRow
+          hand={myHand}
+          selected={selected}
+          onTap={toggleCard}
+          onReorder={(from, to) => {
+            reorderHumanHand(game, from, to);
+            setSelected([]);
+          }}
+        />
+
+        <View style={styles.actionsRow}>
           <Pressable
             style={[styles.btn, !isMyTurn && styles.btnDisabled]}
             disabled={!isMyTurn}
@@ -301,9 +314,9 @@ export default function LocalGameScreen() {
             style={[
               styles.btn,
               styles.btnPass,
-              (!isMyTurn || view.handState.leadCombo === null) && styles.btnDisabled,
+              (!isMyTurn || lead === null) && styles.btnDisabled,
             ]}
-            disabled={!isMyTurn || view.handState.leadCombo === null}
+            disabled={!isMyTurn || lead === null}
             onPress={onPass}
           >
             <Text style={styles.btnText}>Pass</Text>
@@ -314,85 +327,219 @@ export default function LocalGameScreen() {
   );
 }
 
+// HandRow: a horizontally scrollable row of cards. Each card is tappable to
+// select. Cards are also draggable (long-press + drag) to reorder.
+function HandRow({
+  hand,
+  selected,
+  onTap,
+  onReorder,
+}: {
+  hand: Card[];
+  selected: Card[];
+  onTap: (c: Card) => void;
+  onReorder: (from: number, to: number) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.handScroll}
+    >
+      {hand.map((c, i) => (
+        <DraggableCard
+          key={c.id}
+          card={c}
+          isSelected={!!selected.find((s) => s.id === c.id)}
+          index={i}
+          onTap={() => onTap(c)}
+          onReorder={onReorder}
+          total={hand.length}
+        />
+      ))}
+    </ScrollView>
+  );
+}
+
+function DraggableCard({
+  card,
+  isSelected,
+  index,
+  onTap,
+  onReorder,
+  total,
+}: {
+  card: Card;
+  isSelected: boolean;
+  index: number;
+  onTap: () => void;
+  onReorder: (from: number, to: number) => void;
+  total: number;
+}) {
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const longPressFired = useRef(false);
+  const [dragging, setDragging] = useState(false);
+
+  const responder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, g) => {
+          // engage after a real drag
+          return longPressFired.current && (Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8);
+        },
+        onPanResponderGrant: () => {
+          longPressFired.current = true;
+          setDragging(true);
+        },
+        onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+        onPanResponderRelease: (_, g) => {
+          longPressFired.current = false;
+          setDragging(false);
+          // compute target index from dx (each card slot is ~52px wide including overlap)
+          const SLOT = 44;
+          const target = Math.max(0, Math.min(total - 1, index + Math.round(g.dx / SLOT)));
+          if (target !== index) onReorder(index, target);
+          Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+        },
+        onPanResponderTerminate: () => {
+          longPressFired.current = false;
+          setDragging(false);
+          Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+        },
+      }),
+    [index, total, onReorder, pan],
+  );
+
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  return (
+    <Animated.View
+      style={{
+        transform: [{ translateX: pan.x }, { translateY: pan.y }],
+        zIndex: dragging ? 100 : 1,
+      }}
+      {...responder.panHandlers}
+    >
+      <Pressable
+        onPress={onTap}
+        onPressIn={() => {
+          longPressTimer = setTimeout(() => {
+            longPressFired.current = true;
+          }, 350);
+        }}
+        onPressOut={() => {
+          if (longPressTimer) clearTimeout(longPressTimer);
+          if (!longPressFired.current) longPressFired.current = false;
+        }}
+      >
+        <View style={{ marginRight: -28 }}>
+          <PlayingCard card={card} selected={isSelected} />
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0e4a3a', padding: 12 },
-  opponentsRow: {
+  container: { flex: 1, backgroundColor: '#0e4a3a' },
+  loadingText: { color: '#fff', textAlign: 'center', marginTop: 40 },
+
+  // Opponents
+  oppRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  oppBox: {
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    paddingHorizontal: 10,
     paddingVertical: 8,
-    minHeight: 90,
-  },
-  opponent: {
+    borderRadius: 10,
     alignItems: 'center',
-    padding: 4,
-    borderRadius: 8,
+    minWidth: 90,
   },
-  opponentCurrent: { backgroundColor: 'rgba(255,255,255,0.15)' },
-  opponentDone: { opacity: 0.5 },
-  oppLabel: { color: '#fff', fontWeight: '600', fontSize: 12, marginBottom: 4 },
-  oppHand: { flexDirection: 'row' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  trickBox: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    padding: 18,
-    borderRadius: 12,
-    minWidth: 240,
-    alignItems: 'center',
-  },
-  trickLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 4 },
-  trickText: { color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center' },
-  trickMuted: { color: 'rgba(255,255,255,0.8)', fontSize: 16, textAlign: 'center' },
-  finishBox: {
-    backgroundColor: '#f4f1e8',
-    padding: 22,
-    borderRadius: 14,
-    alignItems: 'center',
-    minWidth: 240,
-  },
-  finishTitle: { fontSize: 22, fontWeight: '800', color: '#0e4a3a', marginBottom: 8 },
-  finishText: { color: '#222', fontSize: 16, lineHeight: 24, marginBottom: 16 },
-  timerBarBg: {
-    width: '90%',
-    height: 6,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 3,
-    marginTop: 18,
-    overflow: 'hidden',
-  },
-  timerBarFg: { height: '100%', backgroundColor: '#f1c40f' },
-  timerText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 4 },
-  handArea: { paddingTop: 12, paddingBottom: 8 },
-  handRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 4,
-    marginBottom: 12,
-  },
-  card: {
-    backgroundColor: '#f4f1e8',
-    borderRadius: 6,
+  oppBoxActive: {
+    backgroundColor: 'rgba(241,196,15,0.25)',
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: '#f1c40f',
+  },
+  oppBoxDone: { opacity: 0.55 },
+  oppName: { color: '#fff', fontSize: 12, fontWeight: '600', marginBottom: 4 },
+  oppStackRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  oppCount: { color: '#fff', fontSize: 18, fontWeight: '700' },
+
+  // Center trick pile
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12 },
+  trickBox: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    padding: 14,
+    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-    margin: 2,
+    minWidth: 240,
+    maxWidth: 340,
   },
-  cardSelected: {
-    transform: [{ translateY: -12 }],
-    shadowColor: '#f1c40f',
-    shadowOpacity: 1,
-    shadowRadius: 8,
+  trickLabel: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginBottom: 6 },
+  trickCards: { flexDirection: 'row', justifyContent: 'center', marginBottom: 6 },
+  trickName: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  trickEmpty: { color: 'rgba(255,255,255,0.8)', fontSize: 16, paddingVertical: 30 },
+  error: { color: '#ff6b6b', marginTop: 10, fontWeight: '600' },
+
+  // Bottom
+  bottom: { paddingBottom: 8 },
+  handActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 6,
   },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-around' },
+  selLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
+  handScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
   btn: {
     backgroundColor: '#1c7a5d',
     paddingVertical: 12,
-    paddingHorizontal: 32,
+    paddingHorizontal: 36,
     borderRadius: 10,
   },
   btnPass: { backgroundColor: '#7f8c8d' },
   btnDisabled: { opacity: 0.4 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  error: { color: '#ff6b6b', marginTop: 8 },
+  btnSmall: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  btnSmallText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#fff' },
+
+  // Finish screen
+  finishCard: {
+    flex: 1,
+    margin: 16,
+    backgroundColor: '#f4f1e8',
+    borderRadius: 14,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  finishHeadline: { fontSize: 32, fontWeight: '800', color: '#0e4a3a', marginBottom: 8 },
+  finishSub: { fontSize: 14, color: '#666', marginBottom: 16 },
+  finishRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  finishPlace: { color: '#0e4a3a', fontSize: 22, fontWeight: '700', width: 40 },
+  finishName: { color: '#222', fontSize: 18 },
+  finishActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
 });

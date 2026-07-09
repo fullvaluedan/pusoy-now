@@ -25,7 +25,7 @@ console.log('full game simulation');
 const deck = buildDeck();
 const hands = dealFour(deck);
 
-let hs = newHand('test-game', ['p0', 'p1', 'p2', 'p3'], hands, 1, 0, 'h1');
+let hs = newHand('test-game', ['p0', 'p1', 'p2', 'p3'], hands, 1, 'h1');
 ok('deal: 13 cards each', hands.every((h) => h.length === 13));
 
 let iter = 0;

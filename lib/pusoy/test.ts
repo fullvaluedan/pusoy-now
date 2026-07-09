@@ -94,8 +94,9 @@ const h2 = [c('C', '5'), c('D', '5'), c('H', '5')];
 const h3 = [c('C', '6'), c('D', '6'), c('H', '6')];
 
 const gameHands = [h0, h1, h2, h3];
-let hs = newHand('g1', ['p0', 'p1', 'p2', 'p3'], gameHands, 1, 0, 'hand-1');
-ok('opening lead is player 0', hs.currentPlayerIndex === 0);
+// p0 has the 3 of clubs (c('C','3')), so they should be the opener
+let hs = newHand('g1', ['p0', 'p1', 'p2', 'p3'], gameHands, 1, 'hand-1');
+ok('opening lead is player 0 (holds 3 of clubs)', hs.currentPlayerIndex === 0);
 
 // p0 plays their last 3-of-a-kind (H-3 highest suit among 3s)
 const trip3 = detectCombo([c('C', '3'), c('D', '3'), c('H', '3')])!;
@@ -131,7 +132,7 @@ ok('p3 finished', hs.finishedOrder.includes(3));
 
 // 4) timeout behaviour
 console.log('engine timeouts');
-hs = newHand('g2', ['p0', 'p1', 'p2', 'p3'], gameHands, 1, 0, 'hand-2');
+hs = newHand('g2', ['p0', 'p1', 'p2', 'p3'], gameHands, 1, 'hand-2');
 ok('turn deadline set', hs.turnDeadline !== null);
 ok('turn starts at 15s', hs.turnDeadline! - hs.turnStartedAt! === TURN_MS);
 const afterTimeout = applyTimeout(hs, 0);

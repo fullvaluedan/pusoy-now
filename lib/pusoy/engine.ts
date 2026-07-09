@@ -11,14 +11,17 @@ import type {
 import { canPlay, detectCombo } from './combo';
 
 export const TURN_MS = 15_000;
+// Sentinel: when a HandState is created with turnMs=null, the UI should not
+// show a timer (used for bot mode).
+export type TurnDuration = number | null;
 
 export function newHand(
   gameId: string,
   playerIds: string[],
   hands: Card[][],
   roundNumber: number,
-  leadPlayerIndex: number,
   handId: string,
+  opts: { turnMs?: number | null; openerIndex?: number } = {},
 ): HandState {
   if (playerIds.length !== 4) {
     throw new Error('Pusoy Dos is 4 players');
@@ -26,17 +29,30 @@ export function newHand(
   if (hands.length !== 4) {
     throw new Error('need 4 hands');
   }
+  // Determine the opener. If caller supplied openerIndex use that; otherwise
+  // find the player who holds the 3 of clubs. The 3 of clubs is the
+  // mandatory opener in Pusoy Dos (per the canonical Filipino rules).
+  let opener = opts.openerIndex;
+  if (opener === undefined) {
+    opener = hands.findIndex((h) =>
+      h.some((c) => c.rank === '3' && c.suit === 'C'),
+    );
+    if (opener < 0) {
+      throw new Error('no 3 of clubs in any hand — bad deal');
+    }
+  }
+  const turnMs = opts.turnMs === undefined ? TURN_MS : opts.turnMs;
   const now = Date.now();
   return {
     handId,
     roundNumber,
-    currentPlayerIndex: leadPlayerIndex,
-    leadPlayerIndex,
+    currentPlayerIndex: opener,
+    leadPlayerIndex: opener,
     leadCombo: null,
     lastPlay: null,
     passed: [],
     finishedOrder: [],
-    turnDeadline: now + TURN_MS,
+    turnDeadline: turnMs === null ? null : now + turnMs,
     turnStartedAt: now,
   };
 }
@@ -135,7 +151,7 @@ export function applyAction(
 
   const now = Date.now();
   next.turnStartedAt = now;
-  next.turnDeadline = now + TURN_MS;
+  next.turnDeadline = state.turnDeadline === null ? null : now + TURN_MS;
   return next;
 }
 
@@ -167,7 +183,7 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
     }
     const now = Date.now();
     next.turnStartedAt = now;
-    next.turnDeadline = now + TURN_MS;
+    next.turnDeadline = state.turnDeadline === null ? null : now + TURN_MS;
     return next;
   }
   if (alive.length === 1) {
@@ -181,7 +197,7 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
     next.currentPlayerIndex = alive[0];
     const now = Date.now();
     next.turnStartedAt = now;
-    next.turnDeadline = now + TURN_MS;
+    next.turnDeadline = state.turnDeadline === null ? null : now + TURN_MS;
     return next;
   }
   let i = (playerIndex + 1) % 4;
@@ -192,7 +208,7 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
     passed,
     currentPlayerIndex: i,
     turnStartedAt: now,
-    turnDeadline: now + TURN_MS,
+    turnDeadline: state.turnDeadline === null ? null : now + TURN_MS,
   };
 }
 
