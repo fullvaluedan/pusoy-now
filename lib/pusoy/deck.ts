@@ -15,13 +15,16 @@ export const RANK_VALUE: Record<Rank, number> = RANKS.reduce(
   {} as Record<Rank, number>,
 );
 
-// Suit strength for tiebreaks. Spades > Hearts > Diamonds > Clubs.
-// Used only when same rank + same length.
+// Suit strength for tiebreaks. In the standard variant, 2♦ is the highest
+// single (the "bomb" — unbeatable as a lead). So diamonds outrank the
+// other suits at the 2 rank; for all other ranks, spades > hearts > clubs
+// is the conventional order. To keep comparison simple and match Pusoy
+// Dos rules used in the wild, we order: D > S > H > C.
 export const SUIT_VALUE: Record<Suit, number> = {
   C: 1,
-  D: 2,
-  H: 3,
-  S: 4,
+  D: 4, // 2♦ is the bomb; diamonds rank above the others.
+  H: 2,
+  S: 3,
 };
 
 export function buildDeck(): Card[] {
@@ -52,13 +55,8 @@ export function dealFour(deck: Card[]): Card[][] {
   for (let i = 0; i < deck.length; i++) {
     hands[i % 4].push(deck[i]);
   }
-  // sort each hand by rank ascending, then suit ascending
-  for (const h of hands) {
-    h.sort((a, b) => {
-      const r = RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
-      if (r !== 0) return r;
-      return SUIT_VALUE[a.suit] - SUIT_VALUE[b.suit];
-    });
-  }
+  // Note: do NOT pre-sort hands. The dealing animation relies on hands being
+  // in deal order so the user sees the cards arrive in the order they were
+  // dealt. The user can hit "Organize" to sort if they want.
   return hands;
 }

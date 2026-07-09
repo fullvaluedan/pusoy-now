@@ -23,7 +23,20 @@ function c(suit: 'C' | 'D' | 'H' | 'S', rank: Card['rank']): Card {
   return { id: `${suit}-${rank}`, suit, rank };
 }
 
-// 1) detectCombo
+// 1) dealFour preserves deal order (no pre-sort)
+console.log('deal order');
+const testDeck = buildDeck();
+const dealt = dealFour(testDeck);
+// dealFour deals round-robin: card 0 -> hand[0], card 1 -> hand[1], card 2 -> hand[2], card 3 -> hand[3], card 4 -> hand[0] (hand[0]'s 2nd card), ...
+let orderOK = true;
+for (let i = 0; i < 52; i++) {
+  const seat = i % 4;
+  const posInHand = Math.floor(i / 4);
+  if (dealt[seat][posInHand].id !== testDeck[i].id) orderOK = false;
+}
+ok('hands are returned in deal order', orderOK);
+
+// 2) detectCombo
 console.log('detectCombo');
 ok('single', JSON.stringify(detectCombo([c('S', 'A')]))?.includes('"type":"single"'));
 ok('pair same rank', detectCombo([c('S', '5'), c('H', '5')])?.type === 'pair');
@@ -130,7 +143,18 @@ ok('p1 finished', hs.finishedOrder.includes(1));
 ok('p2 finished', hs.finishedOrder.includes(2));
 ok('p3 finished', hs.finishedOrder.includes(3));
 
-// 4) timeout behaviour
+// 4) 2 of diamonds is unbeatable as a single (the "bomb" rule)
+console.log('2 of diamonds rule');
+const twoD = detectCombo([c('D', '2')])!;
+const twoH = detectCombo([c('H', '2')])!;
+const twoS = detectCombo([c('S', '2')])!;
+ok('2♦ beats any other 2 single', canPlay(twoD, twoH));
+ok('2♥ cannot beat 2♦', !canPlay(twoH, twoD));
+ok('2♠ cannot beat 2♦', !canPlay(twoS, twoD));
+const aSingle = detectCombo([c('S', 'A')])!;
+ok('A cannot beat 2♦', !canPlay(aSingle, twoD));
+
+// 5) timeout behaviour
 console.log('engine timeouts');
 hs = newHand('g2', ['p0', 'p1', 'p2', 'p3'], gameHands, 1, 'hand-2');
 ok('turn deadline set', hs.turnDeadline !== null);

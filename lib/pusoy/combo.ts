@@ -203,9 +203,18 @@ export function compareCombos(a: PlayedCombo, b: PlayedCombo): number {
 // Can `play` legally follow `lead`?
 //  - A 5-card combo can only be beaten by another 5-card combo.
 //  - For singles/pairs/threes, the played combo must be the same length and higher rank.
+//  - 2♦ as a single is the "bomb" — unbeatable by any other single. Only a
+//    5-card combo can beat it.
 //  - If `lead` is null, anything goes.
 export function canPlay(play: PlayedCombo, lead: PlayedCombo | null): boolean {
   if (lead === null) return true;
+  // 2♦ bomb: no other single can beat it. A 5-card combo CAN if it's higher.
+  if (lead.length === 1 && lead.cards[0].rank === '2' && lead.cards[0].suit === 'D') {
+    if (play.length === 5) {
+      return compareCombos(play, lead) > 0;
+    }
+    return false;
+  }
   if (play.length === 5 && lead.length === 5) {
     return compareCombos(play, lead) > 0;
   }
