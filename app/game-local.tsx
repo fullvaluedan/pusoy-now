@@ -1,16 +1,17 @@
 // Bot game screen. Renders the table with full Bicycle-style cards.
 //
 // Features:
-//   - Dealing animation overlay (shuffle + deal)
+//   - Dealing animation overlay (shuffle + deal). Human's card shows face-up
+//     as it arrives.
 //   - Opponent seats with stacked face-down card counts
-//   - Center trick pile showing the last played combo
-//   - Human hand: tap to select, long-press + drag to reorder
+//   - Center trick pile showing the last played combo as real cards
+//   - Human hand: tap to select, drag to reorder (no long-press needed).
+//     Selection persists across reorder.
 //   - "Organize" button — auto-sort by rank/suit
-//   - Play / Pass actions
-//   - Bot-mode only: no turn timer
+//   - Play / Pass actions centered as a single row directly below the hand
+//   - Bot mode: no turn timer
 //   - Round-complete screen with finish order
 
-import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -72,15 +73,17 @@ function seatName(game: LocalGame, seat: number, displayName: string): string {
 export default function LocalGameScreen() {
   const params = useLocalSearchParams<{ bots: string }>();
   const router = useRouter();
-  const botCount = Math.max(1, Math.min(3, Number(params.bots) || 1));
+  const botCount = Math.max(1, Math.min(3, Number(params.bots) || 3));
 
   const [game, setGame] = useState<LocalGame | null>(null);
   // Re-render trigger on game state changes.
   const [tick, setTick] = useState(0);
   const [selected, setSelected] = useState<Card[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
 
+  // Create a new game when this screen mounts. The screen is re-mounted by
+  // router.replace on "Play again", so this fires fresh each time and we
+  // don't need to manually clean up the previous game.
   useEffect(() => {
     const g = createLocalGame(botCount, 'You');
     setGame(g);
@@ -110,6 +113,7 @@ export default function LocalGameScreen() {
       <SafeAreaView style={styles.container}>
         <DealingAnimation
           dealOrder={game.dealOrder}
+          deck={game.deck}
           playerKinds={game.playerKinds}
           playerNames={playerNames}
           onDone={() => startGame(game)}
@@ -140,10 +144,9 @@ export default function LocalGameScreen() {
           <View style={styles.finishActions}>
             <Pressable
               style={styles.btn}
-              onPress={() => {
-                const g = createLocalGame(botCount, 'You');
-                setGame(g);
-              }}
+              onPress={() =>
+                router.replace({ pathname: '/game-local', params: { bots: botCount } })
+              }
             >
               <Text style={styles.btnText}>Play again</Text>
             </Pressable>
@@ -164,12 +167,6 @@ export default function LocalGameScreen() {
   const isMyTurn = currentSeat === humanSeat;
   const lead = game.handState.leadCombo;
   const lastPlay = game.trickHistory[0];
-  const humanSelectionValid =
-    selected.length > 0 &&
-    (() => {
-      const combo = detectCombo(selected);
-      return combo && canPlay(combo, lead);
-    })();
 
   const onPlay = () => {
     setError(null);
@@ -279,9 +276,9 @@ export default function LocalGameScreen() {
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
 
-      {/* Bottom: human hand */}
+      {/* Bottom: hand + actions. Hand in the lower-center; Play/Pass centered directly under it. */}
       <View style={styles.bottom}>
-        <View style={styles.handActions}>
+        <View style={styles.handToolbar}>
           <Pressable style={styles.btnSmall} onPress={onOrganize}>
             <Text style={styles.btnSmallText}>Organize</Text>
           </Pressable>
@@ -298,29 +295,31 @@ export default function LocalGameScreen() {
           onTap={toggleCard}
           onReorder={(from, to) => {
             reorderHumanHand(game, from, to);
-            setSelected([]);
+            // selection persists: the card ids in `selected` are still in the hand
           }}
         />
 
         <View style={styles.actionsRow}>
-          <Pressable
-            style={[styles.btn, !isMyTurn && styles.btnDisabled]}
-            disabled={!isMyTurn}
-            onPress={onPlay}
-          >
-            <Text style={styles.btnText}>Play</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.btn,
-              styles.btnPass,
-              (!isMyTurn || lead === null) && styles.btnDisabled,
-            ]}
-            disabled={!isMyTurn || lead === null}
-            onPress={onPass}
-          >
-            <Text style={styles.btnText}>Pass</Text>
-          </Pressable>
+          <View style={styles.actionsInner}>
+            <Pressable
+              style={[styles.btn, !isMyTurn && styles.btnDisabled]}
+              disabled={!isMyTurn}
+              onPress={onPlay}
+            >
+              <Text style={styles.btnText}>Play</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.btn,
+                styles.btnPass,
+                (!isMyTurn || lead === null) && styles.btnDisabled,
+              ]}
+              disabled={!isMyTurn || lead === null}
+              onPress={onPass}
+            >
+              <Text style={styles.btnText}>Pass</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -328,7 +327,8 @@ export default function LocalGameScreen() {
 }
 
 // HandRow: a horizontally scrollable row of cards. Each card is tappable to
-// select. Cards are also draggable (long-press + drag) to reorder.
+// select. Cards are also draggable (no long-press — engage on any movement
+// past 8px) to reorder.
 function HandRow({
   hand,
   selected,
@@ -377,41 +377,38 @@ function DraggableCard({
   total: number;
 }) {
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const longPressFired = useRef(false);
   const [dragging, setDragging] = useState(false);
+
+  // SLOT is the visual width of each card slot (the card itself is 64px
+  // wide but the ScrollView places them with a -28px margin overlap, so the
+  // effective stride is 36px). Tuned to feel right when dragging.
+  const SLOT = 36;
 
   const responder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, g) => {
-          // engage after a real drag
-          return longPressFired.current && (Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8);
+          // engage drag on any movement past 8px (no long-press needed)
+          return Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8;
         },
         onPanResponderGrant: () => {
-          longPressFired.current = true;
           setDragging(true);
         },
         onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
         onPanResponderRelease: (_, g) => {
-          longPressFired.current = false;
           setDragging(false);
-          // compute target index from dx (each card slot is ~52px wide including overlap)
-          const SLOT = 44;
           const target = Math.max(0, Math.min(total - 1, index + Math.round(g.dx / SLOT)));
           if (target !== index) onReorder(index, target);
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
         },
         onPanResponderTerminate: () => {
-          longPressFired.current = false;
           setDragging(false);
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
         },
       }),
-    [index, total, onReorder, pan],
+    [index, total, onReorder, pan, SLOT],
   );
-
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 
   return (
     <Animated.View
@@ -421,18 +418,7 @@ function DraggableCard({
       }}
       {...responder.panHandlers}
     >
-      <Pressable
-        onPress={onTap}
-        onPressIn={() => {
-          longPressTimer = setTimeout(() => {
-            longPressFired.current = true;
-          }, 350);
-        }}
-        onPressOut={() => {
-          if (longPressTimer) clearTimeout(longPressTimer);
-          if (!longPressFired.current) longPressFired.current = false;
-        }}
-      >
+      <Pressable onPress={onTap}>
         <View style={{ marginRight: -28 }}>
           <PlayingCard card={card} selected={isSelected} />
         </View>
@@ -486,9 +472,9 @@ const styles = StyleSheet.create({
   trickEmpty: { color: 'rgba(255,255,255,0.8)', fontSize: 16, paddingVertical: 30 },
   error: { color: '#ff6b6b', marginTop: 10, fontWeight: '600' },
 
-  // Bottom
-  bottom: { paddingBottom: 8 },
-  handActions: {
+  // Bottom — hand in the lower-center, actions centered directly below
+  bottom: { paddingBottom: 12 },
+  handToolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -502,14 +488,18 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingTop: 6,
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
   },
+  actionsInner: { flexDirection: 'row', gap: 12 },
   btn: {
     backgroundColor: '#1c7a5d',
     paddingVertical: 12,
-    paddingHorizontal: 36,
+    paddingHorizontal: 32,
     borderRadius: 10,
   },
   btnPass: { backgroundColor: '#7f8c8d' },

@@ -15,6 +15,7 @@ const TOTAL_STEPS = 52;
 
 interface Props {
   dealOrder: DealStep[];
+  deck: import('../lib/pusoy/types').Card[];
   playerKinds: LocalPlayer[];
   playerNames: string[];
   onDone: () => void;
@@ -40,7 +41,7 @@ function seatFraction(seat: number, humanSeat: number, total: number): { x: numb
   return { x: 0.5, y: 0.85 }; // human
 }
 
-export function DealingAnimation({ dealOrder, playerKinds, playerNames, onDone }: Props) {
+export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, onDone }: Props) {
   const { width, height } = Dimensions.get('window');
   const [step, setStep] = useState(0);
   const x = useRef(new Animated.Value(width * 0.5 - 32)).current;
@@ -101,9 +102,13 @@ export function DealingAnimation({ dealOrder, playerKinds, playerNames, onDone }
     );
   }
 
-  // Last 5 opponents' stack previews along the top, plus a "dealing" indicator
+  // The card currently being dealt.
   const humanSeat = playerKinds.findIndex((k) => k === 'human');
   const oppStacks: number[] = [0, 1, 2, 3].map((s) => s === humanSeat ? -1 : s);
+  const currentStep = dealOrder[step];
+  const currentCard = currentStep ? deck[currentStep.cardIndex] : null;
+  const isHumanCard = currentStep?.seat === humanSeat;
+
   return (
     <View style={styles.overlay}>
       <View style={styles.oppRow}>
@@ -118,7 +123,7 @@ export function DealingAnimation({ dealOrder, playerKinds, playerNames, onDone }
       </View>
       <Text style={styles.dealingLabel}>Dealing…</Text>
       <Animated.View style={[styles.flyingCard, { left: x, top: y, opacity }]}>
-        <PlayingCard faceDown />
+        <PlayingCard card={isHumanCard ? currentCard ?? undefined : undefined} faceDown={!isHumanCard} />
       </Animated.View>
     </View>
   );
