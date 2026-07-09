@@ -21,18 +21,25 @@ import { detectCombo, canPlay } from './combo';
 import type { Card, PlayedCombo } from './types';
 import { RANK_VALUE, SUIT_VALUE } from './deck';
 
-function comboKey(c: PlayedCombo): number {
-  // lower is better (we want to discard the weakest combo first)
-  // primary: rankValue, secondary: length (shorter is "weaker" usually but for
-  // 5-card hands longer is stronger). We collapse to a single sort key.
-  if (c.length === 5) {
-    // for 5-card hands, weight by fiveType strength then rank
-    const fiveWeight =
-      { straight: 1, flush: 2, fullHouse: 3, fourOfAKind: 4, straightFlush: 5 }[
-        c.fiveType!
-      ] * 100;
-    return c.rankValue + fiveWeight;
+function comboKey(c: PlayedCombo, lead: PlayedCombo | null): number {
+  // We use a single numeric key to sort legal plays. The bot picks the play
+  // with the LOWEST key (best play per the rules below).
+  //
+  // Opening play (lead is null): the bot wants to dump the strongest combos
+  // first to free up the hand. So prefer 5-card hands, then trips, then
+  // pairs, then singles. Within a length class, prefer the LOWEST rank so
+  // the bot sheds bad cards.
+  //
+  // Responding to a lead: the bot has to match the lead's length, so
+  // `findLegalPlays` already filters to legal combos. Among those, prefer
+  // the LOWEST rank (smallest card that still beats the lead).
+  if (lead === null) {
+    // Higher combo class => lower key (sorts first). Within a class, lower
+    // rank => lower key (sorts first).
+    return -c.length * 100 + c.rankValue;
   }
+  // Responding: same length is guaranteed by findLegalPlays. Lower rank =>
+  // lower key (sorts first).
   return c.rankValue;
 }
 
@@ -82,8 +89,8 @@ export function botChoose(hand: Card[], lead: PlayedCombo | null): PlayedCombo |
   const legal = findLegalPlays(hand, lead);
   if (legal.length === 0) return null; // must pass
 
-  // Sort by comboKey ascending: prefer the weakest legal play.
-  legal.sort((a, b) => comboKey(a) - comboKey(b));
+  // Sort by comboKey ascending: prefer the best (per the rules above) play.
+  legal.sort((a, b) => comboKey(a, lead) - comboKey(b, lead));
 
   // Small randomness: occasionally pick a non-optimal but legal play so the
   // bot doesn't feel robotic.

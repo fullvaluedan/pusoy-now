@@ -4,6 +4,7 @@
 import { buildDeck, dealFour } from './deck';
 import { detectCombo, compareCombos, canPlay } from './combo';
 import { applyAction, applyTimeout, isHandOver, newHand, TURN_MS } from './engine';
+import { botChoose } from './bot';
 import type { Card } from './types';
 
 let pass = 0;
@@ -169,6 +170,67 @@ ok('timeout on opening play does not throw', afterTimeout !== null);
 hs = applyAction(hs, 0, h0, { kind: 'play', combo: trip3 });
 const afterOpen = applyTimeout(hs, hs.currentPlayerIndex);
 ok('timeout after opening records pass', afterOpen.passed.includes(hs.currentPlayerIndex));
+
+// 4) bot opener strategy: dump 5-card combos first, then trips, then pairs,
+//    then singles. Below we give a hand with all four types available and
+//    expect the bot to play the 5-card combo.
+console.log('bot opener strategy');
+const c5 = (s: 'C' | 'D' | 'H' | 'S', r: any): Card => ({ id: `${s}-${r}`, suit: s, rank: r });
+const handWithAll = [
+  c5('C', '3'), c5('D', '3'), c5('H', '3'), // trip 3s
+  c5('C', '5'), c5('D', '5'),              // pair 5s
+  c5('C', '7'), c5('C', '8'), c5('C', '9'), c5('C', '10'), c5('C', 'J'), // straight flush
+  c5('S', 'A'),                              // single A
+];
+const botChoice1 = botChoose(handWithAll, null);
+ok('bot plays a 5-card combo on opening if available', botChoice1?.length === 5);
+ok('bot picks the straight flush (or any 5-card) on opening', botChoice1?.fiveType !== undefined);
+
+const handNoFives = [
+  c5('C', '3'), c5('D', '3'), c5('H', '3'),  // trip 3s
+  c5('C', '5'), c5('D', '5'),                // pair 5s (NOTE: trip 3s + pair 5s = full house!)
+  c5('S', 'A'),                              // single A
+  c5('H', 'K'), c5('S', 'Q'),                // two more singles
+];
+// The bot has 10% randomness, so run a few times to confirm it always picks
+// a 5-card combo on the opening when one is available.
+let fullHouseCount = 0;
+for (let i = 0; i < 20; i++) {
+  const choice = botChoose(handNoFives, null);
+  if (choice?.fiveType === 'fullHouse') fullHouseCount++;
+}
+ok('bot always picks a 5-card combo (full house) when one is available', fullHouseCount > 15);
+
+const handTripsAndPair = [
+  c5('C', '3'), c5('D', '3'), c5('H', '3'),  // trip 3s
+  c5('C', '5'), c5('D', '5'),                // pair 5s (still makes a full house — 5-card)
+  c5('S', 'A'),
+];
+// Bot prefers full house over 3-of-a-kind. (One exception in 10 due to randomness.)
+let fullHouseCount2 = 0;
+for (let i = 0; i < 20; i++) {
+  const choice = botChoose(handTripsAndPair, null);
+  if (choice?.fiveType === 'fullHouse') fullHouseCount2++;
+}
+ok('bot plays the full house over a plain 3-of-a-kind on opening', fullHouseCount2 > 15);
+
+// Truly no 5-card hand: a 2-of-a-kind (NOT a 3-of-a-kind), so no full house possible
+const handPairAndSingles = [
+  c5('C', '3'), c5('D', '3'),  // pair 3s
+  c5('S', 'A'),
+  c5('H', 'K'),
+];
+const botChoice4 = botChoose(handPairAndSingles, null);
+ok('bot plays a pair over a single on opening when no 5-card/trip', botChoice4?.type === 'pair');
+
+// Bot responds to a lead with same length
+const openingLead = detectCombo([c5('C', '5')])!; // single 5
+const botResponse = botChoose(handPairAndSingles, openingLead);
+ok('bot responds with a single when lead is a single', botResponse?.type === 'single');
+// Bot should pick the K (rank 11) over A (rank 12) because K is the lowest
+// rank that still beats 5 — shed the higher card for later.
+ok('bot picks the K (lowest rank that beats 5 of clubs)', botResponse?.rankValue === 11);
+ok('bot picks K over A (sheds the higher card for later)', botResponse?.cards[0].rank === 'K');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

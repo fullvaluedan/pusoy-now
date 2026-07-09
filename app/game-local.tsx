@@ -16,16 +16,16 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Dimensions,
   PanResponder,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DealingAnimation } from '../components/DealingAnimation';
-import { OpponentCardStack, PlayingCard } from '../components/PlayingCard';
+import { OpponentCardStack, PlayingCard, CARD_WIDTH } from '../components/PlayingCard';
 import { canPlay, detectCombo } from '../lib/pusoy/combo';
 import {
   createLocalGame,
@@ -326,9 +326,10 @@ export default function LocalGameScreen() {
   );
 }
 
-// HandRow: a horizontally scrollable row of cards. Each card is tappable to
-// select. Cards are also draggable (no long-press — engage on any movement
-// past 8px) to reorder.
+// HandRow: all 13 cards fanned across the screen width, centered. Each
+// card is tappable to select. Cards are also draggable (no long-press) to
+// reorder. The fan uses computed offsets so the entire hand is visible
+// regardless of card count.
 function HandRow({
   hand,
   selected,
@@ -340,12 +341,17 @@ function HandRow({
   onTap: (c: Card) => void;
   onReorder: (from: number, to: number) => void;
 }) {
+  const { width } = Dimensions.get('window');
+  const SIDE_MARGIN = 12;
+  // Total fan width: card width + (n-1) * stride. We pick a stride so the
+  // fan fills the screen minus side margins.
+  const available = width - SIDE_MARGIN * 2;
+  const stride = hand.length > 1 ? Math.min(CARD_WIDTH, (available - CARD_WIDTH) / (hand.length - 1)) : 0;
+  const totalWidth = CARD_WIDTH + stride * (hand.length - 1);
+  // Center the fan horizontally inside the screen.
+  const startX = (width - totalWidth) / 2;
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.handScroll}
-    >
+    <View style={[styles.handFan, { height: CARD_WIDTH + 24 }]}>
       {hand.map((c, i) => (
         <DraggableCard
           key={c.id}
@@ -355,9 +361,11 @@ function HandRow({
           onTap={() => onTap(c)}
           onReorder={onReorder}
           total={hand.length}
+          startX={startX}
+          stride={stride}
         />
       ))}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -368,6 +376,8 @@ function DraggableCard({
   onTap,
   onReorder,
   total,
+  startX,
+  stride,
 }: {
   card: Card;
   isSelected: boolean;
@@ -375,21 +385,19 @@ function DraggableCard({
   onTap: () => void;
   onReorder: (from: number, to: number) => void;
   total: number;
+  startX: number;
+  stride: number;
 }) {
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const [dragging, setDragging] = useState(false);
-
-  // SLOT is the visual width of each card slot (the card itself is 64px
-  // wide but the ScrollView places them with a -28px margin overlap, so the
-  // effective stride is 36px). Tuned to feel right when dragging.
-  const SLOT = 36;
+  // The "rest" position for this card in the fan.
+  const restX = startX + index * stride;
 
   const responder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, g) => {
-          // engage drag on any movement past 8px (no long-press needed)
           return Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8;
         },
         onPanResponderGrant: () => {
@@ -398,7 +406,7 @@ function DraggableCard({
         onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
         onPanResponderRelease: (_, g) => {
           setDragging(false);
-          const target = Math.max(0, Math.min(total - 1, index + Math.round(g.dx / SLOT)));
+          const target = Math.max(0, Math.min(total - 1, index + Math.round(g.dx / Math.max(1, stride))));
           if (target !== index) onReorder(index, target);
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
         },
@@ -407,21 +415,22 @@ function DraggableCard({
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
         },
       }),
-    [index, total, onReorder, pan, SLOT],
+    [index, total, onReorder, pan, stride],
   );
 
   return (
     <Animated.View
       style={{
+        position: 'absolute',
+        left: restX,
+        top: 12,
         transform: [{ translateX: pan.x }, { translateY: pan.y }],
-        zIndex: dragging ? 100 : 1,
+        zIndex: dragging ? 100 : index,
       }}
       {...responder.panHandlers}
     >
       <Pressable onPress={onTap}>
-        <View style={{ marginRight: -28 }}>
-          <PlayingCard card={card} selected={isSelected} />
-        </View>
+        <PlayingCard card={card} selected={isSelected} />
       </Pressable>
     </Animated.View>
   );
@@ -482,9 +491,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   selLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
-  handScroll: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  handFan: {
+    // The hand is a fan of absolutely-positioned cards centered horizontally
+    // on the screen. Height is set by the parent (HandRow) to match card
+    // height + a bit of vertical padding for the lift animation.
+    width: '100%',
+    position: 'relative',
   },
   actionsRow: {
     flexDirection: 'row',
