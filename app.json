@@ -4,8 +4,13 @@
     "slug": "pusoy-now",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/art/app-icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/art/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#0e4a3a"
+    },
     "scheme": "pusoynow",
     "newArchEnabled": true,
     "ios": {
@@ -15,15 +20,13 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0e4a3a",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/art/app-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.pusoynow.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/art/app-icon.png",
       "bundler": "metro"
     },
     "plugins": [
