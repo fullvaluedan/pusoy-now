@@ -6,7 +6,17 @@
 // the seat's position. Each step takes ~50ms; the whole animation ~2.6s.
 
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { OpponentCardStack, PlayingCard, CARD_WIDTH, CARD_HEIGHT } from './PlayingCard';
 import { colors, layout, withAlpha } from '../lib/theme';
 import type { DealStep, LocalPlayer } from '../lib/pusoy/localGame';
@@ -45,12 +55,22 @@ function seatFraction(seat: number, humanSeat: number, total: number): { x: numb
 }
 
 export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, onDone }: Props) {
-  const { width, height } = Dimensions.get('window');
+  // Dealing renders as panel content, so every fly target and the shuffle /
+  // center anchor derive from the measured panel box, not the full window.
+  // This keeps the seats and the in-flight card inside the panel instead of
+  // flinging them to window corners (the old Dimensions.get('window') defect).
+  const { width: windowWidth } = useWindowDimensions();
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [step, setStep] = useState(0);
-  const x = useRef(new Animated.Value(width * 0.5 - 32)).current;
-  const y = useRef(new Animated.Value(height * 0.5 - 46)).current;
+  const x = useRef(new Animated.Value(0)).current;
+  const y = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const [showShuffle, setShowShuffle] = useState(true);
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setBox((b) => (b && b.w === width && b.h === height ? b : { w: width, h: height }));
+  };
 
   // Shuffle phase: deck bobs for 800ms, then fades
   useEffect(() => {
@@ -58,25 +78,31 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
     return () => clearTimeout(t);
   }, []);
 
-  // Dealing phase: 52 steps
+  // Dealing phase: 52 steps. Waits for the panel box to be measured so the
+  // flight geometry is relative to the panel, not the window.
   useEffect(() => {
-    if (showShuffle) return;
+    if (showShuffle || !box) return;
     if (step >= TOTAL_STEPS) {
       const t = setTimeout(onDone, 350);
       return () => clearTimeout(t);
+    }
+    if (step === 0) {
+      // Anchor the first card at the panel center before it flies out.
+      x.setValue(box.w * 0.5 - CARD_WIDTH / 2);
+      y.setValue(box.h * 0.5 - CARD_HEIGHT / 2);
     }
     const humanSeat = playerKinds.findIndex((k) => k === 'human');
     const next = dealOrder[step];
     const target = seatFraction(next.seat, humanSeat, 4);
     Animated.parallel([
       Animated.timing(x, {
-        toValue: target.x * width - 32,
+        toValue: target.x * box.w - CARD_WIDTH / 2,
         duration: STEP_MS,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: false,
       }),
       Animated.timing(y, {
-        toValue: target.y * height - 46,
+        toValue: target.y * box.h - CARD_HEIGHT / 2,
         duration: STEP_MS,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: false,
@@ -87,11 +113,11 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
         Animated.timing(opacity, { toValue: 0, duration: 5, useNativeDriver: false }),
       ]),
     ]).start(() => setStep((s) => s + 1));
-  }, [step, showShuffle, dealOrder, playerKinds, x, y, opacity, onDone, width, height]);
+  }, [step, showShuffle, box, dealOrder, playerKinds, x, y, opacity, onDone]);
 
   if (showShuffle) {
     return (
-      <Pressable style={styles.overlay} onPress={onDone}>
+      <Pressable style={styles.overlay} onPress={onDone} onLayout={onLayout}>
         <View style={styles.shuffleBox}>
           <View style={styles.deckStack}>
             <View style={[styles.deckCard, { top: 0, left: 0 }]}>
@@ -129,17 +155,17 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
   for (let s = 0; s < step; s++) {
     if (dealOrder[s].seat === humanSeat) humanDealt.push(deck[dealOrder[s].cardIndex]);
   }
-  // Fan math mirrors HandRow (including its table-column width cap) so each
-  // card lands in its final position as it arrives, rather than shifting as
-  // the hand grows or jumping when the live hand takes over.
+  // Fan math mirrors HandRow exactly (same width basis and centering) so each
+  // dealt card lands in the final position the live hand will render it in,
+  // rather than shifting as the hand grows or jumping when play begins.
   const SIDE_MARGIN = 12;
-  const fanWidth = Math.min(width, layout.maxTableWidth);
+  const fanWidth = Math.min(windowWidth, layout.maxTableWidth);
   const available = fanWidth - SIDE_MARGIN * 2;
   const stride = Math.min(CARD_WIDTH, (available - CARD_WIDTH) / 12);
-  const fanStartX = (width - (CARD_WIDTH + stride * 12)) / 2;
+  const fanStartX = (fanWidth - (CARD_WIDTH + stride * 12)) / 2;
 
   return (
-    <Pressable style={styles.overlay} onPress={onDone}>
+    <Pressable style={styles.overlay} onPress={onDone} onLayout={onLayout}>
       <View style={styles.oppRow}>
         {oppStacks.map((s) =>
           s < 0 ? null : (
