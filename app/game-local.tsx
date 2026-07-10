@@ -122,12 +122,29 @@ function seatName(game: LocalGame, seat: number, displayName: string): string {
 
 // Felt table backdrop shared by every phase of this screen (loading,
 // dealing, in-progress, finished) so the game always sits on the same
-// textured surface, with colors.felt as the backing color underneath.
+// surface. The felt is a resolution-independent surface, not a stretched
+// photo: a solid color base fills the root edge to edge (behind notches),
+// the fixed-size photo lays over it at low opacity as a texture hint only
+// (resizeMode="cover" always fully covers, so there's no crop gap, and low
+// opacity hides the upscale pixelation at wide viewports), and a stacked
+// border vignette darkens the edges like a real table under center
+// lighting. The SafeAreaView nests inside all of that so content still
+// clears the safe-area insets while the felt itself ignores them.
 function TableBackground({ children }: { children: ReactNode }) {
   return (
-    <ImageBackground source={FELT_IMG} style={styles.tableBackground} resizeMode="cover">
-      <SafeAreaView style={styles.container}>{children}</SafeAreaView>
-    </ImageBackground>
+    <View style={styles.tableBackground}>
+      <ImageBackground
+        source={FELT_IMG}
+        style={styles.tableTexture}
+        imageStyle={styles.tableTextureImage}
+        resizeMode="cover"
+      >
+        <View style={styles.tableVignetteOuter} pointerEvents="none" />
+        <View style={styles.tableVignetteMid} pointerEvents="none" />
+        <View style={styles.tableVignetteInner} pointerEvents="none" />
+        <SafeAreaView style={styles.container}>{children}</SafeAreaView>
+      </ImageBackground>
+    </View>
   );
 }
 
@@ -638,9 +655,47 @@ function DraggableCard({
 }
 
 const styles = StyleSheet.create({
-  // The felt.png ImageBackground itself; colors.felt shows through at the
-  // edges (resizeMode="cover") and while the image loads.
+  // Solid felt color base, filling the root so any moment the photo isn't
+  // painted yet (or a viewport ratio the crop doesn't fully agree with)
+  // still reads as felt rather than blank space.
   tableBackground: { flex: 1, backgroundColor: colors.felt },
+  tableTexture: { flex: 1 },
+  // Kept faint on purpose: this is a texture hint layered on the color
+  // base, not the surface itself, so upscaling the single fixed-size photo
+  // to a wide desktop viewport never reads as pixelated.
+  tableTextureImage: { opacity: 0.3 },
+  // Three concentric low-alpha frames stand in for a radial gradient (no
+  // gradient lib in this project); alpha rises toward the outer band so the
+  // edges darken gradually. The alpha steps stay under ~0.06 apart and the
+  // bands wide, because a larger step reads as a stacked frame rather than
+  // a vignette.
+  tableVignetteOuter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 14,
+    borderColor: withAlpha(colors.black, 0.16),
+  },
+  tableVignetteMid: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    right: 14,
+    bottom: 14,
+    borderWidth: 24,
+    borderColor: withAlpha(colors.black, 0.1),
+  },
+  tableVignetteInner: {
+    position: 'absolute',
+    top: 38,
+    left: 38,
+    right: 38,
+    bottom: 38,
+    borderWidth: 34,
+    borderColor: withAlpha(colors.black, 0.04),
+  },
   container: { flex: 1, backgroundColor: 'transparent' },
   loadingText: { color: colors.textOnFelt, textAlign: 'center', marginTop: spacing.xxl },
 
