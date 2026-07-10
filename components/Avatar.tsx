@@ -6,6 +6,10 @@ import { Image, StyleSheet, Text, View, type ImageSourcePropType, type StyleProp
 import { colors, typography, withAlpha } from '../lib/theme';
 import { avatarInitial } from '../lib/initials';
 
+const SEAT_FRAME_IMG = require('../assets/art/seat-frame.png');
+// The ring art extends this far past the photo on each side.
+const FRAME_SCALE = 1.5;
+
 interface AvatarProps {
   name: string;
   url?: string | null;
@@ -14,6 +18,8 @@ interface AvatarProps {
   localSource?: ImageSourcePropType;
   size?: number;
   active?: boolean;
+  // Wrap the avatar in the decorative gold seat-frame ring.
+  framed?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -25,6 +31,7 @@ export const Avatar = memo(function Avatar({
   localSource,
   size = 40,
   active = false,
+  framed = false,
   style,
 }: AvatarProps) {
   const [imageError, setImageError] = useState(false);
@@ -32,32 +39,43 @@ export const Avatar = memo(function Avatar({
   const source = url ? { uri: url } : localSource;
   const showImage = source && !imageError;
 
-  return (
+  const inner = (
     <View
       style={[
         styles.container,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-        },
+        { width: size, height: size, borderRadius: size / 2 },
         active && styles.active,
-        style,
+        !framed && style,
       ]}
     >
       {showImage ? (
         <Image
           source={source}
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-          }}
+          style={{ width: size, height: size, borderRadius: size / 2 }}
           onError={() => setImageError(true)}
         />
       ) : (
         <Text style={styles.initial}>{avatarInitial(name)}</Text>
       )}
+    </View>
+  );
+
+  if (!framed) return inner;
+
+  // Framed: an unclipped wrapper holds the ring art (behind, larger than the
+  // photo so the ornamental band shows around it) and the circular avatar on
+  // top. contain keeps the ring undistorted; pointerEvents none keeps it inert.
+  const ring = Math.round(size * FRAME_SCALE);
+  return (
+    <View style={[styles.frameWrap, { width: ring, height: ring }, style]}>
+      <Image
+        source={SEAT_FRAME_IMG}
+        style={[styles.frameRing, { width: ring, height: ring }]}
+        resizeMode="contain"
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      />
+      {inner}
     </View>
   );
 });
@@ -78,5 +96,13 @@ const styles = StyleSheet.create({
     color: colors.textOnFelt,
     fontSize: typography.caption.fontSize,
     fontWeight: '700',
+  },
+  frameWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  frameRing: {
+    position: 'absolute',
+    pointerEvents: 'none',
   },
 });

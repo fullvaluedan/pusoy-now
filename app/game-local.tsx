@@ -59,6 +59,7 @@ import type { BotLevel, Card, FiveCardType, PlayedCombo } from '../lib/pusoy/typ
 const FELT_IMG = require('../assets/art/felt.png');
 const BOT_AVATAR_IMG = require('../assets/art/bot-avatar.png');
 const TABLE_INLAY_IMG = require('../assets/art/table-inlay.png');
+const TURN_GLOW_IMG = require('../assets/art/turn-glow.png');
 
 const RANK_DISPLAY: Record<Card['rank'], string> = {
   '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
@@ -190,6 +191,7 @@ function SeatPlate({
         url={avatarUrl}
         localSource={avatarSource}
         size={28}
+        framed
         active={isCurrent && !finished}
         style={styles.oppAvatarMargin}
       />
@@ -529,6 +531,18 @@ export default function LocalGameScreen() {
 
       {/* Bottom: hand + actions. Hand in the lower-center; Play/Pass centered directly under it. */}
       <View style={[styles.bottom, isMyTurn && styles.bottomActive]}>
+        {/* Soft gold glow behind the hand while it is the player's turn. First
+            child so it paints behind the toolbar/hand/actions; contain so it
+            never distorts; pointerEvents none so it never blocks a tap. */}
+        {isMyTurn && (
+          <Image
+            source={TURN_GLOW_IMG}
+            style={styles.turnGlow}
+            resizeMode="cover"
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          />
+        )}
         {isMyTurn && (
           <View style={styles.turnBanner} pointerEvents="none">
             <Text style={styles.turnBannerText}>Your turn</Text>
@@ -824,6 +838,19 @@ const styles = StyleSheet.create({
   bottomActive: {
     borderTopColor: colors.gold,
     backgroundColor: withAlpha(colors.gold, 0.08),
+  },
+  // Radial gold glow art behind the hand on the player's turn. Fills the hand
+  // area; low opacity so it reads as ambient light, not a solid block.
+  turnGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: undefined,
+    height: undefined,
+    opacity: 0.5,
+    pointerEvents: 'none',
   },
   turnBanner: {
     position: 'absolute',
