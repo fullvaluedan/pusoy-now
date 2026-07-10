@@ -16,7 +16,7 @@ export default function BluetoothInfo() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>Bluetooth multiplayer</Text>
         <Text style={styles.subtitle}>
-          Play with people nearby — no internet required. Perfect for flights, commutes, and the back seat.
+          Play with people nearby, no internet required. Perfect for flights, commutes, and the back seat.
         </Text>
 
         <Text style={styles.section}>What works today</Text>
