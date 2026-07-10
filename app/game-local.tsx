@@ -20,9 +20,10 @@
 //   - Round-complete screen with finish order
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
+  ImageBackground,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -36,6 +37,7 @@ import { OpponentCardStack, PlayingCard, CARD_WIDTH } from '../components/Playin
 import { canPlay, detectCombo } from '../lib/pusoy/combo';
 import { findLegalPlays } from '../lib/pusoy/bot';
 import { parseLevel } from '../lib/pusoy/level';
+import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
 import {
   createLocalGame,
   findHumanSeat,
@@ -48,6 +50,8 @@ import {
   type SortMode,
 } from '../lib/pusoy/localGame';
 import type { BotLevel, Card, PlayedCombo } from '../lib/pusoy/types';
+
+const FELT_IMG = require('../assets/art/felt.png');
 
 const RANK_DISPLAY: Record<Card['rank'], string> = {
   '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
@@ -75,7 +79,7 @@ function comboName(c: PlayedCombo): string {
 }
 
 function comboLabel(c: PlayedCombo): string {
-  return `${comboName(c)} — ${c.cards.map(cardLabel).join(' ')}`;
+  return `${comboName(c)} - ${c.cards.map(cardLabel).join(' ')}`;
 }
 
 const SORT_LABEL: Record<SortMode, string> = {
@@ -101,6 +105,24 @@ const LEVEL_LABEL: Record<BotLevel, string> = {
 function seatName(game: LocalGame, seat: number, displayName: string): string {
   if (game.playerKinds[seat] === 'human') return displayName;
   return `Bot ${seat + 1} - ${LEVEL_LABEL[game.level]}`;
+}
+
+// First-letter avatar placeholder. U8 replaces this with a real
+// components/Avatar.tsx that shows a social picture when one is available;
+// this stays a simple themed initial disc until then.
+function seatInitial(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || '?';
+}
+
+// Felt table backdrop shared by every phase of this screen (loading,
+// dealing, in-progress, finished) so the game always sits on the same
+// textured surface, with colors.felt as the backing color underneath.
+function TableBackground({ children }: { children: ReactNode }) {
+  return (
+    <ImageBackground source={FELT_IMG} style={styles.tableBackground} resizeMode="cover">
+      <SafeAreaView style={styles.container}>{children}</SafeAreaView>
+    </ImageBackground>
+  );
 }
 
 export default function LocalGameScreen() {
@@ -156,9 +178,9 @@ export default function LocalGameScreen() {
 
   if (!game) {
     return (
-      <SafeAreaView style={styles.container}>
+      <TableBackground>
         <Text style={styles.loadingText}>Loading…</Text>
-      </SafeAreaView>
+      </TableBackground>
     );
   }
 
@@ -169,7 +191,7 @@ export default function LocalGameScreen() {
   if (game.phase === 'dealing') {
     const playerNames = [0, 1, 2, 3].map((s) => seatName(game, s, 'You'));
     return (
-      <SafeAreaView style={styles.container}>
+      <TableBackground>
         <DealingAnimation
           dealOrder={game.dealOrder}
           deck={game.deck}
@@ -177,7 +199,7 @@ export default function LocalGameScreen() {
           playerNames={playerNames}
           onDone={() => startGame(game)}
         />
-      </SafeAreaView>
+      </TableBackground>
     );
   }
 
@@ -186,7 +208,7 @@ export default function LocalGameScreen() {
     const youWon = game.finishOrder[0] === humanSeat;
     const youLast = game.finishOrder[game.finishOrder.length - 1] === humanSeat;
     return (
-      <SafeAreaView style={styles.container}>
+      <TableBackground>
         <View style={styles.finishCard}>
           <Text style={styles.finishHeadline}>
             {youWon ? 'You won!' : youLast ? 'You lost' : 'Hand over'}
@@ -215,7 +237,7 @@ export default function LocalGameScreen() {
             </Pressable>
           </View>
         </View>
-      </SafeAreaView>
+      </TableBackground>
     );
   }
 
@@ -300,13 +322,16 @@ export default function LocalGameScreen() {
   const opponentOrder = [1, 2, 3].map((o) => (humanSeat + o) % 4);
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Top: opponents row */}
+    <TableBackground>
+      {/* Top: opponents row — each seat is a plate with an avatar-slot
+          placeholder (initial disc; U8 swaps in the real Avatar component),
+          the name, card count, and pass/turn state. */}
       <View style={styles.oppRow}>
         {opponentOrder.map((seat) => {
           const isCurrent = currentSeat === seat;
           const finished = game.handState.finishedOrder.includes(seat);
           const passed = game.handState.passed.includes(seat);
+          const name = seatName(game, seat, 'You');
           return (
             <View
               key={seat}
@@ -316,8 +341,11 @@ export default function LocalGameScreen() {
                 finished && styles.oppBoxDone,
               ]}
             >
-              <Text style={styles.oppName}>
-                {seatName(game, seat, 'You')}
+              <View style={[styles.oppAvatar, isCurrent && !finished && styles.oppAvatarActive]}>
+                <Text style={styles.oppAvatarText}>{seatInitial(name)}</Text>
+              </View>
+              <Text style={styles.oppName} numberOfLines={1}>
+                {name}
                 {isCurrent && !finished ? ' •' : ''}
                 {finished ? ' ✓' : passed ? ' (pass)' : ''}
               </Text>
@@ -350,7 +378,7 @@ export default function LocalGameScreen() {
           <View style={styles.trickBox}>
             <Text style={styles.trickEmpty}>
               {isMyTurn
-                ? 'Your turn — lead with a play'
+                ? 'Your turn - lead with a play'
                 : `${seatName(game, currentSeat, 'You')} to lead`}
             </Text>
           </View>
@@ -413,7 +441,7 @@ export default function LocalGameScreen() {
           </View>
         </View>
       </View>
-    </SafeAreaView>
+    </TableBackground>
   );
 }
 
@@ -535,63 +563,81 @@ function DraggableCard({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0e4a3a' },
-  loadingText: { color: '#fff', textAlign: 'center', marginTop: 40 },
+  // The felt.png ImageBackground itself; colors.felt shows through at the
+  // edges (resizeMode="cover") and while the image loads.
+  tableBackground: { flex: 1, backgroundColor: colors.felt },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  loadingText: { color: colors.textOnFelt, textAlign: 'center', marginTop: spacing.xxl },
 
-  // Opponents
+  // Opponents — each is a seat plate: avatar slot, name, count, state.
   oppRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   oppBox: {
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
+    backgroundColor: withAlpha(colors.ink, 0.25),
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
     alignItems: 'center',
-    minWidth: 90,
+    minWidth: 92,
   },
   oppBoxActive: {
-    backgroundColor: 'rgba(241,196,15,0.25)',
+    backgroundColor: withAlpha(colors.gold, 0.25),
     borderWidth: 1,
-    borderColor: '#f1c40f',
+    borderColor: colors.gold,
   },
   oppBoxDone: { opacity: 0.55 },
-  oppName: { color: '#fff', fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  oppStackRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  oppCount: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  oppAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.feltLight,
+    borderWidth: 1,
+    borderColor: withAlpha(colors.white, 0.3),
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  oppAvatarActive: { borderColor: colors.gold },
+  oppAvatarText: { color: colors.textOnFelt, fontSize: typography.caption.fontSize, fontWeight: '700' },
+  oppName: { color: colors.textOnFelt, fontSize: typography.tiny.fontSize, fontWeight: '600', marginBottom: spacing.xs },
+  oppStackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
+  oppCount: { color: colors.textOnFelt, fontSize: 18, fontWeight: '700' },
 
-  // Center trick pile
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12 },
+  // Center trick pile — a subtle inset "well" on the felt.
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.md },
   trickBox: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    padding: 14,
-    borderRadius: 12,
+    backgroundColor: withAlpha(colors.black, 0.3),
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: withAlpha(colors.black, 0.4),
     alignItems: 'center',
     minWidth: 240,
     maxWidth: 340,
   },
-  trickLabel: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginBottom: 6 },
-  trickCards: { flexDirection: 'row', justifyContent: 'center', marginBottom: 6 },
-  trickName: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  trickEmpty: { color: 'rgba(255,255,255,0.8)', fontSize: 16, paddingVertical: 30 },
-  error: { color: '#ff6b6b', marginTop: 10, fontWeight: '600' },
-  autoPass: { color: '#f1c40f', marginTop: 10, fontWeight: '600' },
+  trickLabel: { color: colors.textOnFeltMuted, fontSize: typography.tiny.fontSize, marginBottom: spacing.xs + 2 },
+  trickCards: { flexDirection: 'row', justifyContent: 'center', marginBottom: spacing.xs + 2 },
+  trickName: { color: colors.textOnFelt, fontSize: typography.label.fontSize, fontWeight: '600' },
+  trickEmpty: { color: withAlpha(colors.white, 0.8), fontSize: typography.body.fontSize, paddingVertical: 30 },
+  error: { color: colors.danger, marginTop: spacing.sm + 2, fontWeight: '600' },
+  autoPass: { color: colors.gold, marginTop: spacing.sm + 2, fontWeight: '600' },
 
   // Bottom — hand in the lower-center, actions centered directly below
-  bottom: { paddingBottom: 12 },
+  bottom: { paddingBottom: spacing.md - 2 },
   handToolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 6,
+    paddingHorizontal: spacing.lg - 4,
+    marginBottom: spacing.xs + 2,
   },
-  selLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
-  selOk: { color: '#7bed9f', fontWeight: '700' },
-  selBad: { color: '#ff8f8f', fontWeight: '600' },
+  selLabel: { color: colors.textOnFeltMuted, fontSize: typography.caption.fontSize },
+  selOk: { color: colors.success, fontWeight: '700' },
+  selBad: { color: colors.dangerLight, fontWeight: '600' },
   handFan: {
     // The hand is a fan of absolutely-positioned cards centered horizontally
     // on the screen. Height is set by the parent (HandRow) to match card
@@ -602,47 +648,47 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingHorizontal: spacing.lg - 4,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: withAlpha(colors.white, 0.1),
   },
-  actionsInner: { flexDirection: 'row', gap: 12 },
+  actionsInner: { flexDirection: 'row', gap: spacing.md - 2 },
   btn: {
-    backgroundColor: '#1c7a5d',
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 10,
+    backgroundColor: colors.feltLight,
+    paddingVertical: spacing.sm + 4,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: radii.md,
   },
-  btnPass: { backgroundColor: '#7f8c8d' },
+  btnPass: { backgroundColor: colors.neutral },
   btnDisabled: { opacity: 0.4 },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  btnText: { color: colors.textOnFelt, fontWeight: '700', fontSize: 16 },
   btnSmall: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 8,
+    backgroundColor: withAlpha(colors.white, 0.15),
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.sm - 2,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: withAlpha(colors.white, 0.3),
   },
-  btnSmallText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#fff' },
+  btnSmallText: { color: colors.textOnFelt, fontWeight: '600', fontSize: typography.caption.fontSize },
+  btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.textOnFelt },
 
   // Finish screen
   finishCard: {
     flex: 1,
-    margin: 16,
-    backgroundColor: '#f4f1e8',
-    borderRadius: 14,
-    padding: 20,
+    margin: spacing.lg - 4,
+    backgroundColor: colors.cream,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  finishHeadline: { fontSize: 32, fontWeight: '800', color: '#0e4a3a', marginBottom: 8 },
-  finishSub: { fontSize: 14, color: '#666', marginBottom: 16 },
-  finishRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  finishPlace: { color: '#0e4a3a', fontSize: 22, fontWeight: '700', width: 40 },
-  finishName: { color: '#222', fontSize: 18 },
-  finishActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  finishHeadline: { fontSize: 32, fontWeight: '800', color: colors.felt, marginBottom: spacing.sm },
+  finishSub: { fontSize: typography.label.fontSize, color: colors.textMuted, marginBottom: spacing.lg - 4 },
+  finishRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
+  finishPlace: { color: colors.felt, fontSize: 22, fontWeight: '700', width: 40 },
+  finishName: { color: colors.textPrimary, fontSize: typography.subheading.fontSize - 2 },
+  finishActions: { flexDirection: 'row', gap: spacing.md - 2, marginTop: spacing.xxl - 8 },
 });

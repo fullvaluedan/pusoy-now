@@ -1,12 +1,16 @@
-// Bicycle-style playing card component. Pure View+Text (no SVG, no images).
-// Renders a standard card layout: large pips in top-left and bottom-right
-// (rotated 180°), big center pip for face cards, white background, thin
-// border, rounded corners. Card back is a classic blue with a white
-// diamond pattern in the center.
+// Bicycle-style playing card component. Card FACES are pure View+Text (no
+// SVG, no images) so they stay crisp at small sizes — large pips in
+// top-left and bottom-right (rotated 180°), big center pip for face cards,
+// cream background, thin border, rounded corners. The card BACK is the
+// generated `card-back.png` art, with a themed felt color behind it so
+// nothing flashes blank while the image loads.
 
 import { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
+import { colors } from '../lib/theme';
 import type { Card, Suit, Rank } from '../lib/pusoy/types';
+
+const CARD_BACK_IMG = require('../assets/art/card-back.png');
 
 const RANK_LABEL: Record<Rank, string> = {
   '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
@@ -17,7 +21,7 @@ const SUIT_GLYPH: Record<Suit, string> = {
 };
 // Red suits get red ink, black suits get near-black.
 const SUIT_COLOR: Record<Suit, string> = {
-  C: '#1a1a1a', D: '#c0392b', H: '#c0392b', S: '#1a1a1a',
+  C: colors.ink, D: colors.cardRed, H: colors.cardRed, S: colors.ink,
 };
 
 const CARD_W = 64;
@@ -51,18 +55,8 @@ function PlayingCardComponent({ card, faceDown, small, selected, dimmed, tiltDeg
           tiltDeg !== 0 && { transform: [{ rotate: `${tiltDeg}deg` }, { translateY: -10 }] },
         ]}
       >
-        {/* Diamond pattern: a single big "♦" rotated */}
-        <Text
-          style={{
-            color: '#fff',
-            fontSize: h * 0.6,
-            lineHeight: h * 0.6,
-            transform: [{ rotate: '0deg' }],
-            opacity: 0.9,
-          }}
-        >
-          ◆
-        </Text>
+        {/* colors.felt shows through as a fallback until the art loads */}
+        <Image source={CARD_BACK_IMG} style={cardBackImageStyle(w, h)} resizeMode="cover" />
       </View>
     );
   }
@@ -160,9 +154,9 @@ const cardBase = (w: number, h: number) => ({
   height: h,
   borderRadius: 7,
   borderWidth: 1,
-  borderColor: '#2c3e50',
-  backgroundColor: '#fdfdfb',
-  shadowColor: '#000',
+  borderColor: colors.cardBorder,
+  backgroundColor: colors.cardFace,
+  shadowColor: colors.black,
   shadowOpacity: 0.35,
   shadowRadius: 2,
   shadowOffset: { width: 1, height: 1 },
@@ -176,12 +170,19 @@ const cardFaceStyle = (w: number, h: number) => ({
 
 const cardBackStyle = (w: number, h: number) => ({
   ...cardBase(w, h),
-  backgroundColor: '#1e4a8a',
+  // Themed felt fallback shows through while card-back.png loads.
+  backgroundColor: colors.felt,
   alignItems: 'center' as const,
   justifyContent: 'center' as const,
-  // Subtle diagonal stripe pattern via border.
-  borderColor: '#fff',
+  overflow: 'hidden' as const,
+  borderColor: colors.cream,
   borderWidth: 2,
+});
+
+const cardBackImageStyle = (w: number, h: number) => ({
+  width: w,
+  height: h,
+  borderRadius: 6,
 });
 
 const cornerTopLeft = {

@@ -6,9 +6,12 @@
 // the seat's position. Each step takes ~50ms; the whole animation ~2.6s.
 
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { OpponentCardStack, PlayingCard } from './PlayingCard';
+import { colors, withAlpha } from '../lib/theme';
 import type { DealStep, LocalPlayer } from '../lib/pusoy/localGame';
+
+const CARD_BACK_IMG = require('../assets/art/card-back.png');
 
 const STEP_MS = 50;
 const TOTAL_STEPS = 52;
@@ -91,10 +94,18 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
       <Pressable style={styles.overlay} onPress={onDone}>
         <View style={styles.shuffleBox}>
           <View style={styles.deckStack}>
-            <View style={[styles.deckCard, { top: 0, left: 0 }]} />
-            <View style={[styles.deckCard, { top: 2, left: 2 }]} />
-            <View style={[styles.deckCard, { top: 4, left: 4 }]} />
-            <View style={[styles.deckCard, { top: 6, left: 6 }]} />
+            <View style={[styles.deckCard, { top: 0, left: 0 }]}>
+              <Image source={CARD_BACK_IMG} style={styles.deckCardImage} resizeMode="cover" />
+            </View>
+            <View style={[styles.deckCard, { top: 2, left: 2 }]}>
+              <Image source={CARD_BACK_IMG} style={styles.deckCardImage} resizeMode="cover" />
+            </View>
+            <View style={[styles.deckCard, { top: 4, left: 4 }]}>
+              <Image source={CARD_BACK_IMG} style={styles.deckCardImage} resizeMode="cover" />
+            </View>
+            <View style={[styles.deckCard, { top: 6, left: 6 }]}>
+              <Image source={CARD_BACK_IMG} style={styles.deckCardImage} resizeMode="cover" />
+            </View>
           </View>
           <Text style={styles.shuffleText}>Shuffling…</Text>
           <Text style={styles.skipHint}>Tap to skip</Text>
@@ -135,7 +146,7 @@ const styles = StyleSheet.create({
   overlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: '#0e4a3a',
+    backgroundColor: colors.felt,
     zIndex: 100,
   },
   shuffleBox: {
@@ -153,17 +164,24 @@ const styles = StyleSheet.create({
     width: 64,
     height: 92,
     borderRadius: 7,
-    backgroundColor: '#1e4a8a',
+    // Themed felt fallback shows through while card-back.png loads.
+    backgroundColor: colors.felt,
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: colors.cream,
+    overflow: 'hidden',
+  },
+  deckCardImage: {
+    width: 64,
+    height: 92,
+    borderRadius: 6,
   },
   shuffleText: {
-    color: '#fff',
+    color: colors.textOnFelt,
     fontSize: 22,
     fontWeight: '600',
   },
   skipHint: {
-    color: 'rgba(255,255,255,0.45)',
+    color: withAlpha(colors.white, 0.45),
     fontSize: 13,
     marginTop: 10,
   },
@@ -172,7 +190,7 @@ const styles = StyleSheet.create({
     bottom: 24,
     left: 0, right: 0,
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.45)',
+    color: withAlpha(colors.white, 0.45),
     fontSize: 13,
   },
   oppRow: {
@@ -184,13 +202,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   oppSlot: { alignItems: 'center' },
-  oppName: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginBottom: 4 },
+  oppName: { color: withAlpha(colors.white, 0.85), fontSize: 13, marginBottom: 4 },
   dealingLabel: {
     position: 'absolute',
     top: '50%',
     left: 0, right: 0,
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.5)',
+    color: withAlpha(colors.white, 0.5),
     fontSize: 14,
   },
   flyingCard: {

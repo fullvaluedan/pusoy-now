@@ -29,7 +29,29 @@ export const colors = {
   surface: '#ffffff',
   border: '#0e4a3a',
   overlay: 'rgba(0,0,0,0.05)',
+
+  // Card component (PlayingCard / DealingAnimation / game table)
+  cardFace: '#fdfdfb', // card face background, slightly warmer than cream
+  cardBorder: '#2c3e50', // card face/back stroke, dark navy-ink
+  black: '#000000', // true black, for shadows and dark translucent panels via withAlpha
+
+  // Status text (in-game feedback)
+  danger: '#ff6b6b', // error / illegal-play text
+  dangerLight: '#ff8f8f', // secondary danger state (selection doesn't beat lead)
+  success: '#7bed9f', // legal/selected-ok state text
+  neutral: '#7f8c8d', // secondary action (Pass button)
 } as const;
+
+// Compose an rgba() string from a hex color token + alpha, so translucent
+// panels/text/borders can be built from theme colors instead of hardcoding
+// new hex or rgba literals at each call site.
+export function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export const spacing = {
   xs: 4,
