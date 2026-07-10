@@ -515,7 +515,12 @@ export default function LocalGameScreen() {
       </View>
 
       {/* Bottom: hand + actions. Hand in the lower-center; Play/Pass centered directly under it. */}
-      <View style={styles.bottom}>
+      <View style={[styles.bottom, isMyTurn && styles.bottomActive]}>
+        {isMyTurn && (
+          <View style={styles.turnBanner} pointerEvents="none">
+            <Text style={styles.turnBannerText}>Your turn</Text>
+          </View>
+        )}
         <View style={styles.handToolbar}>
           <View style={styles.handToolbarLeft}>
             <Pressable style={styles.btnSmall} onPress={onOrganize}>
@@ -780,7 +785,34 @@ const styles = StyleSheet.create({
   autoPass: { color: colors.gold, marginTop: spacing.sm + 2, fontWeight: '600' },
 
   // Bottom — hand in the lower-center, actions centered directly below
-  bottom: { paddingBottom: spacing.md - 2 },
+  bottom: {
+    paddingBottom: spacing.md - 2,
+    paddingTop: spacing.sm,
+    borderTopWidth: 2,
+    borderTopColor: 'transparent',
+  },
+  // Active-turn highlight on the whole hand area: a gold top edge plus a faint
+  // gold wash, matching the seat-plate active state so the two read as one system.
+  bottomActive: {
+    borderTopColor: colors.gold,
+    backgroundColor: withAlpha(colors.gold, 0.08),
+  },
+  turnBanner: {
+    position: 'absolute',
+    top: -12,
+    alignSelf: 'center',
+    backgroundColor: colors.gold,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
+    borderRadius: 999,
+    zIndex: 20,
+  },
+  turnBannerText: {
+    color: colors.felt,
+    fontSize: typography.tiny.fontSize,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   handToolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
