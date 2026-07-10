@@ -20,7 +20,7 @@
 //   - Round-complete screen with finish order
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   ImageBackground,
@@ -30,6 +30,7 @@ import {
   Text,
   View,
   useWindowDimensions,
+  type ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../components/Avatar';
@@ -51,9 +52,10 @@ import {
   type LocalGame,
   type SortMode,
 } from '../lib/pusoy/localGame';
-import type { BotLevel, Card, PlayedCombo } from '../lib/pusoy/types';
+import type { BotLevel, Card, FiveCardType, PlayedCombo } from '../lib/pusoy/types';
 
 const FELT_IMG = require('../assets/art/felt.png');
+const BOT_AVATAR_IMG = require('../assets/art/bot-avatar.png');
 
 const RANK_DISPLAY: Record<Card['rank'], string> = {
   '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
@@ -67,17 +69,26 @@ function cardLabel(c: Card): string {
   return `${RANK_DISPLAY[c.rank]}${SUIT_GLYPH[c.suit]}`;
 }
 
+const FIVE_TYPE_LABEL: Record<FiveCardType, string> = {
+  straight: 'Straight',
+  flush: 'Flush',
+  fullHouse: 'Full house',
+  fourOfAKind: 'Four of a kind',
+  straightFlush: 'Straight flush',
+};
+
 function comboName(c: PlayedCombo): string {
-  if (c.fiveType) {
-    return c.fiveType === 'fourOfAKind' ? 'Four of a kind'
-      : c.fiveType === 'fullHouse' ? 'Full house'
-      : c.fiveType === 'flush' ? 'Flush'
-      : c.fiveType === 'straightFlush' ? 'Straight flush'
-      : 'Straight';
-  }
+  if (c.fiveType) return FIVE_TYPE_LABEL[c.fiveType];
   if (c.type === 'single') return 'Single';
   if (c.type === 'pair') return 'Pair';
   return 'Three of a kind';
+}
+
+// The bullet marks whose turn it is; the check marks a player who is out.
+function seatStatusSuffix(isCurrent: boolean, finished: boolean, passed: boolean): string {
+  const turn = isCurrent && !finished ? ' •' : '';
+  const state = finished ? ' ✓' : passed ? ' (pass)' : '';
+  return turn + state;
 }
 
 function comboLabel(c: PlayedCombo): string {
@@ -120,6 +131,49 @@ function TableBackground({ children }: { children: ReactNode }) {
   );
 }
 
+// One seat in the top row. The human's plate omits the face-down stack, since
+// they are already looking at those cards in their hand.
+function SeatPlate({
+  name,
+  avatarUrl = null,
+  avatarSource,
+  isCurrent,
+  finished,
+  passed,
+  count,
+  showStack,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  avatarSource?: ImageSourcePropType;
+  isCurrent: boolean;
+  finished: boolean;
+  passed: boolean;
+  count: number;
+  showStack: boolean;
+}) {
+  return (
+    <View style={[styles.oppBox, isCurrent && styles.oppBoxActive, finished && styles.oppBoxDone]}>
+      <Avatar
+        name={name}
+        url={avatarUrl}
+        localSource={avatarSource}
+        size={28}
+        active={isCurrent && !finished}
+        style={styles.oppAvatarMargin}
+      />
+      <Text style={styles.oppName} numberOfLines={1}>
+        {name}
+        {seatStatusSuffix(isCurrent, finished, passed)}
+      </Text>
+      <View style={styles.oppStackRow}>
+        {showStack ? <OpponentCardStack count={count} small /> : null}
+        <Text style={styles.oppCount}>{count}</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function LocalGameScreen() {
   const params = useLocalSearchParams<{ bots: string; level: string }>();
   const router = useRouter();
@@ -149,16 +203,37 @@ export default function LocalGameScreen() {
     };
   }, [botCount, level]);
 
+  // Every legal play available to the human right now, or null when it is not
+  // their turn. Leading enumerates all C(13,5) five-card subsets, so this is
+  // memoized on the game state rather than recomputed on every tap: selecting a
+  // card re-renders the screen but does not change what is legal.
+  const legalPlays = useMemo(() => {
+    if (!game || game.phase !== 'playing') return null;
+    const seat = findHumanSeat(game);
+    if (game.handState.currentPlayerIndex !== seat) return null;
+    return findLegalPlays(game.hands[seat], game.handState.leadCombo);
+    // `game` is mutated in place, so `tick` is what marks it dirty.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, tick]);
+
+  // Stable identity: every DraggableCard rebuilds its PanResponder whenever this
+  // changes, so an inline arrow here would rebuild all 13 on every game tick.
+  const handleReorder = useCallback(
+    (from: number, to: number) => {
+      if (!game) return;
+      reorderHumanHand(game, from, to);
+      // Selection persists: the card ids in `selected` are still in the hand.
+    },
+    [game],
+  );
+
   // Auto-pass: on the human's turn, if nothing in hand can beat the lead,
   // show a banner briefly and pass automatically. Never fires when leading
   // (lead === null means anything is playable).
   useEffect(() => {
     if (!game || game.phase !== 'playing') return;
-    const seat = findHumanSeat(game);
-    if (game.handState.currentPlayerIndex !== seat) return;
-    const leadCombo = game.handState.leadCombo;
-    if (!leadCombo) return;
-    if (findLegalPlays(game.hands[seat], leadCombo).length > 0) return;
+    if (!game.handState.leadCombo) return;
+    if (legalPlays === null || legalPlays.length > 0) return;
     setAutoPassing(true);
     const t = setTimeout(() => {
       setAutoPassing(false);
@@ -172,7 +247,7 @@ export default function LocalGameScreen() {
       clearTimeout(t);
       setAutoPassing(false);
     };
-  }, [game, tick]);
+  }, [game, tick, legalPlays]);
 
   if (!game) {
     return (
@@ -221,6 +296,7 @@ export default function LocalGameScreen() {
                 <Avatar
                   name={name}
                   url={isHuman ? profile?.avatarUrl ?? null : null}
+                  localSource={isHuman ? undefined : BOT_AVATAR_IMG}
                   size={24}
                   style={styles.finishAvatar}
                 />
@@ -243,7 +319,7 @@ export default function LocalGameScreen() {
               style={[styles.btn, styles.btnGhost]}
               onPress={() => router.replace('/')}
             >
-              <Text style={styles.btnText}>Home</Text>
+              <Text style={[styles.btnText, styles.btnGhostText]}>Home</Text>
             </Pressable>
           </View>
         </View>
@@ -257,8 +333,7 @@ export default function LocalGameScreen() {
   const lead = game.handState.leadCombo;
   const lastPlay = game.trickHistory[0];
 
-  // Legal plays for highlighting (my turn only). ~C(13,5) enumeration; cheap.
-  const legalPlays = isMyTurn ? findLegalPlays(myHand, lead) : null;
+  // `legalPlays` (memoized above) is non-null exactly when it is our turn.
   // Cards that can be part of a legal play. Selection-aware: once cards are
   // selected, only plays that CONTAIN the whole selection keep cards lit —
   // so selecting one 9 lights up exactly what combos with it.
@@ -333,69 +408,32 @@ export default function LocalGameScreen() {
 
   return (
     <TableBackground>
-      {/* Top: seat row — human's seat on the left, opponents in the middle and right */}
+      {/* Top: seat row, the human on the left and the opponents beside them */}
       <View style={styles.oppRow}>
-        {/* Human's seat */}
-        <View
-          style={[
-            styles.oppBox,
-            currentSeat === humanSeat && styles.oppBoxActive,
-            game.handState.finishedOrder.includes(humanSeat) && styles.oppBoxDone,
-          ]}
-        >
-          <Avatar
-            name={humanDisplayName}
-            url={profile?.avatarUrl ?? null}
-            size={28}
-            active={currentSeat === humanSeat && !game.handState.finishedOrder.includes(humanSeat)}
-            style={styles.oppAvatarMargin}
-          />
-          <Text style={styles.oppName} numberOfLines={1}>
-            {humanDisplayName}
-            {currentSeat === humanSeat && !game.handState.finishedOrder.includes(humanSeat) ? ' •' : ''}
-            {game.handState.finishedOrder.includes(humanSeat) ? ' ✓' : game.handState.passed.includes(humanSeat) ? ' (pass)' : ''}
-          </Text>
-          {/* No face-down stack here: the player already sees these cards
-              fanned out in their hand. Just the count, for parity. */}
-          <View style={styles.oppStackRow}>
-            <Text style={styles.oppCount}>{game.hands[humanSeat].length}</Text>
-          </View>
-        </View>
+        <SeatPlate
+          name={humanDisplayName}
+          avatarUrl={profile?.avatarUrl ?? null}
+          isCurrent={currentSeat === humanSeat}
+          finished={game.handState.finishedOrder.includes(humanSeat)}
+          passed={game.handState.passed.includes(humanSeat)}
+          count={game.hands[humanSeat].length}
+          // No face-down stack: the player already sees these cards fanned out
+          // in their hand. Just the count, for parity with the opponents.
+          showStack={false}
+        />
 
-        {/* Opponent seats */}
-        {opponentOrder.map((seat) => {
-          const isCurrent = currentSeat === seat;
-          const finished = game.handState.finishedOrder.includes(seat);
-          const passed = game.handState.passed.includes(seat);
-          const name = seatName(game, seat, humanDisplayName);
-          return (
-            <View
-              key={seat}
-              style={[
-                styles.oppBox,
-                isCurrent && styles.oppBoxActive,
-                finished && styles.oppBoxDone,
-              ]}
-            >
-              <Avatar
-                name={name}
-                url={null}
-                size={28}
-                active={isCurrent && !finished}
-                style={styles.oppAvatarMargin}
-              />
-              <Text style={styles.oppName} numberOfLines={1}>
-                {name}
-                {isCurrent && !finished ? ' •' : ''}
-                {finished ? ' ✓' : passed ? ' (pass)' : ''}
-              </Text>
-              <View style={styles.oppStackRow}>
-                <OpponentCardStack count={game.hands[seat].length} small />
-                <Text style={styles.oppCount}>{game.hands[seat].length}</Text>
-              </View>
-            </View>
-          );
-        })}
+        {opponentOrder.map((seat) => (
+          <SeatPlate
+            key={seat}
+            name={seatName(game, seat, humanDisplayName)}
+            avatarSource={BOT_AVATAR_IMG}
+            isCurrent={currentSeat === seat}
+            finished={game.handState.finishedOrder.includes(seat)}
+            passed={game.handState.passed.includes(seat)}
+            count={game.hands[seat].length}
+            showStack
+          />
+        ))}
       </View>
 
       {/* Center: trick pile */}
@@ -452,10 +490,7 @@ export default function LocalGameScreen() {
           selected={selected}
           playableIds={playableIds}
           onTap={toggleCard}
-          onReorder={(from, to) => {
-            reorderHumanHand(game, from, to);
-            // selection persists: the card ids in `selected` are still in the hand
-          }}
+          onReorder={handleReorder}
         />
 
         <View style={styles.actionsRow}>
@@ -701,7 +736,10 @@ const styles = StyleSheet.create({
     borderColor: withAlpha(colors.white, 0.3),
   },
   btnSmallText: { color: colors.textOnFelt, fontWeight: '600', fontSize: typography.caption.fontSize },
-  btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.textOnFelt },
+  // The only ghost button sits on the cream finish card, not on the felt, so it
+  // takes the dark ink. White-on-cream was effectively invisible.
+  btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.felt },
+  btnGhostText: { color: colors.felt },
 
   // Finish screen
   finishCard: {

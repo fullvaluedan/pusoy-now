@@ -69,14 +69,12 @@ function redirectUrl(): string {
   return Linking.createURL('auth-callback');
 }
 
-function profileFrom(session: Session, avatarUrl: string | null): AuthProfile {
-  return { displayName: pickDisplayName(session.user), avatarUrl };
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const configured = isSupabaseConfigured();
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<AuthProfile | null>(null);
+  // Only the avatar is state. The display name is a pure function of the
+  // session, so deriving it below removes any way for the two to disagree.
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(configured);
   // Avoid setState after unmount, and avoid re-upserting the same session.
   const mounted = useRef(true);
@@ -87,16 +85,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // needs it to hand back anything bigger than a 50px thumbnail, so this runs
   // on every sign-in rather than only the first.
   const syncProfile = useCallback(async (client: SupabaseClient, next: Session) => {
-    let avatarUrl: string | null = null;
+    let resolved: string | null = null;
     try {
-      avatarUrl = await resolveAvatarUrl(next.user, { providerToken: next.provider_token ?? null });
+      resolved = await resolveAvatarUrl(next.user, { providerToken: next.provider_token ?? null });
     } catch {
       // A missing picture is not worth failing a sign-in over.
     }
-    if (mounted.current) setProfile(profileFrom(next, avatarUrl));
+    if (mounted.current) setAvatarUrl(resolved);
 
     try {
-      await upsertPlayer(client as any, buildPlayerRow(next.user.id, next.user, avatarUrl));
+      await upsertPlayer(client as any, buildPlayerRow(next.user.id, next.user, resolved));
     } catch (e) {
       // The session is real either way. A failed profile write (offline, RLS
       // misconfigured) must not bounce the player back to the guest state.
@@ -117,12 +115,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void client.auth.getSession().then(({ data }) => {
       if (!mounted.current) return;
       setSession(data.session);
-      if (data.session) {
-        // Restored from storage, not a fresh sign-in: there is no provider_token
-        // to re-fetch with, so show what the token already carries.
-        setProfile(profileFrom(data.session, null));
-      }
       setLoading(false);
+      if (!data.session) return;
+      // Restored from storage, not a fresh sign-in, so there is no
+      // provider_token to re-fetch a full-size Facebook picture with. Show
+      // whatever the stored token carries; the next sign-in refreshes it.
+      // Without this the player's avatar would vanish on every app restart.
+      void resolveAvatarUrl(data.session.user, { providerToken: null })
+        .then((url) => {
+          if (mounted.current) setAvatarUrl(url);
+        })
+        .catch(() => {
+          // Initials are the fallback.
+        });
     });
 
     const { data: sub } = client.auth.onAuthStateChange((event, next) => {
@@ -130,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(next);
       if (!next) {
         syncedUserId.current = null;
-        setProfile(null);
+        setAvatarUrl(null);
         return;
       }
       if (event === 'SIGNED_IN' && syncedUserId.current !== next.user.id) {
@@ -182,14 +187,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const client = getSupabaseOrNull();
     if (!client) return;
     await client.auth.signOut();
-    // onAuthStateChange clears session and profile, but do not rely on the
+    // onAuthStateChange clears session and avatar, but do not rely on the
     // round trip: the UI should be back to guest immediately.
     if (mounted.current) {
       setSession(null);
-      setProfile(null);
+      setAvatarUrl(null);
       syncedUserId.current = null;
     }
   }, []);
+
+  // Derived, never stored: the display name always agrees with the session.
+  const profile = useMemo<AuthProfile | null>(
+    () => (session ? { displayName: pickDisplayName(session.user), avatarUrl } : null),
+    [session, avatarUrl],
+  );
 
   const value = useMemo<AuthValue>(
     () => ({ session, profile, loading, configured, signIn, signOut }),

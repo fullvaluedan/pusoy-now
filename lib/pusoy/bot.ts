@@ -215,8 +215,10 @@ function rankCounts(cards: Card[]): Map<Rank, number> {
 // How many cards this play strands. Peeling one card off a pair leaves a lone
 // card that can no longer answer a pair lead; peeling one off a trip leaves
 // two. Returns the number of cards left behind in a broken group.
-function breakagePenalty(hand: Card[], play: PlayedCombo): number {
-  const have = rankCounts(hand);
+//
+// `have` is the rank census of the whole hand, passed in because it is the same
+// for every candidate play of a decision.
+function breakagePenalty(have: Map<Rank, number>, play: PlayedCombo): number {
   const taken = rankCounts(play.cards);
   let penalty = 0;
   for (const [rank, n] of taken) {
@@ -286,6 +288,7 @@ function chooseExpert(
   const blocking = shortOpponent && lead !== null;
   // Computed once per decision, not once per candidate play.
   const unseen = lead === null ? unseenCards(hand, played) : [];
+  const handCounts = rankCounts(hand);
 
   const scored = legal.map((play) => {
     // Emptying the hand is the win condition, so the combo class of the play
@@ -295,7 +298,7 @@ function chooseExpert(
     // (a) Combo preservation: prefer the play that strands the fewest cards in
     // a half-broken pair or trip. Notably this stops the bot shattering a pair
     // to answer a single when a lone single would have done.
-    score -= breakagePenalty(hand, play) * EXPERT_BREAKAGE;
+    score -= breakagePenalty(handCounts, play) * EXPERT_BREAKAGE;
 
     if (blocking) {
       // Spend the big cards now: they are worthless the moment someone goes out.

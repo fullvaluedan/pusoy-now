@@ -4,7 +4,7 @@
 
 import { buildDeck, dealFour, shuffle, RANK_VALUE } from './deck';
 import { detectCombo, detectFiveCard, compareCombos, canPlay } from './combo';
-import { applyAction, applyTimeout, handFinishOrder, isHandOver, newHand } from './engine';
+import { applyAction, handFinishOrder, isHandOver, newHand } from './engine';
 import { botChoose } from './bot';
 import type {
   BotLevel,
@@ -305,12 +305,11 @@ function finalizeHand(game: LocalGame) {
   game.finishOrder = order;
   game.finishedAt = Date.now();
   game.phase = 'finished';
-  for (const t of game.botTimers) clearTimeout(game.botTimers.pop() as any);
+  // Clear every timer, then drop the array. The old form popped from the array
+  // it was iterating, so it cleared only half of them, and any survivor would
+  // fire against an already-finished hand.
+  for (const t of game.botTimers) clearTimeout(t);
   game.botTimers = [];
-  // Tally stats
-  for (let i = 0; i < order.length - 1; i++) {
-    // order[0] won, order[last] lost
-  }
   // The "first to empty" is the winner; the last is the loser. Everyone in
   // between tied on position. We record wins/losses against the player who
   // came last (the "loser of the hand").
