@@ -511,6 +511,45 @@ export default function LocalGameScreen() {
     });
   };
 
+  // Dragging a card into the center plays a hand automatically, but only when a
+  // hand type is already established (there is a lead). A single-lead drag plays
+  // that single; a pair-lead drag plays the matching pair (lowest suits); a
+  // 5-card-lead drag plays the current five-card selection if it is legal. When
+  // leading (no lead yet) a drag never auto-plays — the player builds the combo
+  // and presses Play. A drag that would not be a legal play is ignored.
+  const playByDrag = (c: Card) => {
+    if (!isMyTurn || !lead) return;
+    let cards: Card[] | null = null;
+    if (lead.length === 1) {
+      const single = detectCombo([c]);
+      if (single && canPlay(single, lead)) cards = [c];
+    } else if (lead.length === 2) {
+      const pairs = (legalPlays ?? []).filter(
+        (p) => p.length === 2 && p.cards[0].rank === c.rank,
+      );
+      if (pairs.length) {
+        pairs.sort(
+          (a, b) =>
+            Math.max(SUIT_VALUE[a.cards[0].suit], SUIT_VALUE[a.cards[1].suit]) -
+            Math.max(SUIT_VALUE[b.cards[0].suit], SUIT_VALUE[b.cards[1].suit]),
+        );
+        cards = pairs[0].cards;
+      }
+    } else if (selected.length === 5 && selLegal) {
+      cards = selected;
+    }
+    if (!cards) return;
+    const combo = detectCombo(cards);
+    if (!combo || !canPlay(combo, lead)) return;
+    setError(null);
+    try {
+      humanAct(game, { kind: 'play', combo: { ...combo, cards } as PlayedCombo }, cards);
+      setSelected([]);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   // Compute opponent order: 0,1,2,3 starting at humanSeat+1
   const opponentOrder = [1, 2, 3].map((o) => (humanSeat + o) % 4);
 
@@ -643,6 +682,8 @@ export default function LocalGameScreen() {
           playableIds={playableIds}
           onTap={toggleCard}
           onReorder={handleReorder}
+          onDropToCenter={playByDrag}
+          dropEnabled={isMyTurn && lead !== null}
         />
       </View>
     </TableBackground>
@@ -659,6 +700,8 @@ function HandRow({
   playableIds,
   onTap,
   onReorder,
+  onDropToCenter,
+  dropEnabled,
 }: {
   hand: Card[];
   selected: Card[];
@@ -666,6 +709,10 @@ function HandRow({
   playableIds: Set<string> | null;
   onTap: (c: Card) => void;
   onReorder: (from: number, to: number) => void;
+  // Called when a card is flicked up into the center to auto-play it.
+  onDropToCenter: (c: Card) => void;
+  // Whether an upward flick should attempt a play (true only with a lead).
+  dropEnabled: boolean;
 }) {
   // Reactive: reflows the fan when the browser window resizes / device rotates.
   const { width } = useWindowDimensions();
@@ -688,6 +735,8 @@ function HandRow({
           index={i}
           onTap={() => onTap(c)}
           onReorder={onReorder}
+          onDropToCenter={onDropToCenter}
+          dropEnabled={dropEnabled}
           total={hand.length}
           startX={startX}
           stride={stride}
@@ -704,6 +753,8 @@ function DraggableCard({
   index,
   onTap,
   onReorder,
+  onDropToCenter,
+  dropEnabled,
   total,
   startX,
   stride,
@@ -714,6 +765,8 @@ function DraggableCard({
   index: number;
   onTap: () => void;
   onReorder: (from: number, to: number) => void;
+  onDropToCenter: (c: Card) => void;
+  dropEnabled: boolean;
   total: number;
   startX: number;
   stride: number;
@@ -736,8 +789,16 @@ function DraggableCard({
         onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
         onPanResponderRelease: (_, g) => {
           setDragging(false);
-          const target = Math.max(0, Math.min(total - 1, index + Math.round(g.dx / Math.max(1, stride))));
-          if (target !== index) onReorder(index, target);
+          // An upward flick into the center is a play gesture (only when a hand
+          // is established); a mostly-horizontal drag reorders. The vertical
+          // move must dominate so a normal reorder never fires a play.
+          const isUpwardFlick = dropEnabled && g.dy < -70 && Math.abs(g.dy) > Math.abs(g.dx);
+          if (isUpwardFlick) {
+            onDropToCenter(card);
+          } else {
+            const target = Math.max(0, Math.min(total - 1, index + Math.round(g.dx / Math.max(1, stride))));
+            if (target !== index) onReorder(index, target);
+          }
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
         },
         onPanResponderTerminate: () => {
@@ -745,7 +806,7 @@ function DraggableCard({
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
         },
       }),
-    [index, total, onReorder, pan, stride],
+    [index, total, onReorder, onDropToCenter, dropEnabled, card, pan, stride],
   );
 
   return (
