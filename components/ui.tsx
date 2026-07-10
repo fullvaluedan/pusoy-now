@@ -49,7 +49,9 @@ export function ScreenContainer({ children, scroll, style, maxWidth = MAX_CONTEN
 const MAX_CONTENT_WIDTH = 480;
 
 const screenStyles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.cream },
+  // userSelect none so web drags never paint a text-selection highlight; it
+  // inherits to all screen children. Matches the game screen root.
+  container: { flex: 1, backgroundColor: colors.cream, userSelect: 'none' },
   // Full-bleed cream background; children are centered in a capped column.
   scrollContent: { padding: spacing.lg, alignItems: 'center' },
   columnScroll: { width: '100%', gap: spacing.sm + 4, alignSelf: 'center' },

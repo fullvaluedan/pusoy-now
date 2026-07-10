@@ -964,6 +964,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backdrop,
     alignItems: 'center',
     justifyContent: 'center',
+    // Suppress browser text selection on web: dragging a card must not paint a
+    // blue text-selection highlight across the table. user-select inherits, so
+    // setting it on the screen root covers the panel and every child.
+    userSelect: 'none',
   },
   // Shadow host for the panel. Kept separate from the clipping panel because
   // the panel sets overflow:'hidden' (to round the felt into its corners),
