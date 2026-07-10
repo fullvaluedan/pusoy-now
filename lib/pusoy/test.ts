@@ -6,6 +6,8 @@ import { detectCombo, compareCombos, canPlay } from './combo';
 import { applyAction, applyTimeout, isHandOver, newHand, TURN_MS } from './engine';
 import { botChoose } from './bot';
 import { makeRng, NO_WOBBLE } from './rng';
+import { createLocalGame } from './localGame';
+import { parseLevel } from './level';
 import type { Card } from './types';
 
 let pass = 0;
@@ -339,6 +341,36 @@ const leadTwoD = detectCombo([c5('D', '2')])!;
 ok('easy passes when no legal play exists', botChoose(stuckHand, leadTwoD, { level: 'easy', rng: NO_WOBBLE }) === null);
 ok('normal passes when no legal play exists', botChoose(stuckHand, leadTwoD, normal) === null);
 ok('expert passes when no legal play exists', botChoose(stuckHand, leadTwoD, expert()) === null);
+
+// 9) Difficulty level parsing and threading
+console.log('difficulty level');
+
+// Test createLocalGame threads level onto the game
+const gameExpert = createLocalGame(3, 'You', 'expert');
+ok('createLocalGame threads expert level', gameExpert.level === 'expert');
+
+const gameNormal = createLocalGame(3, 'You', 'normal');
+ok('createLocalGame threads normal level', gameNormal.level === 'normal');
+
+const gameEasy = createLocalGame(3, 'You', 'easy');
+ok('createLocalGame threads easy level', gameEasy.level === 'easy');
+
+// Test createLocalGame defaults to 'normal' when no level passed
+const gameDefault = createLocalGame(3, 'You');
+ok('createLocalGame defaults to normal', gameDefault.level === 'normal');
+
+// Test parseLevel returns each valid level
+ok('parseLevel accepts easy', parseLevel('easy') === 'easy');
+ok('parseLevel accepts normal', parseLevel('normal') === 'normal');
+ok('parseLevel accepts expert', parseLevel('expert') === 'expert');
+
+// Test parseLevel falls back to 'normal' for invalid/missing values
+ok('parseLevel falls back on undefined', parseLevel(undefined) === 'normal');
+ok('parseLevel falls back on null', parseLevel(null) === 'normal');
+ok('parseLevel falls back on empty string', parseLevel('') === 'normal');
+ok('parseLevel falls back on wrong case (EXPERT)', parseLevel('EXPERT') === 'normal');
+ok('parseLevel falls back on wrong string (hard)', parseLevel('hard') === 'normal');
+ok('parseLevel falls back on array', parseLevel(['expert', 'normal']) === 'normal');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

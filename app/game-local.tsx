@@ -35,6 +35,7 @@ import { DealingAnimation } from '../components/DealingAnimation';
 import { OpponentCardStack, PlayingCard, CARD_WIDTH } from '../components/PlayingCard';
 import { canPlay, detectCombo } from '../lib/pusoy/combo';
 import { findLegalPlays } from '../lib/pusoy/bot';
+import { parseLevel } from '../lib/pusoy/level';
 import {
   createLocalGame,
   findHumanSeat,
@@ -46,7 +47,7 @@ import {
   type LocalGame,
   type SortMode,
 } from '../lib/pusoy/localGame';
-import type { Card, PlayedCombo } from '../lib/pusoy/types';
+import type { BotLevel, Card, PlayedCombo } from '../lib/pusoy/types';
 
 const RANK_DISPLAY: Record<Card['rank'], string> = {
   '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
@@ -89,15 +90,24 @@ const NEXT_SORT: Record<SortMode, SortMode> = {
   hands: 'rank',
 };
 
+const LEVEL_LABEL: Record<BotLevel, string> = {
+  easy: 'Easy',
+  normal: 'Normal',
+  expert: 'Expert',
+};
+
+// The only place a seat is named. Bots carry their difficulty so the level the
+// player picked stays visible for the whole game.
 function seatName(game: LocalGame, seat: number, displayName: string): string {
   if (game.playerKinds[seat] === 'human') return displayName;
-  return `Bot ${seat + 1}`;
+  return `Bot ${seat + 1} - ${LEVEL_LABEL[game.level]}`;
 }
 
 export default function LocalGameScreen() {
-  const params = useLocalSearchParams<{ bots: string }>();
+  const params = useLocalSearchParams<{ bots: string; level: string }>();
   const router = useRouter();
   const botCount = Math.max(1, Math.min(3, Number(params.bots) || 3));
+  const level = parseLevel(params.level);
 
   const [game, setGame] = useState<LocalGame | null>(null);
   // Re-render trigger on game state changes.
@@ -111,13 +121,13 @@ export default function LocalGameScreen() {
   // router.replace on "Play again", so this fires fresh each time and we
   // don't need to manually clean up the previous game.
   useEffect(() => {
-    const g = createLocalGame(botCount, 'You');
+    const g = createLocalGame(botCount, 'You', level);
     setGame(g);
     const unsub = subscribe(g, () => setTick((t) => t + 1));
     return () => {
       unsub();
     };
-  }, [botCount]);
+  }, [botCount, level]);
 
   // Auto-pass: on the human's turn, if nothing in hand can beat the lead,
   // show a banner briefly and pass automatically. Never fires when leading
@@ -157,9 +167,7 @@ export default function LocalGameScreen() {
 
   // 1) Dealing animation overlay
   if (game.phase === 'dealing') {
-    const playerNames = [0, 1, 2, 3].map((s) =>
-      s === humanSeat ? 'You' : `Bot ${s + 1}`,
-    );
+    const playerNames = [0, 1, 2, 3].map((s) => seatName(game, s, 'You'));
     return (
       <SafeAreaView style={styles.container}>
         <DealingAnimation
@@ -187,16 +195,14 @@ export default function LocalGameScreen() {
           {game.finishOrder.map((s, i) => (
             <View key={i} style={styles.finishRow}>
               <Text style={styles.finishPlace}>{i + 1}.</Text>
-              <Text style={styles.finishName}>
-                {s === humanSeat ? 'You' : `Bot ${s + 1}`}
-              </Text>
+              <Text style={styles.finishName}>{seatName(game, s, 'You')}</Text>
             </View>
           ))}
           <View style={styles.finishActions}>
             <Pressable
               style={styles.btn}
               onPress={() =>
-                router.replace({ pathname: '/game-local', params: { bots: botCount } })
+                router.replace({ pathname: '/game-local', params: { bots: botCount, level } })
               }
             >
               <Text style={styles.btnText}>Play again</Text>
