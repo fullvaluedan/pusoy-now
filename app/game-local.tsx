@@ -60,7 +60,6 @@ import type { BotLevel, Card, FiveCardType, PlayedCombo } from '../lib/pusoy/typ
 
 const FELT_IMG = require('../assets/art/felt-tile.png');
 const BOT_AVATAR_IMG = require('../assets/art/bot-avatar.png');
-const TABLE_INLAY_IMG = require('../assets/art/table-inlay.png');
 const TURN_GLOW_IMG = require('../assets/art/turn-glow.png');
 
 const RANK_DISPLAY: Record<Card['rank'], string> = {
@@ -142,41 +141,51 @@ function seatName(game: LocalGame, seat: number, displayName: string): string {
   return `Bot ${seat + 1}`;
 }
 
-// Felt table backdrop shared by every phase of this screen (loading,
+// Bounded table panel shared by every phase of this screen (loading,
 // dealing, in-progress, finished) so the game always sits on the same
-// surface. The felt is a resolution-independent surface, not a stretched
-// photo: a solid color base fills the root edge to edge (behind notches),
-// the fixed-size photo lays over it at low opacity as a texture hint only
-// (resizeMode="cover" always fully covers, so there's no crop gap, and low
-// opacity hides the upscale pixelation at wide viewports), and a stacked
-// border vignette darkens the edges like a real table under center
-// lighting. The SafeAreaView nests inside all of that so content still
-// clears the safe-area insets while the felt itself ignores them.
-function TableBackground({ children }: { children: ReactNode }) {
+// surface. A flat dark backdrop fills the window; inside it a centered panel
+// (capped to maxTableWidth, inset by panelMargin on desktop, rounded, framed
+// with a code-drawn double gold border, and drop-shadowed) clips its
+// children. The felt tile and vignette live inside the panel so decoration
+// and content share one box and compose at every window size. On narrow
+// viewports the panel goes full-bleed (margin and corners collapse). The
+// SafeAreaView nests inside so content clears the safe-area insets while the
+// felt itself fills the panel edge to edge.
+function TablePanel({ children }: { children: ReactNode }) {
+  const { width } = useWindowDimensions();
+  const isWide = width > layout.maxTableWidth;
+  const vMargin = isWide ? layout.panelMargin : 0;
+  const radius = isWide ? layout.panelRadius : 0;
   return (
-    <View style={styles.tableBackground}>
-      <ImageBackground
-        source={FELT_IMG}
-        style={styles.tableTexture}
-        imageStyle={styles.tableTextureImage}
-        resizeMode="repeat"
+    <View style={styles.backdrop}>
+      <View
+        style={[
+          styles.panelShadow,
+          { marginVertical: vMargin, borderRadius: radius },
+        ]}
       >
-        <View style={styles.tableVignetteOuter} pointerEvents="none" />
-        <View style={styles.tableVignetteMid} pointerEvents="none" />
-        <View style={styles.tableVignetteInner} pointerEvents="none" />
-        {/* Decorative gold table inlay, framing the play area. resizeMode
-            "contain" cannot distort at any viewport; inset from the edges so it
-            reads as a border; pointerEvents none so it never blocks a tap; low
-            opacity so cards and text stay legible on top. */}
-        <Image
-          source={TABLE_INLAY_IMG}
-          style={styles.tableInlay}
-          resizeMode="contain"
-          accessibilityElementsHidden
-          importantForAccessibility="no"
-        />
-        <SafeAreaView style={styles.container}>{children}</SafeAreaView>
-      </ImageBackground>
+        <View style={[styles.panel, { borderRadius: radius }]}>
+          <ImageBackground
+            source={FELT_IMG}
+            style={styles.panelFelt}
+            imageStyle={styles.panelFeltImage}
+            resizeMode="repeat"
+          >
+            <View style={styles.tableVignetteOuter} pointerEvents="none" />
+            <View style={styles.tableVignetteMid} pointerEvents="none" />
+            <View style={styles.tableVignetteInner} pointerEvents="none" />
+            {/* Inner gold hairline, inset from the panel's outer gold edge, so
+                the frame reads as a classic double-line table border. Drawn in
+                code (not the fixed-aspect inlay PNG) so it hugs the panel at
+                any size. pointerEvents none so it never blocks a tap. */}
+            <View
+              style={[styles.panelInnerFrame, { borderRadius: Math.max(0, radius - 6) }]}
+              pointerEvents="none"
+            />
+            <SafeAreaView style={styles.container}>{children}</SafeAreaView>
+          </ImageBackground>
+        </View>
+      </View>
     </View>
   );
 }
@@ -219,7 +228,7 @@ function SeatPlate({
         name={name}
         url={avatarUrl}
         localSource={avatarSource}
-        size={28}
+        size={48}
         framed
         active={isCurrent && !finished}
         style={styles.oppAvatarMargin}
@@ -257,7 +266,7 @@ function TopBar({
       <View style={[styles.topBarSide, styles.topBarRight]}>
         {onSkip ? (
           <Pressable style={styles.btnSmall} onPress={onSkip}>
-            <Text style={styles.btnSmallText}>Skip to end</Text>
+            <Text style={styles.btnSmallText} numberOfLines={1}>Skip to end</Text>
           </Pressable>
         ) : null}
       </View>
@@ -373,9 +382,9 @@ export default function LocalGameScreen() {
 
   if (!game) {
     return (
-      <TableBackground>
+      <TablePanel>
         <Text style={styles.loadingText}>Loading…</Text>
-      </TableBackground>
+      </TablePanel>
     );
   }
 
@@ -386,7 +395,7 @@ export default function LocalGameScreen() {
   if (game.phase === 'dealing') {
     const playerNames = [0, 1, 2, 3].map((s) => seatName(game, s, humanDisplayName));
     return (
-      <TableBackground>
+      <TablePanel>
         <DealingAnimation
           dealOrder={game.dealOrder}
           deck={game.deck}
@@ -394,7 +403,7 @@ export default function LocalGameScreen() {
           playerNames={playerNames}
           onDone={() => startGame(game)}
         />
-      </TableBackground>
+      </TablePanel>
     );
   }
 
@@ -403,7 +412,7 @@ export default function LocalGameScreen() {
     const youWon = game.finishOrder[0] === humanSeat;
     const youLast = game.finishOrder[game.finishOrder.length - 1] === humanSeat;
     return (
-      <TableBackground>
+      <TablePanel>
         <View style={styles.tableColumn}>
         <TopBar
           title={`${LEVEL_LABEL[game.level]} table`}
@@ -451,7 +460,7 @@ export default function LocalGameScreen() {
           </View>
         </View>
         </View>
-      </TableBackground>
+      </TablePanel>
     );
   }
 
@@ -642,7 +651,7 @@ export default function LocalGameScreen() {
   const prevPlay = game.trickHistory[1];
 
   return (
-    <TableBackground>
+    <TablePanel>
       <View style={styles.tableColumn}>
         <TopBar
           title={`${LEVEL_LABEL[game.level]} table`}
@@ -787,7 +796,7 @@ export default function LocalGameScreen() {
         />
       </View>
       </View>
-    </TableBackground>
+    </TablePanel>
   );
 }
 
@@ -942,30 +951,52 @@ function DraggableCard({
 }
 
 const styles = StyleSheet.create({
-  // Solid felt color base, filling the root so any moment the photo isn't
-  // painted yet (or a viewport ratio the crop doesn't fully agree with)
-  // still reads as felt rather than blank space.
-  tableBackground: { flex: 1, backgroundColor: colors.felt },
-  tableTexture: { flex: 1 },
-  // Decorative gold inlay frame over the felt, behind the play content. Inset
-  // from every edge so it reads as a table border; low opacity so it stays
-  // subtle under the cards and text. resizeMode="contain" (set on the Image)
-  // guarantees no distortion at any viewport.
-  tableInlay: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    right: 8,
-    bottom: 8,
-    width: undefined,
-    height: undefined,
-    opacity: 0.22,
-    pointerEvents: 'none',
+  // Flat dark backdrop filling the window behind the bounded table panel.
+  // alignItems centers the width-capped panel horizontally; panelShadow's
+  // own marginVertical insets it from the top and bottom on desktop.
+  backdrop: { flex: 1, backgroundColor: colors.backdrop, alignItems: 'center' },
+  // Shadow host for the panel. Kept separate from the clipping panel because
+  // the panel sets overflow:'hidden' (to round the felt into its corners),
+  // which would otherwise clip its own drop shadow. Width-capped so the panel
+  // never grows past a phone-ish column on wide viewports.
+  panelShadow: {
+    flex: 1,
+    width: '100%',
+    maxWidth: layout.maxTableWidth,
+    shadowColor: colors.black,
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 16,
   },
-  // Seamless felt tile repeated across the whole surface, so there is no
-  // single-image seam or center-bright band at any viewport. Kept semi-faint
-  // over the solid felt color base so the weave reads as texture, not noise.
-  tableTextureImage: { opacity: 0.55 },
+  // The visible table: felt-filled, gold-framed, rounded, clipping its
+  // children so the felt and content share one box. Solid felt color base
+  // shows through while the tile image loads.
+  panel: {
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: colors.felt,
+    borderWidth: 3,
+    borderColor: colors.gold,
+  },
+  // The felt tile fills the panel; ImageBackground with resizeMode="repeat"
+  // tiles a seamless weave so there is no single-image seam at any size.
+  panelFelt: { flex: 1 },
+  // Kept semi-faint over the solid felt color base so the weave reads as
+  // texture, not noise.
+  panelFeltImage: { opacity: 0.55 },
+  // Inner gold hairline of the double-line frame, inset from the panel's
+  // outer gold border. Lower alpha so the two lines read as a frame, not a
+  // solid band.
+  panelInnerFrame: {
+    position: 'absolute',
+    top: 5,
+    left: 5,
+    right: 5,
+    bottom: 5,
+    borderWidth: 1,
+    borderColor: withAlpha(colors.gold, 0.55),
+  },
   // Three concentric low-alpha frames stand in for a radial gradient (no
   // gradient lib in this project); alpha rises toward the outer band so the
   // edges darken gradually. The alpha steps stay under ~0.06 apart and the
@@ -1001,13 +1032,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   loadingText: { color: colors.textOnFelt, textAlign: 'center', marginTop: spacing.xxl },
 
-  // Everything at the table lives in a centered, phone-ish column so wide
-  // desktop viewports don't scatter the seats and hand to the screen edges.
+  // Table content fills the panel, which already caps its own width to a
+  // phone-ish column on wide viewports, so no further width handling is needed
+  // here.
   tableColumn: {
     flex: 1,
     width: '100%',
-    maxWidth: layout.maxTableWidth,
-    alignSelf: 'center',
   },
 
   // Slim in-table top bar replacing the stock navigation header.
@@ -1018,7 +1048,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
   },
-  topBarSide: { width: 96, justifyContent: 'center' },
+  // Wide enough that "Skip to end" fits on one line without wrapping; kept
+  // equal on both sides so the centered title stays centered.
+  topBarSide: { width: 116, justifyContent: 'center' },
   topBarRight: { alignItems: 'flex-end' },
   topBarBack: { color: colors.textOnFelt, fontSize: 22, fontWeight: '700' },
   topBarTitle: {
@@ -1041,11 +1073,11 @@ const styles = StyleSheet.create({
   },
   oppBox: {
     backgroundColor: withAlpha(colors.ink, 0.25),
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md - 2,
     borderRadius: radii.md,
     alignItems: 'center',
-    minWidth: 92,
+    minWidth: 120,
     marginTop: spacing.lg,
   },
   // The middle seat sits higher, arcing the row around the table's far edge.
@@ -1056,11 +1088,11 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
   },
   oppBoxDone: { opacity: 0.55 },
-  oppAvatarMargin: { marginBottom: spacing.xs },
+  oppAvatarMargin: { marginBottom: spacing.sm },
   oppNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
-  oppName: { color: colors.textOnFelt, fontSize: typography.tiny.fontSize, fontWeight: '600' },
+  oppName: { color: colors.textOnFelt, fontSize: 15, fontWeight: '700' },
   oppStackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
-  oppCount: { color: colors.textOnFelt, fontSize: 18, fontWeight: '700' },
+  oppCount: { color: colors.textOnFelt, fontSize: 24, fontWeight: '700' },
 
   // Seat status chips: PASS while sitting out, place medal once out of cards.
   seatChip: {

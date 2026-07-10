@@ -11,6 +11,7 @@ export const colors = {
   // Core palette
   felt: '#0e4a3a', // deep felt green (primary brand color, headers, primary buttons)
   feltLight: '#1c7a5d', // lighter felt, secondary buttons / hover states
+  backdrop: '#06231b', // flat dark green-ink behind the bounded table panel
   cream: '#f4f1e8', // paper cream, screen background
   white: '#ffffff', // card panels
   cardRed: '#c0392b', // suit red, danger/alert accents
@@ -74,6 +75,12 @@ export const radii = {
 // of drifting to the screen edges.
 export const layout = {
   maxTableWidth: 560,
+  // On desktop the table renders as a bounded panel: capped to maxTableWidth,
+  // inset from the top/bottom by panelMargin so the dark backdrop frames it,
+  // with rounded corners of panelRadius. On narrow viewports the panel goes
+  // full-bleed (margin and radius collapse to 0).
+  panelMargin: 24,
+  panelRadius: 22,
 } as const;
 
 export const typography = {
