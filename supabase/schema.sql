@@ -4,10 +4,20 @@
 create table if not exists public.players (
   user_id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null,
+  -- A CACHE, not a record. Facebook and TikTok CDN avatar URLs expire, so this
+  -- is rewritten on every sign-in and the UI falls back to an initial-letter
+  -- disc whenever the image fails to load.
   avatar_url text,
-  -- social provider that was used to authenticate. e.g. 'google', 'apple',
-  -- 'facebook', 'twitter', 'tiktok'. We never store the social id here;
-  -- auth.users.email is the join key for email-based providers.
+  -- social provider that was used to authenticate. e.g. 'google', 'facebook',
+  -- 'tiktok'. We never store the social id here; auth.users.email is the join
+  -- key for email-based providers.
+  --
+  -- TikTok is the exception. It is not a Supabase provider, so the Edge
+  -- Function in supabase/functions/tiktok-auth exchanges the Login Kit code
+  -- server-side and creates the auth.users row itself, keyed on a synthetic
+  -- address of the form tiktok_<open_id>@tiktok.pusoynow.internal. That open_id
+  -- is also stored in auth.users.raw_app_meta_data->>'tiktok_open_id'. The
+  -- synthetic address is never shown to the player and never receives mail.
   social_provider text,
   social_handle text,
   created_at timestamptz not null default now()

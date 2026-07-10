@@ -7,5 +7,12 @@
   "include": [
     "**/*.ts",
     "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    // Deno runtime entry for the tiktok-auth Edge Function: it imports over
+    // https and uses Deno globals, so it is checked by `deno check`, not by the
+    // app's tsc. Its logic lives in handler.ts, which IS checked and tested.
+    "supabase/functions/**/index.ts"
   ]
 }
