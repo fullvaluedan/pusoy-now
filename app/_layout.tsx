@@ -23,7 +23,9 @@ export default function RootLayout() {
           <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
           <Stack.Screen name="lobby" options={{ title: 'Lobby' }} />
           <Stack.Screen name="bot-select" options={{ title: 'Pick opponents' }} />
-          <Stack.Screen name="game-local" options={{ title: 'Game' }} />
+          {/* The game draws its own slim in-table top bar; the default header
+              would stack a second bar above the felt and clash with it. */}
+          <Stack.Screen name="game-local" options={{ headerShown: false }} />
           <Stack.Screen name="leaderboard" options={{ title: 'Leaderboard' }} />
           <Stack.Screen name="stats" options={{ title: 'Scoreboard' }} />
           <Stack.Screen name="settings" options={{ title: 'Settings' }} />

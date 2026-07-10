@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { OpponentCardStack, PlayingCard, CARD_WIDTH, CARD_HEIGHT } from './PlayingCard';
-import { colors, withAlpha } from '../lib/theme';
+import { colors, layout, withAlpha } from '../lib/theme';
 import type { DealStep, LocalPlayer } from '../lib/pusoy/localGame';
 
 const CARD_BACK_IMG = require('../assets/art/card-back.png');
@@ -129,10 +129,12 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
   for (let s = 0; s < step; s++) {
     if (dealOrder[s].seat === humanSeat) humanDealt.push(deck[dealOrder[s].cardIndex]);
   }
-  // Fan math mirrors HandRow: fixed 13-card spread so each card lands in its
-  // final position as it arrives, rather than shifting as the hand grows.
+  // Fan math mirrors HandRow (including its table-column width cap) so each
+  // card lands in its final position as it arrives, rather than shifting as
+  // the hand grows or jumping when the live hand takes over.
   const SIDE_MARGIN = 12;
-  const available = width - SIDE_MARGIN * 2;
+  const fanWidth = Math.min(width, layout.maxTableWidth);
+  const available = fanWidth - SIDE_MARGIN * 2;
   const stride = Math.min(CARD_WIDTH, (available - CARD_WIDTH) / 12);
   const fanStartX = (width - (CARD_WIDTH + stride * 12)) / 2;
 

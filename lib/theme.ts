@@ -68,6 +68,14 @@ export const radii = {
   lg: 14,
 } as const;
 
+// Layout constraints shared across screens. The game table (and the dealing
+// fan, which must land cards in the same spots) is capped to a phone-ish
+// column on wide viewports so the seats, pool, and hand stay composed instead
+// of drifting to the screen edges.
+export const layout = {
+  maxTableWidth: 560,
+} as const;
+
 export const typography = {
   title: { fontSize: 40, fontWeight: '800' as const },
   heading: { fontSize: 28, fontWeight: '800' as const },

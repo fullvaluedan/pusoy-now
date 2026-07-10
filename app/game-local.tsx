@@ -42,7 +42,7 @@ import { SUIT_VALUE } from '../lib/pusoy/deck';
 import { findLegalPlays } from '../lib/pusoy/bot';
 import { parseLevel } from '../lib/pusoy/level';
 import { recordGame } from '../lib/stats';
-import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
+import { colors, layout, radii, spacing, typography, withAlpha } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import {
   createLocalGame,
@@ -90,11 +90,27 @@ function comboName(c: PlayedCombo): string {
   return 'Three of a kind';
 }
 
-// The bullet marks whose turn it is; the check marks a player who is out.
-function seatStatusSuffix(isCurrent: boolean, finished: boolean, passed: boolean): string {
-  const turn = isCurrent && !finished ? ' •' : '';
-  const state = finished ? ' ✓' : passed ? ' (pass)' : '';
-  return turn + state;
+const PLACE_LABEL = ['1st', '2nd', '3rd', '4th'];
+
+// Small status chip on a seat: PASS while sitting out the trick, or the
+// finishing place once out of cards. Turn state is carried by the gold ring
+// and plate glow, not text.
+function SeatChip({ passed, place }: { passed: boolean; place: number | null }) {
+  if (place !== null) {
+    return (
+      <View style={[styles.seatChip, styles.seatChipPlace]}>
+        <Text style={styles.seatChipPlaceText}>{PLACE_LABEL[place - 1]}</Text>
+      </View>
+    );
+  }
+  if (passed) {
+    return (
+      <View style={[styles.seatChip, styles.seatChipPass]}>
+        <Text style={styles.seatChipPassText}>PASS</Text>
+      </View>
+    );
+  }
+  return null;
 }
 
 function comboLabel(c: PlayedCombo): string {
@@ -119,11 +135,11 @@ const LEVEL_LABEL: Record<BotLevel, string> = {
   expert: 'Expert',
 };
 
-// The only place a seat is named. Bots carry their difficulty so the level the
-// player picked stays visible for the whole game.
+// The only place a seat is named. Names stay short; the table's difficulty
+// lives once in the top bar instead of repeating on every plate.
 function seatName(game: LocalGame, seat: number, displayName: string): string {
   if (game.playerKinds[seat] === 'human') return displayName;
-  return `Bot ${seat + 1} - ${LEVEL_LABEL[game.level]}`;
+  return `Bot ${seat + 1}`;
 }
 
 // Felt table backdrop shared by every phase of this screen (loading,
@@ -165,29 +181,40 @@ function TableBackground({ children }: { children: ReactNode }) {
   );
 }
 
-// One seat in the top row. The human's plate omits the face-down stack, since
-// they are already looking at those cards in their hand.
+// One opponent seat around the top arc of the table. The human has no plate
+// here; their seat is merged into the hand area at the bottom.
 function SeatPlate({
   name,
   avatarUrl = null,
   avatarSource,
   isCurrent,
-  finished,
+  place,
   passed,
   count,
-  showStack,
+  raised,
 }: {
   name: string;
   avatarUrl?: string | null;
   avatarSource?: ImageSourcePropType;
   isCurrent: boolean;
-  finished: boolean;
+  // 1-based finishing place once out of cards, else null.
+  place: number | null;
   passed: boolean;
   count: number;
-  showStack: boolean;
+  // The middle seat sits higher than the two flanking it, arcing the seats
+  // around the table instead of lining them up.
+  raised: boolean;
 }) {
+  const finished = place !== null;
   return (
-    <View style={[styles.oppBox, isCurrent && styles.oppBoxActive, finished && styles.oppBoxDone]}>
+    <View
+      style={[
+        styles.oppBox,
+        raised ? styles.oppBoxRaised : null,
+        isCurrent && styles.oppBoxActive,
+        finished && styles.oppBoxDone,
+      ]}
+    >
       <Avatar
         name={name}
         url={avatarUrl}
@@ -197,13 +224,42 @@ function SeatPlate({
         active={isCurrent && !finished}
         style={styles.oppAvatarMargin}
       />
-      <Text style={styles.oppName} numberOfLines={1}>
-        {name}
-        {seatStatusSuffix(isCurrent, finished, passed)}
-      </Text>
+      <View style={styles.oppNameRow}>
+        <Text style={styles.oppName} numberOfLines={1}>{name}</Text>
+        <SeatChip passed={passed} place={place} />
+      </View>
       <View style={styles.oppStackRow}>
-        {showStack ? <OpponentCardStack count={count} small /> : null}
+        <OpponentCardStack count={count} small />
         <Text style={styles.oppCount}>{count}</Text>
+      </View>
+    </View>
+  );
+}
+
+// Slim in-table top bar: back, the table's difficulty, and (during play) the
+// skip control. Replaces the stock navigation header, which clashed with the
+// felt and wasted a full bar of vertical space.
+function TopBar({
+  title,
+  onBack,
+  onSkip,
+}: {
+  title: string;
+  onBack: () => void;
+  onSkip?: () => void;
+}) {
+  return (
+    <View style={styles.topBar}>
+      <Pressable onPress={onBack} hitSlop={12} style={styles.topBarSide}>
+        <Text style={styles.topBarBack}>{'←'}</Text>
+      </Pressable>
+      <Text style={styles.topBarTitle}>{title}</Text>
+      <View style={[styles.topBarSide, styles.topBarRight]}>
+        {onSkip ? (
+          <Pressable style={styles.btnSmall} onPress={onSkip}>
+            <Text style={styles.btnSmallText}>Skip to end</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -348,6 +404,11 @@ export default function LocalGameScreen() {
     const youLast = game.finishOrder[game.finishOrder.length - 1] === humanSeat;
     return (
       <TableBackground>
+        <View style={styles.tableColumn}>
+        <TopBar
+          title={`${LEVEL_LABEL[game.level]} table`}
+          onBack={() => router.replace('/')}
+        />
         <View style={styles.finishCard}>
           <Text style={styles.finishHeadline}>
             {youWon ? 'You won!' : youLast ? 'You lost' : 'Hand over'}
@@ -388,6 +449,7 @@ export default function LocalGameScreen() {
               <Text style={[styles.btnText, styles.btnGhostText]}>Home</Text>
             </Pressable>
           </View>
+        </View>
         </View>
       </TableBackground>
     );
@@ -570,91 +632,105 @@ export default function LocalGameScreen() {
 
   // Compute opponent order: 0,1,2,3 starting at humanSeat+1
   const opponentOrder = [1, 2, 3].map((o) => (humanSeat + o) % 4);
+  const placeOf = (seat: number): number | null => {
+    const idx = game.handState.finishedOrder.indexOf(seat);
+    return idx === -1 ? null : idx + 1;
+  };
+  const humanPassed = game.handState.passed.includes(humanSeat);
+  // The play immediately before the current one, ghosted under the pool for a
+  // sense of the discards piling up.
+  const prevPlay = game.trickHistory[1];
 
   return (
     <TableBackground>
-      {/* Top: seat row, the human on the left and the opponents beside them */}
-      <View style={styles.oppRow}>
-        <SeatPlate
-          name={humanDisplayName}
-          avatarUrl={profile?.avatarUrl ?? null}
-          isCurrent={currentSeat === humanSeat}
-          finished={game.handState.finishedOrder.includes(humanSeat)}
-          passed={game.handState.passed.includes(humanSeat)}
-          count={game.hands[humanSeat].length}
-          // No face-down stack: the player already sees these cards fanned out
-          // in their hand. Just the count, for parity with the opponents.
-          showStack={false}
+      <View style={styles.tableColumn}>
+        <TopBar
+          title={`${LEVEL_LABEL[game.level]} table`}
+          onBack={() => router.replace('/')}
+          onSkip={onSkip}
         />
 
-        {opponentOrder.map((seat) => (
-          <SeatPlate
-            key={seat}
-            name={seatName(game, seat, humanDisplayName)}
-            avatarSource={BOT_AVATAR_IMG}
-            isCurrent={currentSeat === seat}
-            finished={game.handState.finishedOrder.includes(seat)}
-            passed={game.handState.passed.includes(seat)}
-            count={game.hands[seat].length}
-            showStack
-          />
-        ))}
-      </View>
-
-      {/* Center: trick pile */}
-      <View style={styles.center}>
-        {lastPlay ? (
-          <View style={styles.trickBox}>
-            <Text style={styles.trickLabel}>
-              {seatName(game, lastPlay.playerIndex, humanDisplayName)} played
-            </Text>
-            <View style={styles.trickCards}>
-              {lastPlay.combo.cards.map((c, i) => (
-                <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -28, zIndex: 10 + i }}>
-                  <PlayingCard card={c} />
-                </View>
-              ))}
-            </View>
-            <Text style={styles.trickName}>{comboLabel(lastPlay.combo)}</Text>
-          </View>
-        ) : (
-          <View style={styles.trickBox}>
-            <Text style={styles.trickEmpty}>
-              {isMyTurn
-                ? 'Your turn - lead with a play'
-                : `${seatName(game, currentSeat, humanDisplayName)} to lead`}
-            </Text>
-          </View>
-        )}
-        {/* Play / Pass sit directly under the center pool. Pass is the bright
-            red action; Play is to its left. */}
-        <View style={styles.centerActions}>
-          <Pressable
-            style={[styles.btn, (!isMyTurn || !selLegal) && styles.btnDisabled]}
-            disabled={!isMyTurn || !selLegal}
-            onPress={onPlay}
-          >
-            <Text style={styles.btnText}>Play</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.btn,
-              styles.btnPass,
-              (!isMyTurn || lead === null) && styles.btnDisabled,
-            ]}
-            disabled={!isMyTurn || lead === null}
-            onPress={onPass}
-          >
-            <Text style={styles.btnText}>Pass</Text>
-          </Pressable>
+        {/* Opponents arc around the top of the table; the human sits at the
+            bottom with their hand. */}
+        <View style={styles.oppRow}>
+          {opponentOrder.map((seat, i) => (
+            <SeatPlate
+              key={seat}
+              name={seatName(game, seat, humanDisplayName)}
+              avatarSource={BOT_AVATAR_IMG}
+              isCurrent={currentSeat === seat}
+              place={placeOf(seat)}
+              passed={game.handState.passed.includes(seat)}
+              count={game.hands[seat].length}
+              raised={i === 1}
+            />
+          ))}
         </View>
-        {autoPassing && (
-          <Text style={styles.autoPass}>No playable hand, passing…</Text>
-        )}
-        {error && <Text style={styles.error}>{error}</Text>}
-      </View>
 
-      {/* Bottom: hand + toolbar. Play/Pass live under the center pool above. */}
+        {/* Center: the pool is the hero — the current play sits big and bare
+            on the felt, the previous play ghosted beneath it. */}
+        <View style={styles.center}>
+          {lastPlay ? (
+            <View style={styles.trickArea}>
+              {prevPlay && (
+                <View style={styles.trickGhost} pointerEvents="none">
+                  {prevPlay.combo.cards.map((c, i) => (
+                    <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -34 }}>
+                      <PlayingCard card={c} />
+                    </View>
+                  ))}
+                </View>
+              )}
+              <Text style={styles.trickCaption}>
+                {seatName(game, lastPlay.playerIndex, humanDisplayName).toUpperCase()} PLAYED
+              </Text>
+              <View style={styles.trickCards}>
+                {lastPlay.combo.cards.map((c, i) => (
+                  <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -22, zIndex: 10 + i }}>
+                    <PlayingCard card={c} />
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.trickName}>{comboLabel(lastPlay.combo)}</Text>
+            </View>
+          ) : (
+            <View style={styles.trickArea}>
+              <Text style={styles.trickEmpty}>
+                {isMyTurn
+                  ? 'Your turn, lead with any hand'
+                  : `${seatName(game, currentSeat, humanDisplayName)} to lead`}
+              </Text>
+            </View>
+          )}
+          {/* Play / Pass sit directly under the pool. Pass is the bright red
+              action; Play is to its left. */}
+          <View style={styles.centerActions}>
+            <Pressable
+              style={[styles.btn, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+              disabled={!isMyTurn || !selLegal}
+              onPress={onPlay}
+            >
+              <Text style={styles.btnText}>Play</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.btn,
+                styles.btnPass,
+                (!isMyTurn || lead === null) && styles.btnDisabled,
+              ]}
+              disabled={!isMyTurn || lead === null}
+              onPress={onPass}
+            >
+              <Text style={styles.btnText}>Pass</Text>
+            </Pressable>
+          </View>
+          {autoPassing && (
+            <Text style={styles.autoPass}>No playable hand, passing…</Text>
+          )}
+          {error && <Text style={styles.error}>{error}</Text>}
+        </View>
+
+      {/* Bottom: the human's seat + hand. */}
       <View style={[styles.bottom, isMyTurn && styles.bottomActive]}>
         {/* Soft gold glow behind the hand while it is the player's turn. First
             child so it paints behind the toolbar/hand/actions; contain so it
@@ -675,13 +751,19 @@ export default function LocalGameScreen() {
         )}
         <View style={styles.handToolbar}>
           <View style={styles.handToolbarLeft}>
+            <Avatar
+              name={humanDisplayName}
+              url={profile?.avatarUrl ?? null}
+              size={24}
+              framed
+              active={isMyTurn}
+            />
+            <Text style={styles.youName} numberOfLines={1}>{humanDisplayName}</Text>
+            <SeatChip passed={humanPassed} place={placeOf(humanSeat)} />
             <Pressable style={styles.btnSmall} onPress={onOrganize}>
               <Text style={styles.btnSmallText}>
                 {sortMode === null ? 'Sort' : `Sort: ${SORT_LABEL[sortMode]}`}
               </Text>
-            </Pressable>
-            <Pressable style={styles.btnSmall} onPress={onSkip}>
-              <Text style={styles.btnSmallText}>Skip to end</Text>
             </Pressable>
           </View>
           <Text
@@ -703,6 +785,7 @@ export default function LocalGameScreen() {
           onDropToCenter={playByDrag}
           dropEnabled={isMyTurn && lead !== null}
         />
+      </View>
       </View>
     </TableBackground>
   );
@@ -733,7 +816,9 @@ function HandRow({
   dropEnabled: boolean;
 }) {
   // Reactive: reflows the fan when the browser window resizes / device rotates.
-  const { width } = useWindowDimensions();
+  // Capped to the table column so the fan stays composed on wide viewports.
+  const { width: windowWidth } = useWindowDimensions();
+  const width = Math.min(windowWidth, layout.maxTableWidth);
   const SIDE_MARGIN = 12;
   // Total fan width: card width + (n-1) * stride. We pick a stride so the
   // fan fills the screen minus side margins.
@@ -912,12 +997,43 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   loadingText: { color: colors.textOnFelt, textAlign: 'center', marginTop: spacing.xxl },
 
-  // Opponents — each is a seat plate: avatar slot, name, count, state.
+  // Everything at the table lives in a centered, phone-ish column so wide
+  // desktop viewports don't scatter the seats and hand to the screen edges.
+  tableColumn: {
+    flex: 1,
+    width: '100%',
+    maxWidth: layout.maxTableWidth,
+    alignSelf: 'center',
+  },
+
+  // Slim in-table top bar replacing the stock navigation header.
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  topBarSide: { width: 96, justifyContent: 'center' },
+  topBarRight: { alignItems: 'flex-end' },
+  topBarBack: { color: colors.textOnFelt, fontSize: 22, fontWeight: '700' },
+  topBarTitle: {
+    flex: 1,
+    textAlign: 'center',
+    color: colors.textOnFeltMuted,
+    fontSize: typography.caption.fontSize,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+
+  // Opponents — three seat plates arcing around the top of the table.
   oppRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   oppBox: {
     backgroundColor: withAlpha(colors.ink, 0.25),
@@ -926,7 +1042,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     alignItems: 'center',
     minWidth: 92,
+    marginTop: spacing.lg,
   },
+  // The middle seat sits higher, arcing the row around the table's far edge.
+  oppBoxRaised: { marginTop: 0 },
   oppBoxActive: {
     backgroundColor: withAlpha(colors.gold, 0.25),
     borderWidth: 1,
@@ -934,25 +1053,41 @@ const styles = StyleSheet.create({
   },
   oppBoxDone: { opacity: 0.55 },
   oppAvatarMargin: { marginBottom: spacing.xs },
-  oppName: { color: colors.textOnFelt, fontSize: typography.tiny.fontSize, fontWeight: '600', marginBottom: spacing.xs },
+  oppNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  oppName: { color: colors.textOnFelt, fontSize: typography.tiny.fontSize, fontWeight: '600' },
   oppStackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
   oppCount: { color: colors.textOnFelt, fontSize: 18, fontWeight: '700' },
 
-  // Center trick pile — a subtle inset "well" on the felt.
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.md },
-  trickBox: {
-    backgroundColor: withAlpha(colors.black, 0.3),
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: withAlpha(colors.black, 0.4),
-    alignItems: 'center',
-    minWidth: 240,
-    maxWidth: 340,
+  // Seat status chips: PASS while sitting out, place medal once out of cards.
+  seatChip: {
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 1,
+    borderRadius: 999,
   },
-  trickLabel: { color: colors.textOnFeltMuted, fontSize: typography.tiny.fontSize, marginBottom: spacing.xs + 2 },
-  trickCards: { flexDirection: 'row', justifyContent: 'center', marginBottom: spacing.xs + 2 },
-  trickName: { color: colors.textOnFelt, fontSize: typography.label.fontSize, fontWeight: '600' },
+  seatChipPass: { backgroundColor: withAlpha(colors.cardRed, 0.9) },
+  seatChipPassText: { color: colors.white, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  seatChipPlace: { backgroundColor: colors.gold },
+  seatChipPlaceText: { color: colors.felt, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+
+  // Center pool — the current play is the hero, sitting bare on the felt.
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.md },
+  trickArea: { alignItems: 'center', justifyContent: 'center' },
+  trickCaption: {
+    color: colors.textOnFeltMuted,
+    fontSize: typography.tiny.fontSize,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: spacing.sm,
+  },
+  // The previous play, ghosted beneath the current one like a discard pile.
+  trickGhost: {
+    position: 'absolute',
+    flexDirection: 'row',
+    opacity: 0.25,
+    transform: [{ rotate: '-5deg' }, { translateY: -10 }],
+  },
+  trickCards: { flexDirection: 'row', justifyContent: 'center', marginBottom: spacing.sm },
+  trickName: { color: colors.gold, fontSize: typography.label.fontSize, fontWeight: '700' },
   trickEmpty: { color: withAlpha(colors.white, 0.8), fontSize: typography.body.fontSize, paddingVertical: 30 },
   error: { color: colors.danger, marginTop: spacing.sm + 2, fontWeight: '600' },
   autoPass: { color: colors.gold, marginTop: spacing.sm + 2, fontWeight: '600' },
@@ -1006,7 +1141,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg - 4,
     marginBottom: spacing.xs + 2,
   },
-  handToolbarLeft: { flexDirection: 'row', gap: spacing.sm },
+  handToolbarLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  youName: { color: colors.textOnFelt, fontSize: typography.caption.fontSize, fontWeight: '700', maxWidth: 110 },
   selLabel: { color: colors.textOnFeltMuted, fontSize: typography.caption.fontSize },
   selOk: { color: colors.success, fontWeight: '700' },
   selBad: { color: colors.dangerLight, fontWeight: '600' },
