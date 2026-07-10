@@ -121,6 +121,17 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
   const currentCard = currentStep ? deck[currentStep.cardIndex] : null;
   const isHumanCard = currentStep?.seat === humanSeat;
 
+  // The human's cards that have already landed (steps before the one now in
+  // flight). They accumulate face-up in a fan at the bottom so the player
+  // watches their own hand fill, and the cards stay put when the deal ends and
+  // the real hand takes over the same spot.
+  const humanDealt: import('../lib/pusoy/types').Card[] = [];
+  for (let s = 0; s < step; s++) {
+    if (dealOrder[s].seat === humanSeat) humanDealt.push(deck[dealOrder[s].cardIndex]);
+  }
+  // Overlap the small cards enough that all 13 fit on a narrow screen.
+  const stride = 20;
+
   return (
     <Pressable style={styles.overlay} onPress={onDone}>
       <View style={styles.oppRow}>
@@ -134,6 +145,15 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
         )}
       </View>
       <Text style={styles.dealingLabel}>Dealing…</Text>
+
+      <View style={styles.dealHandRow}>
+        {humanDealt.map((c, i) => (
+          <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -stride }}>
+            <PlayingCard card={c} small />
+          </View>
+        ))}
+      </View>
+
       <Animated.View style={[styles.flyingCard, { left: x, top: y, opacity }]}>
         <PlayingCard card={isHumanCard ? currentCard ?? undefined : undefined} faceDown={!isHumanCard} />
       </Animated.View>
@@ -213,5 +233,15 @@ const styles = StyleSheet.create({
   },
   flyingCard: {
     position: 'absolute',
+  },
+  // The accumulating human hand, centered near the bottom where the real hand
+  // fan will sit once play begins.
+  dealHandRow: {
+    position: 'absolute',
+    bottom: 64,
+    left: 0, right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
