@@ -38,6 +38,7 @@ import { Avatar } from '../components/Avatar';
 import { DealingAnimation } from '../components/DealingAnimation';
 import { OpponentCardStack, PlayingCard, CARD_WIDTH } from '../components/PlayingCard';
 import { canPlay, detectCombo } from '../lib/pusoy/combo';
+import { SUIT_VALUE } from '../lib/pusoy/deck';
 import { findLegalPlays } from '../lib/pusoy/bot';
 import { parseLevel } from '../lib/pusoy/level';
 import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
@@ -397,6 +398,15 @@ export default function LocalGameScreen() {
     for (const p of pool) for (const c of p.cards) playableIds.add(c.id);
   }
 
+  // Selection-independent eligibility: every card that appears in any legal
+  // play right now. Used to gate taps — when a hand type is established you can
+  // only pick cards that could actually beat it.
+  let eligibleIds: Set<string> | null = null;
+  if (legalPlays) {
+    eligibleIds = new Set<string>();
+    for (const p of legalPlays) for (const c of p.cards) eligibleIds.add(c.id);
+  }
+
   const selCombo = selected.length ? detectCombo(selected) : null;
   const selLegal = !!selCombo && canPlay(selCombo, lead);
   const selFeedback = selected.length === 0
@@ -456,11 +466,47 @@ export default function LocalGameScreen() {
     sortHumanHand(game, next);
   };
 
+  // Tapping a card selects it, with behavior that depends on the established
+  // hand type so the player can't build an illegal or wrong-shaped play:
+  //   - not our turn / ineligible card: ignored
+  //   - leading (no lead yet): free multi-select to build any combo
+  //   - single lead: one card, tapping another replaces it
+  //   - pair lead: auto-picks the whole pair of that rank (lowest suits first)
+  //   - 5-card lead: manual multi-select, capped at five
   const toggleCard = (c: Card) => {
+    if (eligibleIds && !eligibleIds.has(c.id)) return;
+
+    if (!lead) {
+      setSelected((sel) =>
+        sel.find((s) => s.id === c.id) ? sel.filter((s) => s.id !== c.id) : [...sel, c],
+      );
+      return;
+    }
+    if (lead.length === 1) {
+      setSelected((sel) => (sel.length === 1 && sel[0].id === c.id ? [] : [c]));
+      return;
+    }
+    if (lead.length === 2) {
+      setSelected((sel) => {
+        if (sel.length === 2 && sel[0].rank === c.rank) return [];
+        const pairs = (legalPlays ?? []).filter(
+          (p) => p.length === 2 && p.cards[0].rank === c.rank,
+        );
+        if (pairs.length === 0) return sel;
+        // Lowest-suit priority: shed the weakest legal pair of this rank first.
+        pairs.sort(
+          (a, b) =>
+            Math.max(SUIT_VALUE[a.cards[0].suit], SUIT_VALUE[a.cards[1].suit]) -
+            Math.max(SUIT_VALUE[b.cards[0].suit], SUIT_VALUE[b.cards[1].suit]),
+        );
+        return pairs[0].cards;
+      });
+      return;
+    }
+    // 5-card lead: manual multi-select, capped at five.
     setSelected((sel) => {
-      if (sel.find((s) => s.id === c.id)) {
-        return sel.filter((s) => s.id !== c.id);
-      }
+      if (sel.find((s) => s.id === c.id)) return sel.filter((s) => s.id !== c.id);
+      if (sel.length >= 5) return sel;
       return [...sel, c];
     });
   };

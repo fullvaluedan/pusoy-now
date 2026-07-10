@@ -5,7 +5,7 @@
 import { buildDeck, dealFour, shuffle, RANK_VALUE } from './deck';
 import { detectCombo, detectFiveCard, compareCombos, canPlay } from './combo';
 import { applyAction, handFinishOrder, isHandOver, newHand } from './engine';
-import { botChoose } from './bot';
+import { botChoose, findLegalPlays } from './bot';
 import type {
   BotLevel,
   Card,
@@ -17,6 +17,10 @@ import type {
 
 const BOT_MIN_DELAY_MS = 900;
 const BOT_MAX_DELAY_MS = 2_400;
+// A forced pass (nothing in hand can beat the lead — e.g. the 2 of diamonds
+// bomb, or a 5-card lead against a hand of fewer than 5 cards) needs no
+// thinking, so it resolves almost instantly instead of faking deliberation.
+const BOT_FORCED_PASS_MS = 250;
 
 export type LocalPlayer = 'human' | 'bot';
 
@@ -385,9 +389,15 @@ function scheduleBots(game: LocalGame) {
     if (game.playerKinds[seat] !== 'bot') continue;
     if (game.handState.finishedOrder.includes(seat)) continue;
     if (game.handState.currentPlayerIndex === seat) {
-      const delay =
-        BOT_MIN_DELAY_MS +
-        Math.random() * (BOT_MAX_DELAY_MS - BOT_MIN_DELAY_MS);
+      // A bot with no legal play can only pass; do it near-instantly so the
+      // table doesn't wait on a foregone conclusion (2 of diamonds bomb, a
+      // 5-card lead against a short hand, etc.).
+      const mustPass =
+        game.handState.leadCombo !== null &&
+        findLegalPlays(game.hands[seat], game.handState.leadCombo).length === 0;
+      const delay = mustPass
+        ? BOT_FORCED_PASS_MS
+        : BOT_MIN_DELAY_MS + Math.random() * (BOT_MAX_DELAY_MS - BOT_MIN_DELAY_MS);
       const t = setTimeout(() => {
         try {
           advanceSeat(game, seat);
