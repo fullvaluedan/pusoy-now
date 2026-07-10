@@ -75,6 +75,10 @@ export const radii = {
 // of drifting to the screen edges.
 export const layout = {
   maxTableWidth: 560,
+  // The panel is also height-capped so it does not stretch to fill a tall
+  // desktop window (which left dead space down the middle); above the cap it
+  // is centered vertically on the backdrop.
+  maxTableHeight: 900,
   // On desktop the table renders as a bounded panel: capped to maxTableWidth,
   // inset from the top/bottom by panelMargin so the dark backdrop frames it,
   // with rounded corners of panelRadius. On narrow viewports the panel goes

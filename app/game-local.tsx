@@ -152,16 +152,21 @@ function seatName(game: LocalGame, seat: number, displayName: string): string {
 // SafeAreaView nests inside so content clears the safe-area insets while the
 // felt itself fills the panel edge to edge.
 function TablePanel({ children }: { children: ReactNode }) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isWide = width > layout.maxTableWidth;
   const vMargin = isWide ? layout.panelMargin : 0;
   const radius = isWide ? layout.panelRadius : 0;
+  // Cap the panel height so it does not stretch to fill a tall window; the
+  // backdrop centers it vertically, giving equal breathing room above and
+  // below. On short/narrow windows this resolves to the full available height
+  // (effectively full-screen).
+  const panelHeight = Math.min(height - vMargin * 2, layout.maxTableHeight);
   return (
     <View style={styles.backdrop}>
       <View
         style={[
           styles.panelShadow,
-          { marginVertical: vMargin, borderRadius: radius },
+          { height: panelHeight, borderRadius: radius },
         ]}
       >
         <View style={[styles.panel, { borderRadius: radius }]}>
@@ -748,7 +753,7 @@ export default function LocalGameScreen() {
           <Image
             source={TURN_GLOW_IMG}
             style={styles.turnGlow}
-            resizeMode="cover"
+            resizeMode="contain"
             accessibilityElementsHidden
             importantForAccessibility="no"
           />
@@ -952,15 +957,20 @@ function DraggableCard({
 
 const styles = StyleSheet.create({
   // Flat dark backdrop filling the window behind the bounded table panel.
-  // alignItems centers the width-capped panel horizontally; panelShadow's
-  // own marginVertical insets it from the top and bottom on desktop.
-  backdrop: { flex: 1, backgroundColor: colors.backdrop, alignItems: 'center' },
+  // alignItems centers the width-capped panel horizontally and justifyContent
+  // centers it vertically once its height is capped below the window height.
+  backdrop: {
+    flex: 1,
+    backgroundColor: colors.backdrop,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Shadow host for the panel. Kept separate from the clipping panel because
   // the panel sets overflow:'hidden' (to round the felt into its corners),
   // which would otherwise clip its own drop shadow. Width-capped so the panel
-  // never grows past a phone-ish column on wide viewports.
+  // never grows past a phone-ish column on wide viewports; height is set
+  // inline (capped and centered by the backdrop).
   panelShadow: {
-    flex: 1,
     width: '100%',
     maxWidth: layout.maxTableWidth,
     shadowColor: colors.black,
@@ -1135,14 +1145,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: 'transparent',
   },
-  // Active-turn highlight on the whole hand area: a gold top edge plus a faint
-  // gold wash, matching the seat-plate active state so the two read as one system.
+  // Active-turn highlight on the whole hand area: a gold top edge plus a very
+  // faint gold wash, matching the seat-plate active state so the two read as
+  // one system. Kept low so it reads as an edge cue, not a lit rectangle.
   bottomActive: {
     borderTopColor: colors.gold,
-    backgroundColor: withAlpha(colors.gold, 0.08),
+    backgroundColor: withAlpha(colors.gold, 0.05),
   },
-  // Radial gold glow art behind the hand on the player's turn. Fills the hand
-  // area; low opacity so it reads as ambient light, not a solid block.
+  // Radial gold glow art behind the hand on the player's turn. resizeMode
+  // "contain" (set on the Image) keeps it a soft centered oval instead of a
+  // stretched full-width rectangle, and the low opacity keeps it reading as
+  // ambient light rather than a solid lighter band.
   turnGlow: {
     position: 'absolute',
     top: 0,
@@ -1151,7 +1164,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: undefined,
     height: undefined,
-    opacity: 0.5,
+    opacity: 0.25,
     pointerEvents: 'none',
   },
   turnBanner: {
