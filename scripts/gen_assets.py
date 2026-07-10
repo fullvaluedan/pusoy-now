@@ -108,6 +108,63 @@ ASSETS = [
             "emblem, no text, no gradients. " + PALETTE
         ),
     },
+    # --- Round 2 Phase A candidates (5-image budget) ---
+    {
+        "name": "felt-tile",
+        "size": "1024x1024",
+        "background": "opaque",
+        "prompt": (
+            "Seamless tileable casino card-table felt texture, top-down, "
+            "deep forest green. Fine even woven grain, very subtle, no seams "
+            "at the edges so it repeats cleanly. Matte, calm, no vignette, no "
+            "objects, no text, no logos. Flat and uniform. " + PALETTE
+        ),
+    },
+    {
+        "name": "table-inlay",
+        "size": "1536x1024",
+        "background": "opaque",
+        "prompt": (
+            "Elegant oval card-table inlay border, top-down, centered on "
+            "deep forest green felt. A thin double gold pinstripe forming a "
+            "rounded rectangle play area with small ornamental corner "
+            "flourishes, lots of empty green in the middle. Flat vector, "
+            "crisp thin lines, no gradients, no text. " + PALETTE
+        ),
+    },
+    {
+        "name": "seat-frame",
+        "size": "1024x1024",
+        "background": "opaque",
+        "prompt": (
+            "Circular avatar seat frame for a card game, centered on a plain "
+            "deep forest green background. An ornamental gold ring with a "
+            "small fleur accent at the top, empty cream center where a photo "
+            "will sit. Flat vector, crisp, no gradients, no text. " + PALETTE
+        ),
+    },
+    {
+        "name": "turn-glow",
+        "size": "1024x1024",
+        "background": "opaque",
+        "prompt": (
+            "Soft radial gold glow halo on a deep forest green background, "
+            "centered, fading smoothly to transparent-looking green at the "
+            "edges. Warm muted gold, subtle, meant to sit behind an active "
+            "player's hand as a highlight. No objects, no text. " + PALETTE
+        ),
+    },
+    {
+        "name": "empty-state",
+        "size": "1024x1024",
+        "background": "opaque",
+        "prompt": (
+            "Friendly empty-state illustration for a card app: a single "
+            "playing-card back and a small stack of chips arranged simply on "
+            "a warm cream background, lots of negative space. Flat vector, "
+            "calm, no text, no gradients. " + PALETTE
+        ),
+    },
 ]
 
 
