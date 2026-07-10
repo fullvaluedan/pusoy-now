@@ -4,11 +4,11 @@
 //
 // Online lobby creation/joining and Bluetooth are stubs that show a "coming
 // soon" toast and link to the relevant doc page.
-import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Button, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
+import { useAuth } from '../lib/auth';
 
 const LOGO_IMG = require('../assets/art/logo.png');
 const HERO_IMG = require('../assets/art/hero.png');
@@ -19,26 +19,10 @@ const MAX_CONTENT_WIDTH = 480;
 // hero.png is 1536x1024 (3:2 landscape).
 const HERO_ASPECT_RATIO = 1536 / 1024;
 
-// -----------------------------------------------------------------------
-// Signed-in chip: presentational only for now. There is no auth yet - U7
-// adds lib/auth.tsx with a real AuthProvider/useAuth session. This screen
-// deliberately does not import from an auth module (it doesn't exist).
-// The `session` state below defaults to the guest shape; U7 will replace
-// this useState with `const { session } = useAuth()` and delete
-// GUEST_SESSION.
-// -----------------------------------------------------------------------
-interface SessionChipState {
-  signedIn: boolean;
-  displayName?: string;
-  avatarUrl?: string;
-}
-
-const GUEST_SESSION: SessionChipState = { signedIn: false };
-
 export default function Home() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const [session] = useState<SessionChipState>(GUEST_SESSION);
+  const { session, profile } = useAuth();
 
   const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
   const heroHeight = contentWidth / HERO_ASPECT_RATIO;
@@ -70,7 +54,11 @@ export default function Home() {
           style={styles.menuItem}
         />
 
-        <SignInEntry session={session} onPress={() => router.push('/sign-in')} />
+        <SignInEntry
+          signedIn={Boolean(session)}
+          displayName={profile?.displayName}
+          onPress={() => router.push('/sign-in')}
+        />
 
         <Button
           title="Leaderboard"
@@ -95,11 +83,19 @@ export default function Home() {
   );
 }
 
-// Secondary sign-in entry. Guest state renders the existing plain button;
-// signed-in state (not reachable yet, drawn from GUEST_SESSION) renders an
-// avatar chip with the player's initial and display name instead.
-function SignInEntry({ session, onPress }: { session: SessionChipState; onPress: () => void }) {
-  if (!session.signedIn) {
+// Secondary sign-in entry. Guests get a plain button; signed-in players get a
+// chip carrying their initial and display name. U8 swaps the initial disc for
+// the real Avatar component so the social picture shows here too.
+function SignInEntry({
+  signedIn,
+  displayName,
+  onPress,
+}: {
+  signedIn: boolean;
+  displayName?: string;
+  onPress: () => void;
+}) {
+  if (!signedIn) {
     return (
       <Button
         title="Sign in to play online"
@@ -112,7 +108,7 @@ function SignInEntry({ session, onPress }: { session: SessionChipState; onPress:
     );
   }
 
-  const initial = (session.displayName ?? '?').trim().charAt(0).toUpperCase();
+  const initial = (displayName ?? '?').trim().charAt(0).toUpperCase() || '?';
 
   return (
     <Pressable style={[styles.chip, styles.menuItem]} onPress={onPress}>
@@ -121,7 +117,7 @@ function SignInEntry({ session, onPress }: { session: SessionChipState; onPress:
       </View>
       <View style={styles.chipTextGroup}>
         <Text style={styles.chipTitle}>Signed in</Text>
-        <Text style={styles.chipSubtitle}>{session.displayName}</Text>
+        <Text style={styles.chipSubtitle}>{displayName}</Text>
       </View>
     </Pressable>
   );

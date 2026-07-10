@@ -7,11 +7,13 @@
 //      EXPO_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
 //      EXPO_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
 // 3. Run the SQL in supabase/schema.sql in the Supabase SQL editor
-// 4. Enable the providers you want in Authentication > Providers:
-//    - Apple (iOS), Google, Facebook, X/Twitter, TikTok
-//    (Each requires its own OAuth app registration. For the vertical slice we
-//    wire Google and Apple as the easiest path — Facebook/Instagram/X/TikTok
-//    need Meta/Twitter/ByteDance developer setup and app review.)
+// 4. Enable Google and Facebook in Authentication > Providers. Each needs its
+//    own OAuth app (Google Cloud Console / Meta for Developers) with the
+//    Supabase callback URL registered. TikTok is not a Supabase provider and
+//    goes through the Edge Function bridge in supabase/functions/tiktok-auth.
+// 5. Add the app's redirect URLs to Authentication > URL Configuration:
+//      pusoynow://auth-callback        (native)
+//      http://localhost:8081           (web dev)
 //
 // The schema is intentionally minimal. Realtime is enabled on the games table
 // so all 4 clients can listen to state changes.
@@ -39,7 +41,15 @@ const ExpoSecureStoreAdapter = {
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+const isWeb = Platform.OS === 'web';
+
 let _client: SupabaseClient | null = null;
+
+// Guests play bots with no account and no .env, so nothing may throw just
+// because Supabase is unconfigured. Callers that need auth check this first.
+export function isSupabaseConfigured(): boolean {
+  return Boolean(url && anonKey);
+}
 
 export function getSupabase(): SupabaseClient {
   if (_client) return _client;
@@ -52,14 +62,26 @@ export function getSupabase(): SupabaseClient {
   _client = createClient(url, anonKey, {
     auth: {
       storage:
-        Platform.OS === 'web'
+        isWeb
           ? // use a non-secure fallback for web only
             (typeof window !== 'undefined' ? window.localStorage : undefined) as any
           : (ExpoSecureStoreAdapter as any),
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      // PKCE keeps the authorization code useless without the verifier this
+      // client holds, which matters most on native where the redirect lands on
+      // a URL scheme any app could claim.
+      flowType: 'pkce',
+      // On web the provider redirects the whole page back with `?code=`, and
+      // supabase-js exchanges it on load. On native there is no page to detect,
+      // so lib/auth.tsx exchanges the code from the deep link itself.
+      detectSessionInUrl: isWeb,
     },
   });
   return _client;
+}
+
+// Null instead of throwing, for the guest paths.
+export function getSupabaseOrNull(): SupabaseClient | null {
+  return isSupabaseConfigured() ? getSupabase() : null;
 }
