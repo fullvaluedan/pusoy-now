@@ -23,29 +23,37 @@ interface ScreenContainerProps {
   children: ReactNode;
   scroll?: boolean;
   style?: StyleProp<ViewStyle>;
+  // Cap the centered content column; defaults to MAX_CONTENT_WIDTH.
+  maxWidth?: number;
 }
 
-export function ScreenContainer({ children, scroll, style }: ScreenContainerProps) {
+export function ScreenContainer({ children, scroll, style, maxWidth = MAX_CONTENT_WIDTH }: ScreenContainerProps) {
   if (scroll) {
     return (
       <SafeAreaView style={[screenStyles.container, style]}>
         <ScrollView contentContainerStyle={screenStyles.scrollContent}>
-          {children}
+          <View style={[screenStyles.columnScroll, { maxWidth }]}>{children}</View>
         </ScrollView>
       </SafeAreaView>
     );
   }
   return (
-    <SafeAreaView style={[screenStyles.container, screenStyles.padded, style]}>
-      {children}
+    <SafeAreaView style={[screenStyles.container, style]}>
+      <View style={[screenStyles.columnPadded, { maxWidth }]}>{children}</View>
     </SafeAreaView>
   );
 }
 
+// Shared max content width so menu screens read as a centered column on wide
+// desktop viewports instead of stretching edge to edge. Matches home's cap.
+const MAX_CONTENT_WIDTH = 480;
+
 const screenStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.cream },
-  padded: { padding: spacing.lg },
-  scrollContent: { padding: spacing.lg, gap: spacing.sm + 4 },
+  // Full-bleed cream background; children are centered in a capped column.
+  scrollContent: { padding: spacing.lg, alignItems: 'center' },
+  columnScroll: { width: '100%', gap: spacing.sm + 4, alignSelf: 'center' },
+  columnPadded: { flex: 1, width: '100%', alignSelf: 'center', padding: spacing.lg },
 });
 
 // ---------------------------------------------------------------------------
