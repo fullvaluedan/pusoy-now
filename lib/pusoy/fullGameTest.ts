@@ -12,6 +12,7 @@ import { buildDeck, dealFour, shuffle } from './deck';
 import { applyAction, isHandOver, newHand, handFinishOrder } from './engine';
 import { botChoose } from './bot';
 import { makeRng } from './rng';
+import { createLocalGame, findHumanSeat, skipToEnd, startGame } from './localGame';
 import type { BotLevel, Card, Rng } from './types';
 
 let pass = 0;
@@ -161,6 +162,24 @@ ok(
   rate >= THRESHOLD,
   { rate },
 );
+
+// --- skipToEnd (fast-forward to ranking) ---------------------------------
+{
+  const g = createLocalGame(3, 'You', 'normal');
+  startGame(g);
+  const humanSeat = findHumanSeat(g);
+  ok('skip: game is playing before skip', g.phase === 'playing');
+  skipToEnd(g);
+  ok('skip: game reaches finished', g.phase === 'finished');
+  ok('skip: finish order names all 4 seats', g.finishOrder.length === 4 &&
+    new Set(g.finishOrder).size === 4);
+  ok('skip: engine recorded 3 players out', g.handState.finishedOrder.length >= 3);
+  ok('skip: no bot timers left pending', g.botTimers.length === 0);
+  ok('skip: human seat appears in the finish order', g.finishOrder.includes(humanSeat));
+  // Idempotent: a second skip on a finished game is a no-op, not a throw.
+  skipToEnd(g);
+  ok('skip: second skip on a finished hand is a no-op', g.phase === 'finished');
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

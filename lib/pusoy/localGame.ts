@@ -336,6 +336,47 @@ export function publicView(game: LocalGame, _viewingSeat: number): PublicGameVie
   };
 }
 
+// Advance one seat by a single action, mutating the game in place. The bot AI
+// chooses the move; when this runs for the human seat (only during skipToEnd)
+// the AI finishes their hand for them. Does NOT reschedule or finalize — the
+// caller decides what happens next.
+function advanceSeat(game: LocalGame, seat: number): void {
+  const hand = game.hands[seat];
+  const lead = game.handState.leadCombo;
+  const choice = botChoose(hand, lead, {
+    level: game.level,
+    context: {
+      seat,
+      playedCards: game.playedCards,
+      handSizes: game.hands.map((h) => h.length),
+    },
+  });
+  if (choice) {
+    game.handState = applyAction(game.handState, seat, hand, { kind: 'play', combo: choice });
+    game.trickHistory = [{ playerIndex: seat, combo: choice }, ...game.trickHistory].slice(0, 8);
+    game.playedCards.push(...choice.cards);
+    game.hands[seat] = hand.filter((c) => !choice.cards.find((pc) => pc.id === c.id));
+  } else {
+    game.handState = applyAction(game.handState, seat, hand, { kind: 'pass' });
+  }
+}
+
+// Fast-forward the rest of the hand with no per-move delay and jump to the
+// finish. Used when the human has emptied their hand (auto) or taps "Skip to
+// end" mid-hand (their remaining cards are then played by the AI). The finish
+// order is produced by the same engine as real-time play.
+export function skipToEnd(game: LocalGame): void {
+  if (game.phase !== 'playing') return;
+  for (const t of game.botTimers) clearTimeout(t);
+  game.botTimers = [];
+  let guard = 0;
+  while (!isHandOver(game.handState) && guard++ < 10_000) {
+    advanceSeat(game, game.handState.currentPlayerIndex);
+  }
+  finalizeHand(game);
+  emit(game);
+}
+
 function scheduleBots(game: LocalGame) {
   for (const t of game.botTimers) clearTimeout(t);
   game.botTimers = [];
@@ -348,39 +389,8 @@ function scheduleBots(game: LocalGame) {
         BOT_MIN_DELAY_MS +
         Math.random() * (BOT_MAX_DELAY_MS - BOT_MIN_DELAY_MS);
       const t = setTimeout(() => {
-        const hand = game.hands[seat];
-        const lead = game.handState.leadCombo;
-        const choice = botChoose(hand, lead, {
-          level: game.level,
-          context: {
-            seat,
-            playedCards: game.playedCards,
-            handSizes: game.hands.map((h) => h.length),
-          },
-        });
         try {
-          if (choice) {
-            const next = applyAction(
-              game.handState,
-              seat,
-              hand,
-              { kind: 'play', combo: choice },
-            );
-            game.handState = next;
-            game.trickHistory = [{ playerIndex: seat, combo: choice }, ...game.trickHistory].slice(0, 8);
-            game.playedCards.push(...choice.cards);
-            game.hands[seat] = hand.filter(
-              (c) => !choice.cards.find((pc) => pc.id === c.id),
-            );
-          } else {
-            const next = applyAction(
-              game.handState,
-              seat,
-              hand,
-              { kind: 'pass' },
-            );
-            game.handState = next;
-          }
+          advanceSeat(game, seat);
           if (isHandOver(game.handState)) {
             finalizeHand(game);
           } else {

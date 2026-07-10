@@ -46,6 +46,7 @@ import {
   findHumanSeat,
   humanAct,
   reorderHumanHand,
+  skipToEnd,
   sortHumanHand,
   startGame,
   subscribe,
@@ -266,6 +267,24 @@ export default function LocalGameScreen() {
     };
   }, [game, tick, legalPlays]);
 
+  // Auto-skip: once the human has emptied their hand, don't make them watch the
+  // bots grind out the rest. Jump straight to the ranking. Fires once, since
+  // skipToEnd flips the phase to 'finished'. A short delay lets the player see
+  // their winning card land first.
+  useEffect(() => {
+    if (!game || game.phase !== 'playing') return;
+    const seat = findHumanSeat(game);
+    if (!game.handState.finishedOrder.includes(seat)) return;
+    const t = setTimeout(() => {
+      try {
+        skipToEnd(game);
+      } catch {
+        // hand already finished under us; nothing to do
+      }
+    }, 700);
+    return () => clearTimeout(t);
+  }, [game, tick]);
+
   if (!game) {
     return (
       <TableBackground>
@@ -403,6 +422,17 @@ export default function LocalGameScreen() {
     }
   };
 
+  // End the hand now. The human's remaining cards are played out by the AI, so
+  // the ranking is a real finish order, not a forfeit.
+  const onSkip = () => {
+    setError(null);
+    try {
+      skipToEnd(game);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   // Cycle sort mode: rank → suit → hands. Selection persists (card ids
   // don't change, only positions).
   const onOrganize = () => {
@@ -487,11 +517,16 @@ export default function LocalGameScreen() {
       {/* Bottom: hand + actions. Hand in the lower-center; Play/Pass centered directly under it. */}
       <View style={styles.bottom}>
         <View style={styles.handToolbar}>
-          <Pressable style={styles.btnSmall} onPress={onOrganize}>
-            <Text style={styles.btnSmallText}>
-              {sortMode === null ? 'Sort' : `Sort: ${SORT_LABEL[sortMode]}`}
-            </Text>
-          </Pressable>
+          <View style={styles.handToolbarLeft}>
+            <Pressable style={styles.btnSmall} onPress={onOrganize}>
+              <Text style={styles.btnSmallText}>
+                {sortMode === null ? 'Sort' : `Sort: ${SORT_LABEL[sortMode]}`}
+              </Text>
+            </Pressable>
+            <Pressable style={styles.btnSmall} onPress={onSkip}>
+              <Text style={styles.btnSmallText}>Skip to end</Text>
+            </Pressable>
+          </View>
           <Text
             style={[
               styles.selLabel,
@@ -753,6 +788,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg - 4,
     marginBottom: spacing.xs + 2,
   },
+  handToolbarLeft: { flexDirection: 'row', gap: spacing.sm },
   selLabel: { color: colors.textOnFeltMuted, fontSize: typography.caption.fontSize },
   selOk: { color: colors.success, fontWeight: '700' },
   selBad: { color: colors.dangerLight, fontWeight: '600' },
