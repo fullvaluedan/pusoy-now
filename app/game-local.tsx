@@ -36,7 +36,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../components/Avatar';
 import { DealingAnimation } from '../components/DealingAnimation';
-import { OpponentCardStack, PlayingCard, CARD_WIDTH } from '../components/PlayingCard';
+import { OpponentCardStack, PlayingCard, CARD_WIDTH, CARD_HEIGHT } from '../components/PlayingCard';
 import { canPlay, detectCombo } from '../lib/pusoy/combo';
 import { SUIT_VALUE } from '../lib/pusoy/deck';
 import { findLegalPlays } from '../lib/pusoy/bot';
@@ -827,8 +827,12 @@ function HandRow({
   const totalWidth = CARD_WIDTH + stride * (hand.length - 1);
   // Center the fan horizontally inside the screen.
   const startX = (width - totalWidth) / 2;
+  // Fan container height must derive from card HEIGHT, not width: each card
+  // sits at `top: 12` (DraggableCard) so a resting card's bottom edge is at
+  // 12 + CARD_HEIGHT; the +24 leaves headroom below for the card's shadow and
+  // for a selected card's -16px lift, so nothing in the fan is ever clipped.
   return (
-    <View style={[styles.handFan, { height: CARD_WIDTH + 24 }]}>
+    <View style={[styles.handFan, { height: CARD_HEIGHT + 24 }]}>
       {hand.map((c, i) => (
         <DraggableCard
           key={c.id}
