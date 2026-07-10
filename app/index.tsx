@@ -6,6 +6,7 @@
 // soon" toast and link to the relevant doc page.
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Avatar } from '../components/Avatar';
 import { Button, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
@@ -57,6 +58,7 @@ export default function Home() {
         <SignInEntry
           signedIn={Boolean(session)}
           displayName={profile?.displayName}
+          avatarUrl={profile?.avatarUrl}
           onPress={() => router.push('/sign-in')}
         />
 
@@ -84,15 +86,16 @@ export default function Home() {
 }
 
 // Secondary sign-in entry. Guests get a plain button; signed-in players get a
-// chip carrying their initial and display name. U8 swaps the initial disc for
-// the real Avatar component so the social picture shows here too.
+// chip carrying their avatar and display name.
 function SignInEntry({
   signedIn,
   displayName,
+  avatarUrl,
   onPress,
 }: {
   signedIn: boolean;
   displayName?: string;
+  avatarUrl?: string | null;
   onPress: () => void;
 }) {
   if (!signedIn) {
@@ -108,16 +111,16 @@ function SignInEntry({
     );
   }
 
-  const initial = (displayName ?? '?').trim().charAt(0).toUpperCase() || '?';
-
   return (
     <Pressable style={[styles.chip, styles.menuItem]} onPress={onPress}>
-      <View style={styles.chipAvatar}>
-        <Text style={styles.chipAvatarText}>{initial}</Text>
-      </View>
+      <Avatar
+        name={displayName ?? 'Player'}
+        url={avatarUrl}
+        size={40}
+      />
       <View style={styles.chipTextGroup}>
         <Text style={styles.chipTitle}>Signed in</Text>
-        <Text style={styles.chipSubtitle}>{displayName}</Text>
+        <Text style={styles.chipSubtitle} numberOfLines={1}>{displayName}</Text>
       </View>
     </Pressable>
   );
@@ -142,15 +145,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
   },
-  chipAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipAvatarText: { ...typography.bodyBold, color: colors.ink },
   chipTextGroup: { flex: 1 },
   chipTitle: { color: colors.textOnFelt, fontSize: typography.bodyBold.fontSize, fontWeight: typography.bodyBold.fontWeight },
   chipSubtitle: { color: colors.textOnFeltMuted, fontSize: typography.caption.fontSize, marginTop: 2 },

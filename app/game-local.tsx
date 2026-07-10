@@ -32,12 +32,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Avatar } from '../components/Avatar';
 import { DealingAnimation } from '../components/DealingAnimation';
 import { OpponentCardStack, PlayingCard, CARD_WIDTH } from '../components/PlayingCard';
 import { canPlay, detectCombo } from '../lib/pusoy/combo';
 import { findLegalPlays } from '../lib/pusoy/bot';
 import { parseLevel } from '../lib/pusoy/level';
 import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
+import { useAuth } from '../lib/auth';
 import {
   createLocalGame,
   findHumanSeat,
@@ -107,13 +109,6 @@ function seatName(game: LocalGame, seat: number, displayName: string): string {
   return `Bot ${seat + 1} - ${LEVEL_LABEL[game.level]}`;
 }
 
-// First-letter avatar placeholder. U8 replaces this with a real
-// components/Avatar.tsx that shows a social picture when one is available;
-// this stays a simple themed initial disc until then.
-function seatInitial(name: string): string {
-  return name.trim().charAt(0).toUpperCase() || '?';
-}
-
 // Felt table backdrop shared by every phase of this screen (loading,
 // dealing, in-progress, finished) so the game always sits on the same
 // textured surface, with colors.felt as the backing color underneath.
@@ -128,8 +123,11 @@ function TableBackground({ children }: { children: ReactNode }) {
 export default function LocalGameScreen() {
   const params = useLocalSearchParams<{ bots: string; level: string }>();
   const router = useRouter();
+  const { profile } = useAuth();
   const botCount = Math.max(1, Math.min(3, Number(params.bots) || 3));
   const level = parseLevel(params.level);
+  // A signed-in player sits at their own name; a guest is just "You".
+  const humanDisplayName = profile?.displayName ?? 'You';
 
   const [game, setGame] = useState<LocalGame | null>(null);
   // Re-render trigger on game state changes.
@@ -189,7 +187,7 @@ export default function LocalGameScreen() {
 
   // 1) Dealing animation overlay
   if (game.phase === 'dealing') {
-    const playerNames = [0, 1, 2, 3].map((s) => seatName(game, s, 'You'));
+    const playerNames = [0, 1, 2, 3].map((s) => seatName(game, s, humanDisplayName));
     return (
       <TableBackground>
         <DealingAnimation
@@ -214,12 +212,24 @@ export default function LocalGameScreen() {
             {youWon ? 'You won!' : youLast ? 'You lost' : 'Hand over'}
           </Text>
           <Text style={styles.finishSub}>Finish order</Text>
-          {game.finishOrder.map((s, i) => (
-            <View key={i} style={styles.finishRow}>
-              <Text style={styles.finishPlace}>{i + 1}.</Text>
-              <Text style={styles.finishName}>{seatName(game, s, 'You')}</Text>
-            </View>
-          ))}
+          {game.finishOrder.map((s, i) => {
+            const isHuman = s === humanSeat;
+            const name = seatName(game, s, humanDisplayName);
+            return (
+              <View key={i} style={styles.finishRow}>
+                <Text style={styles.finishPlace}>{i + 1}.</Text>
+                <Avatar
+                  name={name}
+                  url={isHuman ? profile?.avatarUrl ?? null : null}
+                  size={24}
+                  style={styles.finishAvatar}
+                />
+                <Text style={styles.finishName} numberOfLines={1}>
+                  {name}
+                </Text>
+              </View>
+            );
+          })}
           <View style={styles.finishActions}>
             <Pressable
               style={styles.btn}
@@ -323,15 +333,41 @@ export default function LocalGameScreen() {
 
   return (
     <TableBackground>
-      {/* Top: opponents row — each seat is a plate with an avatar-slot
-          placeholder (initial disc; U8 swaps in the real Avatar component),
-          the name, card count, and pass/turn state. */}
+      {/* Top: seat row — human's seat on the left, opponents in the middle and right */}
       <View style={styles.oppRow}>
+        {/* Human's seat */}
+        <View
+          style={[
+            styles.oppBox,
+            currentSeat === humanSeat && styles.oppBoxActive,
+            game.handState.finishedOrder.includes(humanSeat) && styles.oppBoxDone,
+          ]}
+        >
+          <Avatar
+            name={humanDisplayName}
+            url={profile?.avatarUrl ?? null}
+            size={28}
+            active={currentSeat === humanSeat && !game.handState.finishedOrder.includes(humanSeat)}
+            style={styles.oppAvatarMargin}
+          />
+          <Text style={styles.oppName} numberOfLines={1}>
+            {humanDisplayName}
+            {currentSeat === humanSeat && !game.handState.finishedOrder.includes(humanSeat) ? ' •' : ''}
+            {game.handState.finishedOrder.includes(humanSeat) ? ' ✓' : game.handState.passed.includes(humanSeat) ? ' (pass)' : ''}
+          </Text>
+          {/* No face-down stack here: the player already sees these cards
+              fanned out in their hand. Just the count, for parity. */}
+          <View style={styles.oppStackRow}>
+            <Text style={styles.oppCount}>{game.hands[humanSeat].length}</Text>
+          </View>
+        </View>
+
+        {/* Opponent seats */}
         {opponentOrder.map((seat) => {
           const isCurrent = currentSeat === seat;
           const finished = game.handState.finishedOrder.includes(seat);
           const passed = game.handState.passed.includes(seat);
-          const name = seatName(game, seat, 'You');
+          const name = seatName(game, seat, humanDisplayName);
           return (
             <View
               key={seat}
@@ -341,9 +377,13 @@ export default function LocalGameScreen() {
                 finished && styles.oppBoxDone,
               ]}
             >
-              <View style={[styles.oppAvatar, isCurrent && !finished && styles.oppAvatarActive]}>
-                <Text style={styles.oppAvatarText}>{seatInitial(name)}</Text>
-              </View>
+              <Avatar
+                name={name}
+                url={null}
+                size={28}
+                active={isCurrent && !finished}
+                style={styles.oppAvatarMargin}
+              />
               <Text style={styles.oppName} numberOfLines={1}>
                 {name}
                 {isCurrent && !finished ? ' •' : ''}
@@ -363,7 +403,7 @@ export default function LocalGameScreen() {
         {lastPlay ? (
           <View style={styles.trickBox}>
             <Text style={styles.trickLabel}>
-              {seatName(game, lastPlay.playerIndex, 'You')} played
+              {seatName(game, lastPlay.playerIndex, humanDisplayName)} played
             </Text>
             <View style={styles.trickCards}>
               {lastPlay.combo.cards.map((c, i) => (
@@ -379,7 +419,7 @@ export default function LocalGameScreen() {
             <Text style={styles.trickEmpty}>
               {isMyTurn
                 ? 'Your turn - lead with a play'
-                : `${seatName(game, currentSeat, 'You')} to lead`}
+                : `${seatName(game, currentSeat, humanDisplayName)} to lead`}
             </Text>
           </View>
         )}
@@ -590,19 +630,7 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
   },
   oppBoxDone: { opacity: 0.55 },
-  oppAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.feltLight,
-    borderWidth: 1,
-    borderColor: withAlpha(colors.white, 0.3),
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
-  },
-  oppAvatarActive: { borderColor: colors.gold },
-  oppAvatarText: { color: colors.textOnFelt, fontSize: typography.caption.fontSize, fontWeight: '700' },
+  oppAvatarMargin: { marginBottom: spacing.xs },
   oppName: { color: colors.textOnFelt, fontSize: typography.tiny.fontSize, fontWeight: '600', marginBottom: spacing.xs },
   oppStackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
   oppCount: { color: colors.textOnFelt, fontSize: 18, fontWeight: '700' },
@@ -689,6 +717,7 @@ const styles = StyleSheet.create({
   finishSub: { fontSize: typography.label.fontSize, color: colors.textMuted, marginBottom: spacing.lg - 4 },
   finishRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
   finishPlace: { color: colors.felt, fontSize: 22, fontWeight: '700', width: 40 },
-  finishName: { color: colors.textPrimary, fontSize: typography.subheading.fontSize - 2 },
+  finishAvatar: { marginRight: spacing.sm },
+  finishName: { color: colors.textPrimary, fontSize: typography.subheading.fontSize - 2, flex: 1 },
   finishActions: { flexDirection: 'row', gap: spacing.md - 2, marginTop: spacing.xxl - 8 },
 });
