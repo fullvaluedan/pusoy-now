@@ -25,7 +25,8 @@ Real-browser screenshots show the game falling apart on desktop Chrome: the deco
 - R3. The dealing phase renders inside the same panel (same fan positions, same seats), not as a full-window overlay.
 - R4. Every menu screen (home, sign-in, bot-select, stats, leaderboard, bluetooth) lays out as a centered max-width column on desktop; no full-width stretched buttons.
 - R5. Card affordances read clearly: dimmed cards legible but obviously inactive, selected cards get a gold edge plus lift, cards carry a subtle shadow.
-- R6. Buttons are consistent: equal heights, clear primary (Play) / danger (Pass) / secondary treatments, sensible disabled states.
+- R6. Buttons are consistent: equal heights, clear primary (Play) / danger (Pass) / secondary treatments, sensible disabled states; no button label ever wraps ("Skip to end" renders on one line).
+- R9. Seats use the space: with only 4 players, seat plates and avatars are substantially larger (avatar on the order of 48px+, plate proportions to match) so the opponents read as characters, not chips.
 - R7. Every visual change is accepted only after a real Chrome screenshot at the three reference widths matches the intent; the final result is screenshot-approved by the user.
 - R8. Shipped behavior unchanged: engine tests stay green; highlighting, auto-pass, sort, skip, drag-to-play, scoreboard all still work.
 
@@ -95,11 +96,11 @@ flowchart LR
 
 ### U2. TablePanel: bounded table surface
 
-- **Goal:** One composed table at any window size (R2).
-- **Requirements:** R2, R8
+- **Goal:** One composed table at any window size (R2), with seats sized for a 4-player table (R9).
+- **Requirements:** R2, R8, R9
 - **Dependencies:** U1
 - **Files:** `app/game-local.tsx` (replace `TableBackground` + `tableColumn` with `TablePanel`), `lib/theme.ts` (backdrop color token, panel frame tokens).
-- **Approach:** Dark backdrop view fills the window; inside it a centered panel (width capped at `layout.maxTableWidth`, full height minus margin, rounded corners, code-drawn double gold border, soft shadow) clips its children. The felt tile (`repeat`) and the vignette render inside the panel; the table-inlay Image is removed from this screen. Top bar, seats, pool, and hand all render inside the panel. On narrow/mobile widths the panel margin collapses so it is effectively full-screen.
+- **Approach:** Dark backdrop view fills the window; inside it a centered panel (width capped at `layout.maxTableWidth`, full height minus margin, rounded corners, code-drawn double gold border, soft shadow) clips its children. The felt tile (`repeat`) and the vignette render inside the panel; the table-inlay Image is removed from this screen. Top bar, seats, pool, and hand all render inside the panel. On narrow/mobile widths the panel margin collapses so it is effectively full-screen. Seat plates scale up per R9: framed avatars around 48px+, larger name/count type, the plate arc filling the panel width.
 - **Patterns to follow:** existing `styles.tableColumn` cap and felt/vignette layers, relocated inside the panel.
 - **Test scenarios:** engine/UI tests stay green (`npm test`); screenshot QC at 1440/768/390: no tile seam, frame hugs the panel, no decoration outside the panel, panel centered.
 - **Verification:** three-width screenshot set approved.
