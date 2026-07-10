@@ -6,7 +6,7 @@
 // the seat's position. Each step takes ~50ms; the whole animation ~2.6s.
 
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { OpponentCardStack, PlayingCard } from './PlayingCard';
 import type { DealStep, LocalPlayer } from '../lib/pusoy/localGame';
 
@@ -88,7 +88,7 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
 
   if (showShuffle) {
     return (
-      <View style={styles.overlay}>
+      <Pressable style={styles.overlay} onPress={onDone}>
         <View style={styles.shuffleBox}>
           <View style={styles.deckStack}>
             <View style={[styles.deckCard, { top: 0, left: 0 }]} />
@@ -97,8 +97,9 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
             <View style={[styles.deckCard, { top: 6, left: 6 }]} />
           </View>
           <Text style={styles.shuffleText}>Shuffling…</Text>
+          <Text style={styles.skipHint}>Tap to skip</Text>
         </View>
-      </View>
+      </Pressable>
     );
   }
 
@@ -110,7 +111,7 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
   const isHumanCard = currentStep?.seat === humanSeat;
 
   return (
-    <View style={styles.overlay}>
+    <Pressable style={styles.overlay} onPress={onDone}>
       <View style={styles.oppRow}>
         {oppStacks.map((s) =>
           s < 0 ? null : (
@@ -125,7 +126,8 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
       <Animated.View style={[styles.flyingCard, { left: x, top: y, opacity }]}>
         <PlayingCard card={isHumanCard ? currentCard ?? undefined : undefined} faceDown={!isHumanCard} />
       </Animated.View>
-    </View>
+      <Text style={styles.skipHintBottom}>Tap to skip</Text>
+    </Pressable>
   );
 }
 
@@ -159,6 +161,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 22,
     fontWeight: '600',
+  },
+  skipHint: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
+    marginTop: 10,
+  },
+  skipHintBottom: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0, right: 0,
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
   },
   oppRow: {
     position: 'absolute',

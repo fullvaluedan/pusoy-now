@@ -2,8 +2,8 @@
 // Bluetooth mode in the next round). No network, no Supabase — everything
 // lives in memory and drives the UI directly.
 
-import { buildDeck, dealFour, shuffle } from './deck';
-import { detectCombo, canPlay } from './combo';
+import { buildDeck, dealFour, shuffle, RANK_VALUE } from './deck';
+import { detectCombo, detectFiveCard, compareCombos, canPlay } from './combo';
 import { applyAction, applyTimeout, handFinishOrder, isHandOver, newHand } from './engine';
 import { botChoose } from './bot';
 import type {
@@ -193,20 +193,98 @@ export function reorderHumanHand(game: LocalGame, fromIndex: number, toIndex: nu
   emit(game);
 }
 
-// Auto-sort the human's hand by rank ascending then suit ascending.
-export function sortHumanHand(game: LocalGame): void {
+export type SortMode = 'rank' | 'suit' | 'hands';
+
+// Display order for grouping suits in the hand (not strength order).
+const SUIT_DISPLAY: Record<Card['suit'], number> = { C: 1, D: 2, H: 3, S: 4 };
+
+// Auto-sort the human's hand.
+//   rank  — rank ascending, suit tiebreak
+//   suit  — group by suit, rank ascending within each
+//   hands — group into playable combos: singles, pairs, trips, 5-card hands
+export function sortHumanHand(game: LocalGame, mode: SortMode = 'rank'): void {
   const seat = findHumanSeat(game);
-  const SUIT_ORDER = { C: 1, D: 2, H: 3, S: 4 } as const;
-  const RANK_ORDER = {
-    '3': 1, '4': 2, '5': 3, '6': 4, '7': 5, '8': 6, '9': 7, '10': 8,
-    J: 9, Q: 10, K: 11, A: 12, '2': 13,
-  } as const;
-  game.hands[seat] = game.hands[seat].slice().sort((a, b) => {
-    const r = RANK_ORDER[a.rank] - RANK_ORDER[b.rank];
-    if (r !== 0) return r;
-    return SUIT_ORDER[a.suit] - SUIT_ORDER[b.suit];
-  });
+  const hand = game.hands[seat];
+  if (mode === 'hands') {
+    game.hands[seat] = arrangeByCombos(hand);
+  } else if (mode === 'suit') {
+    game.hands[seat] = hand.slice().sort((a, b) => {
+      const s = SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit];
+      if (s !== 0) return s;
+      return RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
+    });
+  } else {
+    game.hands[seat] = hand.slice().sort((a, b) => {
+      const r = RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
+      if (r !== 0) return r;
+      return SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit];
+    });
+  }
   emit(game);
+}
+
+// Arrange a hand into playable groups, junk on the left, big hands on the
+// right: singles, then pairs, then trips, then 5-card combos. Greedy: the
+// strongest 5-card combo is extracted first so a straight flush isn't broken
+// up to form a plain flush.
+function arrangeByCombos(hand: Card[]): Card[] {
+  let remaining = hand.slice();
+  const fives: PlayedCombo[] = [];
+  while (remaining.length >= 5) {
+    let best: PlayedCombo | null = null;
+    const n = remaining.length;
+    for (let a = 0; a < n; a++)
+      for (let b = a + 1; b < n; b++)
+        for (let c = b + 1; c < n; c++)
+          for (let d = c + 1; d < n; d++)
+            for (let e = d + 1; e < n; e++) {
+              const combo = detectFiveCard([
+                remaining[a], remaining[b], remaining[c], remaining[d], remaining[e],
+              ]);
+              if (combo && (!best || compareCombos(combo, best) > 0)) best = combo;
+            }
+    if (!best) break;
+    fives.push(best);
+    const ids = new Set(best.cards.map((c) => c.id));
+    remaining = remaining.filter((c) => !ids.has(c.id));
+  }
+  fives.sort((a, b) => compareCombos(a, b));
+
+  const byRank = new Map<Card['rank'], Card[]>();
+  for (const c of remaining) {
+    const list = byRank.get(c.rank) ?? [];
+    list.push(c);
+    byRank.set(c.rank, list);
+  }
+  const trips: Card[][] = [];
+  const pairs: Card[][] = [];
+  const singles: Card[] = [];
+  for (const cards of byRank.values()) {
+    cards.sort((a, b) => SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit]);
+    if (cards.length >= 3) {
+      trips.push(cards.slice(0, 3));
+      singles.push(...cards.slice(3));
+    } else if (cards.length === 2) {
+      pairs.push(cards);
+    } else {
+      singles.push(...cards);
+    }
+  }
+  const byGroupRank = (a: Card[], b: Card[]) => RANK_VALUE[a[0].rank] - RANK_VALUE[b[0].rank];
+  trips.sort(byGroupRank);
+  pairs.sort(byGroupRank);
+  singles.sort((a, b) => {
+    const r = RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
+    if (r !== 0) return r;
+    return SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit];
+  });
+
+  return [
+    ...singles,
+    ...pairs.flat(),
+    ...trips.flat(),
+    ...fives.flatMap((f) => f.cards),
+  ];
 }
 
 function finalizeHand(game: LocalGame) {

@@ -7,7 +7,14 @@
 //   - Center trick pile showing the last played combo as real cards
 //   - Human hand: tap to select, drag to reorder (no long-press needed).
 //     Selection persists across reorder.
-//   - "Organize" button — auto-sort by rank/suit
+//   - "Sort" button — cycles rank / suit / hands (playable-combo grouping)
+//   - Playable-card highlighting: on your turn, cards that can't be part of
+//     any legal play are dimmed. Selection-aware: once you select cards, only
+//     cards that complete a legal play with them stay lit.
+//   - Auto-pass: if nothing in hand can beat the lead, a banner shows and
+//     the turn passes automatically.
+//   - Live combo feedback: the toolbar names the selected combo and whether
+//     it beats the lead; Play is only enabled for a legal play.
 //   - Play / Pass actions centered as a single row directly below the hand
 //   - Bot mode: no turn timer
 //   - Round-complete screen with finish order
@@ -16,17 +23,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Dimensions,
   PanResponder,
   Pressable,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DealingAnimation } from '../components/DealingAnimation';
 import { OpponentCardStack, PlayingCard, CARD_WIDTH } from '../components/PlayingCard';
 import { canPlay, detectCombo } from '../lib/pusoy/combo';
+import { findLegalPlays } from '../lib/pusoy/bot';
 import {
   createLocalGame,
   findHumanSeat,
@@ -36,6 +44,7 @@ import {
   startGame,
   subscribe,
   type LocalGame,
+  type SortMode,
 } from '../lib/pusoy/localGame';
 import type { Card, PlayedCombo } from '../lib/pusoy/types';
 
@@ -51,19 +60,34 @@ function cardLabel(c: Card): string {
   return `${RANK_DISPLAY[c.rank]}${SUIT_GLYPH[c.suit]}`;
 }
 
-function comboLabel(c: PlayedCombo): string {
+function comboName(c: PlayedCombo): string {
   if (c.fiveType) {
-    const t = c.fiveType === 'fourOfAKind' ? 'Four of a kind'
+    return c.fiveType === 'fourOfAKind' ? 'Four of a kind'
       : c.fiveType === 'fullHouse' ? 'Full house'
       : c.fiveType === 'flush' ? 'Flush'
       : c.fiveType === 'straightFlush' ? 'Straight flush'
       : 'Straight';
-    return `${t} — ${c.cards.map(cardLabel).join(' ')}`;
   }
-  if (c.type === 'single') return `Single — ${c.cards.map(cardLabel).join(' ')}`;
-  if (c.type === 'pair') return `Pair — ${c.cards.map(cardLabel).join(' ')}`;
-  return `Three of a kind — ${c.cards.map(cardLabel).join(' ')}`;
+  if (c.type === 'single') return 'Single';
+  if (c.type === 'pair') return 'Pair';
+  return 'Three of a kind';
 }
+
+function comboLabel(c: PlayedCombo): string {
+  return `${comboName(c)} — ${c.cards.map(cardLabel).join(' ')}`;
+}
+
+const SORT_LABEL: Record<SortMode, string> = {
+  rank: 'Rank',
+  suit: 'Suit',
+  hands: 'Hands',
+};
+
+const NEXT_SORT: Record<SortMode, SortMode> = {
+  rank: 'suit',
+  suit: 'hands',
+  hands: 'rank',
+};
 
 function seatName(game: LocalGame, seat: number, displayName: string): string {
   if (game.playerKinds[seat] === 'human') return displayName;
@@ -80,6 +104,8 @@ export default function LocalGameScreen() {
   const [tick, setTick] = useState(0);
   const [selected, setSelected] = useState<Card[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode | null>(null);
+  const [autoPassing, setAutoPassing] = useState(false);
 
   // Create a new game when this screen mounts. The screen is re-mounted by
   // router.replace on "Play again", so this fires fresh each time and we
@@ -92,6 +118,31 @@ export default function LocalGameScreen() {
       unsub();
     };
   }, [botCount]);
+
+  // Auto-pass: on the human's turn, if nothing in hand can beat the lead,
+  // show a banner briefly and pass automatically. Never fires when leading
+  // (lead === null means anything is playable).
+  useEffect(() => {
+    if (!game || game.phase !== 'playing') return;
+    const seat = findHumanSeat(game);
+    if (game.handState.currentPlayerIndex !== seat) return;
+    const leadCombo = game.handState.leadCombo;
+    if (!leadCombo) return;
+    if (findLegalPlays(game.hands[seat], leadCombo).length > 0) return;
+    setAutoPassing(true);
+    const t = setTimeout(() => {
+      setAutoPassing(false);
+      try {
+        humanAct(game, { kind: 'pass' });
+      } catch {
+        // turn state changed under us; nothing to do
+      }
+    }, 1400);
+    return () => {
+      clearTimeout(t);
+      setAutoPassing(false);
+    };
+  }, [game, tick]);
 
   if (!game) {
     return (
@@ -168,6 +219,28 @@ export default function LocalGameScreen() {
   const lead = game.handState.leadCombo;
   const lastPlay = game.trickHistory[0];
 
+  // Legal plays for highlighting (my turn only). ~C(13,5) enumeration; cheap.
+  const legalPlays = isMyTurn ? findLegalPlays(myHand, lead) : null;
+  // Cards that can be part of a legal play. Selection-aware: once cards are
+  // selected, only plays that CONTAIN the whole selection keep cards lit —
+  // so selecting one 9 lights up exactly what combos with it.
+  let playableIds: Set<string> | null = null;
+  if (legalPlays) {
+    const pool = selected.length
+      ? legalPlays.filter((p) => selected.every((s) => p.cards.some((c) => c.id === s.id)))
+      : legalPlays;
+    playableIds = new Set<string>();
+    for (const p of pool) for (const c of p.cards) playableIds.add(c.id);
+  }
+
+  const selCombo = selected.length ? detectCombo(selected) : null;
+  const selLegal = !!selCombo && canPlay(selCombo, lead);
+  const selFeedback = selected.length === 0
+    ? `${myHand.length} cards`
+    : !selCombo ? 'Not a combo'
+    : !selLegal ? `${comboName(selCombo)}: doesn't beat lead`
+    : `${comboName(selCombo)} ✓`;
+
   const onPlay = () => {
     setError(null);
     if (selected.length === 0) {
@@ -200,9 +273,12 @@ export default function LocalGameScreen() {
     }
   };
 
+  // Cycle sort mode: rank → suit → hands. Selection persists (card ids
+  // don't change, only positions).
   const onOrganize = () => {
-    sortHumanHand(game);
-    setSelected([]);
+    const next = sortMode === null ? 'rank' : NEXT_SORT[sortMode];
+    setSortMode(next);
+    sortHumanHand(game, next);
   };
 
   const toggleCard = (c: Card) => {
@@ -273,6 +349,9 @@ export default function LocalGameScreen() {
             </Text>
           </View>
         )}
+        {autoPassing && (
+          <Text style={styles.autoPass}>No playable hand, passing…</Text>
+        )}
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
 
@@ -280,18 +359,24 @@ export default function LocalGameScreen() {
       <View style={styles.bottom}>
         <View style={styles.handToolbar}>
           <Pressable style={styles.btnSmall} onPress={onOrganize}>
-            <Text style={styles.btnSmallText}>Organize</Text>
+            <Text style={styles.btnSmallText}>
+              {sortMode === null ? 'Sort' : `Sort: ${SORT_LABEL[sortMode]}`}
+            </Text>
           </Pressable>
-          <Text style={styles.selLabel}>
-            {selected.length === 0
-              ? `${myHand.length} cards`
-              : `${selected.length} selected`}
+          <Text
+            style={[
+              styles.selLabel,
+              selected.length > 0 && (selLegal ? styles.selOk : styles.selBad),
+            ]}
+          >
+            {selFeedback}
           </Text>
         </View>
 
         <HandRow
           hand={myHand}
           selected={selected}
+          playableIds={playableIds}
           onTap={toggleCard}
           onReorder={(from, to) => {
             reorderHumanHand(game, from, to);
@@ -302,8 +387,8 @@ export default function LocalGameScreen() {
         <View style={styles.actionsRow}>
           <View style={styles.actionsInner}>
             <Pressable
-              style={[styles.btn, !isMyTurn && styles.btnDisabled]}
-              disabled={!isMyTurn}
+              style={[styles.btn, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+              disabled={!isMyTurn || !selLegal}
               onPress={onPlay}
             >
               <Text style={styles.btnText}>Play</Text>
@@ -333,15 +418,19 @@ export default function LocalGameScreen() {
 function HandRow({
   hand,
   selected,
+  playableIds,
   onTap,
   onReorder,
 }: {
   hand: Card[];
   selected: Card[];
+  // Cards eligible for a legal play right now; null = no dimming (not my turn).
+  playableIds: Set<string> | null;
   onTap: (c: Card) => void;
   onReorder: (from: number, to: number) => void;
 }) {
-  const { width } = Dimensions.get('window');
+  // Reactive: reflows the fan when the browser window resizes / device rotates.
+  const { width } = useWindowDimensions();
   const SIDE_MARGIN = 12;
   // Total fan width: card width + (n-1) * stride. We pick a stride so the
   // fan fills the screen minus side margins.
@@ -357,6 +446,7 @@ function HandRow({
           key={c.id}
           card={c}
           isSelected={!!selected.find((s) => s.id === c.id)}
+          isDimmed={playableIds !== null && !playableIds.has(c.id)}
           index={i}
           onTap={() => onTap(c)}
           onReorder={onReorder}
@@ -372,6 +462,7 @@ function HandRow({
 function DraggableCard({
   card,
   isSelected,
+  isDimmed,
   index,
   onTap,
   onReorder,
@@ -381,6 +472,7 @@ function DraggableCard({
 }: {
   card: Card;
   isSelected: boolean;
+  isDimmed: boolean;
   index: number;
   onTap: () => void;
   onReorder: (from: number, to: number) => void;
@@ -430,7 +522,7 @@ function DraggableCard({
       {...responder.panHandlers}
     >
       <Pressable onPress={onTap}>
-        <PlayingCard card={card} selected={isSelected} />
+        <PlayingCard card={card} selected={isSelected} dimmed={isDimmed && !isSelected} />
       </Pressable>
     </Animated.View>
   );
@@ -480,6 +572,7 @@ const styles = StyleSheet.create({
   trickName: { color: '#fff', fontSize: 14, fontWeight: '600' },
   trickEmpty: { color: 'rgba(255,255,255,0.8)', fontSize: 16, paddingVertical: 30 },
   error: { color: '#ff6b6b', marginTop: 10, fontWeight: '600' },
+  autoPass: { color: '#f1c40f', marginTop: 10, fontWeight: '600' },
 
   // Bottom — hand in the lower-center, actions centered directly below
   bottom: { paddingBottom: 12 },
@@ -491,6 +584,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   selLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
+  selOk: { color: '#7bed9f', fontWeight: '700' },
+  selBad: { color: '#ff8f8f', fontWeight: '600' },
   handFan: {
     // The hand is a fan of absolutely-positioned cards centered horizontally
     // on the screen. Height is set by the parent (HandRow) to match card

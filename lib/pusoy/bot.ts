@@ -43,7 +43,8 @@ function comboKey(c: PlayedCombo, lead: PlayedCombo | null): number {
   return c.rankValue;
 }
 
-function findLegalPlays(hand: Card[], lead: PlayedCombo | null): PlayedCombo[] {
+// Exported: the UI uses this to auto-pass and to highlight playable cards.
+export function findLegalPlays(hand: Card[], lead: PlayedCombo | null): PlayedCombo[] {
   const out: PlayedCombo[] = [];
   // Singles
   for (const c of hand) {
