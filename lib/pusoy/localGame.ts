@@ -7,6 +7,7 @@ import { detectCombo, detectFiveCard, compareCombos, canPlay } from './combo';
 import { applyAction, applyTimeout, handFinishOrder, isHandOver, newHand } from './engine';
 import { botChoose } from './bot';
 import type {
+  BotLevel,
   Card,
   HandState,
   PlayedCombo,
@@ -40,6 +41,11 @@ export interface LocalGame {
   dealOrder: DealStep[];
   hands: Card[][]; // 4 hands in seat order
   handState: HandState;
+  // Difficulty of every bot at the table.
+  level: BotLevel;
+  // Every card played face-up so far, in play order. The expert bot counts
+  // these to work out when one of its cards has become the live maximum.
+  playedCards: Card[];
   phase: Phase;
   startedAt: number;
   finishedAt: number | null;
@@ -69,7 +75,11 @@ function buildDealOrder(): DealStep[] {
   return out;
 }
 
-export function createLocalGame(botCount: number, displayName: string): LocalGame {
+export function createLocalGame(
+  botCount: number,
+  displayName: string,
+  level: BotLevel = 'normal',
+): LocalGame {
   if (botCount < 1 || botCount > 3) {
     throw new Error('botCount must be 1, 2, or 3');
   }
@@ -108,6 +118,8 @@ export function createLocalGame(botCount: number, displayName: string): LocalGam
     dealOrder: buildDealOrder(),
     hands,
     handState,
+    level,
+    playedCards: [],
     phase: 'dealing',
     startedAt: Date.now(),
     finishedAt: null,
@@ -168,6 +180,7 @@ export function humanAct(
   game.handState = next;
   if (action.kind === 'play' && cards) {
     game.trickHistory = [{ playerIndex: humanSeat, combo: action.combo }, ...game.trickHistory].slice(0, 8);
+    game.playedCards.push(...action.combo.cards);
     game.hands[humanSeat] = hand.filter(
       (c) => !cards.find((pc) => pc.id === c.id),
     );
@@ -338,7 +351,14 @@ function scheduleBots(game: LocalGame) {
       const t = setTimeout(() => {
         const hand = game.hands[seat];
         const lead = game.handState.leadCombo;
-        const choice = botChoose(hand, lead);
+        const choice = botChoose(hand, lead, {
+          level: game.level,
+          context: {
+            seat,
+            playedCards: game.playedCards,
+            handSizes: game.hands.map((h) => h.length),
+          },
+        });
         try {
           if (choice) {
             const next = applyAction(
@@ -349,6 +369,7 @@ function scheduleBots(game: LocalGame) {
             );
             game.handState = next;
             game.trickHistory = [{ playerIndex: seat, combo: choice }, ...game.trickHistory].slice(0, 8);
+            game.playedCards.push(...choice.cards);
             game.hands[seat] = hand.filter(
               (c) => !choice.cards.find((pc) => pc.id === c.id),
             );

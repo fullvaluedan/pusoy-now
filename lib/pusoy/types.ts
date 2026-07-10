@@ -80,6 +80,30 @@ export interface PublicGameView {
   startedAt: number;
 }
 
+// --- Bots ---------------------------------------------------------------
+
+export type BotLevel = 'easy' | 'normal' | 'expert';
+
+// Uniform in [0, 1). Injected so every bot decision is reproducible.
+export type Rng = () => number;
+
+// What the bot is allowed to know beyond its own hand. Everything here is
+// public information a human player at the table could also track.
+export interface BotContext {
+  // Every card played face-up so far this hand, by anyone.
+  playedCards?: Card[];
+  // Cards remaining in each seat's hand, indexed by seat.
+  handSizes?: number[];
+  // The seat the bot is sitting in, so it can ignore itself in `handSizes`.
+  seat?: number;
+}
+
+export interface BotOptions {
+  level?: BotLevel;
+  rng?: Rng;
+  context?: BotContext;
+}
+
 export interface PlayerPublicStats {
   userId: string;
   wins: number;

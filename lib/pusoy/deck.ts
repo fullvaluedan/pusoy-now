@@ -1,6 +1,6 @@
 // Deck + dealing for Pusoy Dos. Standard 52-card deck, 13 cards to each of 4 players.
 
-import type { Card, Rank, Suit } from './types';
+import type { Card, Rank, Rng, Suit } from './types';
 
 const SUITS: Suit[] = ['C', 'D', 'H', 'S'];
 const RANKS: Rank[] = [
@@ -37,11 +37,13 @@ export function buildDeck(): Card[] {
   return deck;
 }
 
-// Fisher-Yates. Returns a NEW shuffled deck.
-export function shuffle<T>(arr: T[]): T[] {
+// Fisher-Yates. Returns a NEW shuffled deck. Pass a seeded `rng` to make the
+// deal reproducible (the win-rate harness deals the same 200 games to every
+// difficulty level so the comparison is fair).
+export function shuffle<T>(arr: T[], rng: Rng = Math.random): T[] {
   const out = arr.slice();
   for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;
