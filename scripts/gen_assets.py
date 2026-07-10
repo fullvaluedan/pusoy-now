@@ -69,6 +69,45 @@ ASSETS = [
             "of negative space, no text, no people, no gradients. " + PALETTE
         ),
     },
+    {
+        "name": "app-icon",
+        "size": "1024x1024",
+        "background": "opaque",
+        "prompt": (
+            "App icon, square, centered composition. Three fanned playing "
+            "cards (red heart ace, black spade ace, green-backed card) as a "
+            "bold simple emblem, filling most of the frame. No text. Deep "
+            "forest green background, cream and gold accents, thick clean "
+            "shapes readable at small size. Flat vector, no gradients. "
+            + PALETTE
+        ),
+    },
+    {
+        "name": "bot-avatar",
+        "size": "1024x1024",
+        "background": "opaque",
+        "prompt": (
+            "Friendly mascot avatar for a card-game opponent, centered bust "
+            "portrait for a circular frame. A cheerful stylized card dealer "
+            "character wearing a green visor, holding a fanned playing card, "
+            "warm and approachable. Flat vector illustration, bold clean "
+            "shapes, simple face, cream background. No text, no gradients. "
+            + PALETTE
+        ),
+    },
+    {
+        "name": "splash",
+        "size": "1024x1536",
+        "background": "opaque",
+        "prompt": (
+            "Portrait mobile splash screen. Centered emblem of three fanned "
+            "playing cards (red heart ace, black spade ace, green-backed "
+            "card) on a deep forest green background with a subtle radial "
+            "vignette and small gold Philippine-sun accents in the corners. "
+            "Calm, elegant, flat vector, generous empty space around the "
+            "emblem, no text, no gradients. " + PALETTE
+        ),
+    },
 ]
 
 
