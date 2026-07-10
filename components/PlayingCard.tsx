@@ -54,7 +54,6 @@ function PlayingCardComponent({ card, faceDown, small, selected, dimmed, tiltDeg
       <View
         style={[
           cardBackStyle(w, h),
-          isDimmed && { opacity: 0.78 },
           selected && { borderColor: colors.gold, borderWidth: 2, transform: [{ translateY: -10 }] },
           tiltDeg !== 0 && { transform: [{ rotate: `${tiltDeg}deg` }, { translateY: -10 }] },
         ]}
@@ -72,7 +71,6 @@ function PlayingCardComponent({ card, faceDown, small, selected, dimmed, tiltDeg
     <View
       style={[
         cardFaceStyle(w, h),
-        isDimmed && { opacity: 0.78 },
         selected && { borderColor: colors.gold, borderWidth: 2, transform: [{ translateY: -16 }] },
         tiltDeg !== 0 && { transform: [{ rotate: `${tiltDeg}deg` }, { translateY: -10 }] },
       ]}
@@ -175,8 +173,9 @@ const cardBase = (w: number, h: number) => ({
   elevation: 4,
 });
 
-// Absolutely-positioned dark tint used for the dimmed treatment (see above):
-// a faint overlay instead of heavy transparency keeps pips readable on felt.
+// Absolutely-positioned dark scrim used for the dimmed treatment (see above).
+// The card itself stays FULLY OPAQUE — no card-level opacity — so the felt and
+// neighboring cards never bleed through; only this scrim conveys "inactive".
 const dimOverlayStyle = {
   position: 'absolute' as const,
   top: 0,
@@ -184,7 +183,7 @@ const dimOverlayStyle = {
   right: 0,
   bottom: 0,
   borderRadius: 6,
-  backgroundColor: withAlpha(colors.ink, 0.22),
+  backgroundColor: withAlpha(colors.ink, 0.38),
 };
 
 const cardFaceStyle = (w: number, h: number) => ({
