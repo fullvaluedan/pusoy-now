@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { OpponentCardStack, PlayingCard } from './PlayingCard';
+import { OpponentCardStack, PlayingCard, CARD_WIDTH, CARD_HEIGHT } from './PlayingCard';
 import { colors, withAlpha } from '../lib/theme';
 import type { DealStep, LocalPlayer } from '../lib/pusoy/localGame';
 
@@ -122,15 +122,19 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
   const isHumanCard = currentStep?.seat === humanSeat;
 
   // The human's cards that have already landed (steps before the one now in
-  // flight). They accumulate face-up in a fan at the bottom so the player
-  // watches their own hand fill, and the cards stay put when the deal ends and
-  // the real hand takes over the same spot.
+  // flight). They accumulate face-up, full size, in the same fanned layout the
+  // real hand uses, so the player watches their actual playing hand fill and
+  // the cards stay put when the deal ends and the live hand takes over.
   const humanDealt: import('../lib/pusoy/types').Card[] = [];
   for (let s = 0; s < step; s++) {
     if (dealOrder[s].seat === humanSeat) humanDealt.push(deck[dealOrder[s].cardIndex]);
   }
-  // Overlap the small cards enough that all 13 fit on a narrow screen.
-  const stride = 20;
+  // Fan math mirrors HandRow: fixed 13-card spread so each card lands in its
+  // final position as it arrives, rather than shifting as the hand grows.
+  const SIDE_MARGIN = 12;
+  const available = width - SIDE_MARGIN * 2;
+  const stride = Math.min(CARD_WIDTH, (available - CARD_WIDTH) / 12);
+  const fanStartX = (width - (CARD_WIDTH + stride * 12)) / 2;
 
   return (
     <Pressable style={styles.overlay} onPress={onDone}>
@@ -146,10 +150,10 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
       </View>
       <Text style={styles.dealingLabel}>Dealing…</Text>
 
-      <View style={styles.dealHandRow}>
+      <View style={styles.dealHandFan}>
         {humanDealt.map((c, i) => (
-          <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -stride }}>
-            <PlayingCard card={c} small />
+          <View key={c.id} style={{ position: 'absolute', left: fanStartX + i * stride, bottom: 0 }}>
+            <PlayingCard card={c} />
           </View>
         ))}
       </View>
@@ -234,14 +238,12 @@ const styles = StyleSheet.create({
   flyingCard: {
     position: 'absolute',
   },
-  // The accumulating human hand, centered near the bottom where the real hand
-  // fan will sit once play begins.
-  dealHandRow: {
+  // The accumulating full-size human hand, at the bottom where the real hand
+  // fan sits once play begins.
+  dealHandFan: {
     position: 'absolute',
-    bottom: 64,
+    bottom: 56,
     left: 0, right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    height: CARD_HEIGHT,
   },
 });

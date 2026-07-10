@@ -47,6 +47,11 @@ export interface LocalGame {
   handState: HandState;
   // Difficulty of every bot at the table.
   level: BotLevel;
+  // True when the player ended the hand early with the manual "Skip to end"
+  // button while still holding cards. Such a result is a bail-out, not a real
+  // finish, so it must not be recorded on the scoreboard. The auto-skip that
+  // fires after the player legitimately empties their hand leaves this false.
+  abandonedByUser: boolean;
   // Every card played face-up so far, in play order. The expert bot counts
   // these to work out when one of its cards has become the live maximum.
   playedCards: Card[];
@@ -123,6 +128,7 @@ export function createLocalGame(
     hands,
     handState,
     level,
+    abandonedByUser: false,
     playedCards: [],
     phase: 'dealing',
     startedAt: Date.now(),

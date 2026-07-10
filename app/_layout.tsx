@@ -25,7 +25,7 @@ export default function RootLayout() {
           <Stack.Screen name="bot-select" options={{ title: 'Pick opponents' }} />
           <Stack.Screen name="game-local" options={{ title: 'Game' }} />
           <Stack.Screen name="leaderboard" options={{ title: 'Leaderboard' }} />
-          <Stack.Screen name="stats" options={{ title: 'Your stats' }} />
+          <Stack.Screen name="stats" options={{ title: 'Scoreboard' }} />
           <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         </Stack>
       </SafeAreaProvider>

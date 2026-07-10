@@ -41,6 +41,7 @@ import { canPlay, detectCombo } from '../lib/pusoy/combo';
 import { SUIT_VALUE } from '../lib/pusoy/deck';
 import { findLegalPlays } from '../lib/pusoy/bot';
 import { parseLevel } from '../lib/pusoy/level';
+import { recordGame } from '../lib/stats';
 import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import {
@@ -283,6 +284,19 @@ export default function LocalGameScreen() {
     };
   }, [game, tick, legalPlays]);
 
+  // Record the finished game on the scoreboard exactly once, unless the player
+  // bailed out with the manual Skip to end button. A legitimate finish (played
+  // through, or auto-skipped after emptying the hand) counts.
+  const recordedRef = useRef(false);
+  useEffect(() => {
+    if (!game || game.phase !== 'finished' || recordedRef.current) return;
+    recordedRef.current = true;
+    if (game.abandonedByUser) return;
+    const seat = findHumanSeat(game);
+    const rank = game.finishOrder.indexOf(seat) + 1;
+    if (rank >= 1 && rank <= 4) void recordGame(game.level, rank);
+  }, [game, tick]);
+
   // Auto-skip: once the human has emptied their hand, don't make them watch the
   // bots grind out the rest. Jump straight to the ranking. Fires once, since
   // skipToEnd flips the phase to 'finished'. A short delay lets the player see
@@ -448,10 +462,14 @@ export default function LocalGameScreen() {
   };
 
   // End the hand now. The human's remaining cards are played out by the AI, so
-  // the ranking is a real finish order, not a forfeit.
+  // the ranking is a real finish order, not a forfeit. Pressing this while still
+  // holding cards is a bail-out and must not count on the scoreboard.
   const onSkip = () => {
     setError(null);
     try {
+      if (!game.handState.finishedOrder.includes(humanSeat)) {
+        game.abandonedByUser = true;
+      }
       skipToEnd(game);
     } catch (e) {
       setError((e as Error).message);
@@ -776,28 +794,37 @@ function DraggableCard({
   // The "rest" position for this card in the fan.
   const restX = startX + index * stride;
 
+  // Claim the gesture on touch-start (not via a child Pressable) so a drag
+  // works on the very first press, even on a card that isn't selected yet. On
+  // web a wrapping Pressable would swallow the mousedown and the PanResponder
+  // would never see the drag until a prior click had "primed" the card. Tap vs
+  // drag is decided on release by how far the pointer moved.
   const responder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, g) => {
-          return Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8;
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderMove: (_, g) => {
+          if (Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6) setDragging(true);
+          pan.x.setValue(g.dx);
+          pan.y.setValue(g.dy);
         },
-        onPanResponderGrant: () => {
-          setDragging(true);
-        },
-        onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
         onPanResponderRelease: (_, g) => {
           setDragging(false);
-          // An upward flick into the center is a play gesture (only when a hand
-          // is established); a mostly-horizontal drag reorders. The vertical
-          // move must dominate so a normal reorder never fires a play.
-          const isUpwardFlick = dropEnabled && g.dy < -70 && Math.abs(g.dy) > Math.abs(g.dx);
-          if (isUpwardFlick) {
-            onDropToCenter(card);
+          const moved = Math.abs(g.dx) > 8 || Math.abs(g.dy) > 8;
+          if (!moved) {
+            onTap();
           } else {
-            const target = Math.max(0, Math.min(total - 1, index + Math.round(g.dx / Math.max(1, stride))));
-            if (target !== index) onReorder(index, target);
+            // An upward flick into the center plays an established hand; a
+            // mostly-horizontal drag reorders. Vertical must dominate so a
+            // normal reorder never fires a play.
+            const isUpwardFlick = dropEnabled && g.dy < -70 && Math.abs(g.dy) > Math.abs(g.dx);
+            if (isUpwardFlick) {
+              onDropToCenter(card);
+            } else {
+              const target = Math.max(0, Math.min(total - 1, index + Math.round(g.dx / Math.max(1, stride))));
+              if (target !== index) onReorder(index, target);
+            }
           }
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
         },
@@ -806,7 +833,7 @@ function DraggableCard({
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
         },
       }),
-    [index, total, onReorder, onDropToCenter, dropEnabled, card, pan, stride],
+    [index, total, onReorder, onTap, onDropToCenter, dropEnabled, card, pan, stride],
   );
 
   return (
@@ -820,9 +847,7 @@ function DraggableCard({
       }}
       {...responder.panHandlers}
     >
-      <Pressable onPress={onTap}>
-        <PlayingCard card={card} selected={isSelected} dimmed={isDimmed && !isSelected} />
-      </Pressable>
+      <PlayingCard card={card} selected={isSelected} dimmed={isDimmed && !isSelected} />
     </Animated.View>
   );
 }

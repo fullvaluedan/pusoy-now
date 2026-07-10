@@ -63,6 +63,15 @@ export default function Home() {
         />
 
         <Button
+          title="Scoreboard"
+          subtitle="Your record vs bots"
+          variant="ghost"
+          align="left"
+          onPress={() => router.push('/stats')}
+          style={styles.menuItem}
+        />
+
+        <Button
           title="Leaderboard"
           variant="ghost"
           align="left"
