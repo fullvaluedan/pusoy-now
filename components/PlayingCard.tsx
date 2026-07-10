@@ -7,7 +7,7 @@
 
 import { memo } from 'react';
 import { Image, Text, View } from 'react-native';
-import { colors } from '../lib/theme';
+import { colors, withAlpha } from '../lib/theme';
 import type { Card, Suit, Rank } from '../lib/pusoy/types';
 
 const CARD_BACK_IMG = require('../assets/art/card-back.png');
@@ -45,18 +45,25 @@ function PlayingCardComponent({ card, faceDown, small, selected, dimmed, tiltDeg
   const fontSize = small ? 12 : 18;
   const glyphSize = small ? 13 : 20;
 
+  // A card is never both selected and dimmed in practice (the game passes
+  // `dimmed={isDimmed && !isSelected}`), but if it were, selected should win.
+  const isDimmed = dimmed && !selected;
+
   if (faceDown || !card) {
     return (
       <View
         style={[
           cardBackStyle(w, h),
-          dimmed && { opacity: 0.45 },
-          selected && { transform: [{ translateY: -10 }] },
+          isDimmed && { opacity: 0.78 },
+          selected && { borderColor: colors.gold, borderWidth: 2, transform: [{ translateY: -10 }] },
           tiltDeg !== 0 && { transform: [{ rotate: `${tiltDeg}deg` }, { translateY: -10 }] },
         ]}
       >
         {/* colors.felt shows through as a fallback until the art loads */}
         <Image source={CARD_BACK_IMG} style={cardBackImageStyle(w, h)} resizeMode="cover" />
+        {/* Faint dark tint on top of the art reads as "inactive" without
+            tanking legibility the way heavy transparency over felt would. */}
+        {isDimmed && <View style={dimOverlayStyle} pointerEvents="none" />}
       </View>
     );
   }
@@ -65,8 +72,8 @@ function PlayingCardComponent({ card, faceDown, small, selected, dimmed, tiltDeg
     <View
       style={[
         cardFaceStyle(w, h),
-        dimmed && { opacity: 0.45 },
-        selected && { transform: [{ translateY: -16 }] },
+        isDimmed && { opacity: 0.78 },
+        selected && { borderColor: colors.gold, borderWidth: 2, transform: [{ translateY: -16 }] },
         tiltDeg !== 0 && { transform: [{ rotate: `${tiltDeg}deg` }, { translateY: -10 }] },
       ]}
     >
@@ -117,6 +124,9 @@ function PlayingCardComponent({ card, faceDown, small, selected, dimmed, tiltDeg
           {SUIT_GLYPH[card.suit]}
         </Text>
       </View>
+      {/* Faint dark tint reads as "inactive" while keeping pips legible
+          underneath (see dimmed treatment on the face-down branch above). */}
+      {isDimmed && <View style={dimOverlayStyle} pointerEvents="none" />}
     </View>
   );
 }
@@ -156,12 +166,26 @@ const cardBase = (w: number, h: number) => ({
   borderWidth: 1,
   borderColor: colors.cardBorder,
   backgroundColor: colors.cardFace,
+  // Slightly stronger, consistent shadow so every card (hand, trick pile,
+  // opponent stacks) visibly lifts off the dark felt.
   shadowColor: colors.black,
-  shadowOpacity: 0.35,
-  shadowRadius: 2,
-  shadowOffset: { width: 1, height: 1 },
-  elevation: 2,
+  shadowOpacity: 0.4,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 4,
 });
+
+// Absolutely-positioned dark tint used for the dimmed treatment (see above):
+// a faint overlay instead of heavy transparency keeps pips readable on felt.
+const dimOverlayStyle = {
+  position: 'absolute' as const,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  borderRadius: 6,
+  backgroundColor: withAlpha(colors.ink, 0.22),
+};
 
 const cardFaceStyle = (w: number, h: number) => ({
   ...cardBase(w, h),

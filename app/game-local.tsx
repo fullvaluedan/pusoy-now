@@ -720,11 +720,11 @@ export default function LocalGameScreen() {
               action; Play is to its left. */}
           <View style={styles.centerActions}>
             <Pressable
-              style={[styles.btn, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+              style={[styles.btn, styles.btnPrimary, (!isMyTurn || !selLegal) && styles.btnDisabled]}
               disabled={!isMyTurn || !selLegal}
               onPress={onPlay}
             >
-              <Text style={styles.btnText}>Play</Text>
+              <Text style={[styles.btnText, styles.btnPrimaryText]}>Play</Text>
             </Pressable>
             <Pressable
               style={[
@@ -1219,23 +1219,35 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginTop: spacing.md,
   },
+  // Play / Pass / Sort share one height + radius family so they read as one
+  // button set; Sort stays visually secondary via smaller padding/font.
   btn: {
     backgroundColor: colors.feltLight,
+    minHeight: 44,
     paddingVertical: spacing.sm + 4,
     paddingHorizontal: spacing.xxl,
     borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  // Play is the primary action when enabled: gold fill, dark ink text so it
+  // reads as the one thing to press. btnDisabled dims it uniformly with Pass.
+  btnPrimary: { backgroundColor: colors.gold },
+  btnPrimaryText: { color: colors.ink },
   // Pass is the bright-red action, deliberately loud so it reads at a glance.
-  btnPass: { backgroundColor: '#e53935' },
+  btnPass: { backgroundColor: colors.cardRed },
   btnDisabled: { opacity: 0.4 },
   btnText: { color: colors.textOnFelt, fontWeight: '700', fontSize: 16 },
   btnSmall: {
     backgroundColor: withAlpha(colors.white, 0.15),
+    minHeight: 44,
     paddingVertical: spacing.xs + 2,
     paddingHorizontal: spacing.md,
-    borderRadius: radii.sm - 2,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: withAlpha(colors.white, 0.3),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   btnSmallText: { color: colors.textOnFelt, fontWeight: '600', fontSize: typography.caption.fontSize },
   // The only ghost button sits on the cream finish card, not on the felt, so it
