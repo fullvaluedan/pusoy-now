@@ -23,6 +23,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
+  Image,
   ImageBackground,
   PanResponder,
   Pressable,
@@ -57,6 +58,7 @@ import type { BotLevel, Card, FiveCardType, PlayedCombo } from '../lib/pusoy/typ
 
 const FELT_IMG = require('../assets/art/felt.png');
 const BOT_AVATAR_IMG = require('../assets/art/bot-avatar.png');
+const TABLE_INLAY_IMG = require('../assets/art/table-inlay.png');
 
 const RANK_DISPLAY: Record<Card['rank'], string> = {
   '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
@@ -143,6 +145,17 @@ function TableBackground({ children }: { children: ReactNode }) {
         <View style={styles.tableVignetteOuter} pointerEvents="none" />
         <View style={styles.tableVignetteMid} pointerEvents="none" />
         <View style={styles.tableVignetteInner} pointerEvents="none" />
+        {/* Decorative gold table inlay, framing the play area. resizeMode
+            "contain" cannot distort at any viewport; inset from the edges so it
+            reads as a border; pointerEvents none so it never blocks a tap; low
+            opacity so cards and text stay legible on top. */}
+        <Image
+          source={TABLE_INLAY_IMG}
+          style={styles.tableInlay}
+          resizeMode="contain"
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+        />
         <SafeAreaView style={styles.container}>{children}</SafeAreaView>
       </ImageBackground>
     </View>
@@ -700,6 +713,21 @@ const styles = StyleSheet.create({
   // still reads as felt rather than blank space.
   tableBackground: { flex: 1, backgroundColor: colors.felt },
   tableTexture: { flex: 1 },
+  // Decorative gold inlay frame over the felt, behind the play content. Inset
+  // from every edge so it reads as a table border; low opacity so it stays
+  // subtle under the cards and text. resizeMode="contain" (set on the Image)
+  // guarantees no distortion at any viewport.
+  tableInlay: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    right: 8,
+    bottom: 8,
+    width: undefined,
+    height: undefined,
+    opacity: 0.22,
+    pointerEvents: 'none',
+  },
   // Kept faint on purpose: this is a texture hint layered on the color
   // base, not the surface itself, so upscaling the single fixed-size photo
   // to a wide desktop viewport never reads as pixelated.
