@@ -83,10 +83,8 @@ export const typography = {
 // screen. These are fixed brand identity colors (not part of the app's
 // classic-cards palette), centralized here so no screen hardcodes hex.
 export const providerBrand = {
-  apple: '#000000',
   google: '#4285F4',
   facebook: '#1877F2',
-  twitter: '#000000',
   tiktok: '#010101',
 } as const;
 

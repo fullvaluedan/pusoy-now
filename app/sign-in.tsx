@@ -1,13 +1,16 @@
 // Sign-in screen. Stub for vertical slice.
 //
-// To enable real social logins:
-//   1. Configure each provider in Supabase (Authentication > Providers)
-//   2. Add OAuth client IDs/secrets to the supabase project
-//   3. Use supabase.auth.signInWithIdToken or signInWithOAuth
-//   4. For iOS specifically, add the URL scheme in app.json
+// Providers: Google, Facebook, TikTok. Apple is deferred to iOS App Store
+// submission time and X/Twitter has been dropped (see the redesign plan).
+// Instagram consumer login was retired by Meta in Dec 2024, so "Facebook"
+// covers both.
 //
-// For the vertical slice we show a list of buttons and a "coming soon" toast
-// explaining what's needed to flip each one on.
+// None of these buttons are wired up yet:
+//   - Google and Facebook go live once lib/auth.tsx lands (Supabase OAuth).
+//   - TikTok needs a Login Kit + Supabase Edge Function bridge and TikTok
+//     developer app approval, so it ships later still.
+// For now they show a "coming soon" toast so the hint text never claims a
+// provider works before it does.
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 import { Button, Card, ScreenContainer } from '../components/ui';
@@ -21,11 +24,9 @@ interface Provider {
 }
 
 const PROVIDERS: Provider[] = [
-  { id: 'apple', name: 'Apple', color: providerBrand.apple, hint: 'iOS only' },
-  { id: 'google', name: 'Google', color: providerBrand.google, hint: 'Recommended' },
-  { id: 'facebook', name: 'Facebook / Instagram', color: providerBrand.facebook, hint: 'via Facebook Login' },
-  { id: 'twitter', name: 'X (Twitter)', color: providerBrand.twitter, hint: '' },
-  { id: 'tiktok', name: 'TikTok', color: providerBrand.tiktok, hint: 'Beta' },
+  { id: 'google', name: 'Google', color: providerBrand.google, hint: 'Not connected yet' },
+  { id: 'facebook', name: 'Facebook', color: providerBrand.facebook, hint: 'Not connected yet' },
+  { id: 'tiktok', name: 'TikTok', color: providerBrand.tiktok, hint: 'Coming soon' },
 ];
 
 export default function SignIn() {
@@ -43,7 +44,7 @@ export default function SignIn() {
           title={`Continue with ${p.name}`}
           subtitle={p.hint}
           color={p.color}
-          onPress={() => alert(`${p.name} login requires Supabase config.\n\nSee supabase/schema.sql and lib/supabase/client.ts.`)}
+          onPress={() => alert(`${p.name} sign-in isn't connected yet.\n\nGuests can still play against bots with no account.`)}
         />
       ))}
 
@@ -52,7 +53,7 @@ export default function SignIn() {
       <Card style={styles.setupBox}>
         <Text style={styles.setupTitle}>Setup required</Text>
         <Text style={styles.setupBody}>
-          Each provider needs an OAuth app on its developer portal, and Supabase must be configured to use it. See the README for a step-by-step.
+          Social sign-in isn't live yet. Google and Facebook are next up; TikTok follows once its developer app is approved. You can keep playing against bots without an account in the meantime.
         </Text>
       </Card>
     </ScreenContainer>
