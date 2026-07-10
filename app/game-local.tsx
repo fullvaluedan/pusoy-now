@@ -56,7 +56,7 @@ import {
 } from '../lib/pusoy/localGame';
 import type { BotLevel, Card, FiveCardType, PlayedCombo } from '../lib/pusoy/types';
 
-const FELT_IMG = require('../assets/art/felt.png');
+const FELT_IMG = require('../assets/art/felt-tile.png');
 const BOT_AVATAR_IMG = require('../assets/art/bot-avatar.png');
 const TABLE_INLAY_IMG = require('../assets/art/table-inlay.png');
 const TURN_GLOW_IMG = require('../assets/art/turn-glow.png');
@@ -141,7 +141,7 @@ function TableBackground({ children }: { children: ReactNode }) {
         source={FELT_IMG}
         style={styles.tableTexture}
         imageStyle={styles.tableTextureImage}
-        resizeMode="cover"
+        resizeMode="repeat"
       >
         <View style={styles.tableVignetteOuter} pointerEvents="none" />
         <View style={styles.tableVignetteMid} pointerEvents="none" />
@@ -523,13 +523,35 @@ export default function LocalGameScreen() {
             </Text>
           </View>
         )}
+        {/* Play / Pass sit directly under the center pool. Pass is the bright
+            red action; Play is to its left. */}
+        <View style={styles.centerActions}>
+          <Pressable
+            style={[styles.btn, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+            disabled={!isMyTurn || !selLegal}
+            onPress={onPlay}
+          >
+            <Text style={styles.btnText}>Play</Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.btn,
+              styles.btnPass,
+              (!isMyTurn || lead === null) && styles.btnDisabled,
+            ]}
+            disabled={!isMyTurn || lead === null}
+            onPress={onPass}
+          >
+            <Text style={styles.btnText}>Pass</Text>
+          </Pressable>
+        </View>
         {autoPassing && (
           <Text style={styles.autoPass}>No playable hand, passing…</Text>
         )}
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
 
-      {/* Bottom: hand + actions. Hand in the lower-center; Play/Pass centered directly under it. */}
+      {/* Bottom: hand + toolbar. Play/Pass live under the center pool above. */}
       <View style={[styles.bottom, isMyTurn && styles.bottomActive]}>
         {/* Soft gold glow behind the hand while it is the player's turn. First
             child so it paints behind the toolbar/hand/actions; contain so it
@@ -576,29 +598,6 @@ export default function LocalGameScreen() {
           onTap={toggleCard}
           onReorder={handleReorder}
         />
-
-        <View style={styles.actionsRow}>
-          <View style={styles.actionsInner}>
-            <Pressable
-              style={[styles.btn, (!isMyTurn || !selLegal) && styles.btnDisabled]}
-              disabled={!isMyTurn || !selLegal}
-              onPress={onPlay}
-            >
-              <Text style={styles.btnText}>Play</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.btn,
-                styles.btnPass,
-                (!isMyTurn || lead === null) && styles.btnDisabled,
-              ]}
-              disabled={!isMyTurn || lead === null}
-              onPress={onPass}
-            >
-              <Text style={styles.btnText}>Pass</Text>
-            </Pressable>
-          </View>
-        </View>
       </View>
     </TableBackground>
   );
@@ -742,10 +741,10 @@ const styles = StyleSheet.create({
     opacity: 0.22,
     pointerEvents: 'none',
   },
-  // Kept faint on purpose: this is a texture hint layered on the color
-  // base, not the surface itself, so upscaling the single fixed-size photo
-  // to a wide desktop viewport never reads as pixelated.
-  tableTextureImage: { opacity: 0.3 },
+  // Seamless felt tile repeated across the whole surface, so there is no
+  // single-image seam or center-bright band at any viewport. Kept semi-faint
+  // over the solid felt color base so the weave reads as texture, not noise.
+  tableTextureImage: { opacity: 0.55 },
   // Three concentric low-alpha frames stand in for a radial gradient (no
   // gradient lib in this project); alpha rises toward the outer band so the
   // edges darken gradually. The alpha steps stay under ~0.06 apart and the
@@ -896,13 +895,21 @@ const styles = StyleSheet.create({
     borderTopColor: withAlpha(colors.white, 0.1),
   },
   actionsInner: { flexDirection: 'row', gap: spacing.md - 2 },
+  // Play / Pass under the center pool.
+  centerActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
   btn: {
     backgroundColor: colors.feltLight,
     paddingVertical: spacing.sm + 4,
     paddingHorizontal: spacing.xxl,
     borderRadius: radii.md,
   },
-  btnPass: { backgroundColor: colors.neutral },
+  // Pass is the bright-red action, deliberately loud so it reads at a glance.
+  btnPass: { backgroundColor: '#e53935' },
   btnDisabled: { opacity: 0.4 },
   btnText: { color: colors.textOnFelt, fontWeight: '700', fontSize: 16 },
   btnSmall: {
