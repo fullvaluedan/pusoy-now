@@ -48,13 +48,13 @@ ASSETS = [
     {
         "name": "logo",
         "size": "1024x1024",
-        "background": "transparent",
+        "background": "opaque",  # gpt-image-2 rejects transparent; rembg later if needed
         "prompt": (
             "Minimal emblem logo for a Filipino card game called PUSOY NOW. "
             "Three fanned playing cards (red heart ace, black spade ace, "
             "green-backed card) above the wordmark 'PUSOY NOW' in a bold "
             "clean slab typeface, ink color. Flat vector, crisp edges, no "
-            "gradients, transparent background. " + PALETTE
+            "gradients, plain solid warm cream #f4f1e8 background. " + PALETTE
         ),
     },
     {
@@ -94,8 +94,12 @@ def generate(key: str, spec: dict) -> None:
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=300) as resp:
-        data = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        print("API error:", e.code, e.read().decode()[:500])
+        raise
     png = base64.b64decode(data["data"][0]["b64_json"])
     path = os.path.join(OUT_DIR, spec["name"] + ".png")
     with open(path, "wb") as f:
