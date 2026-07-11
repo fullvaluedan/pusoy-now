@@ -13,6 +13,7 @@
 
 import { Platform } from 'react-native';
 import { createAuthClient } from 'better-auth/react';
+import { anonymousClient } from 'better-auth/client/plugins';
 import { expoClient } from '@better-auth/expo/client';
 import * as SecureStore from 'expo-secure-store';
 
@@ -26,13 +27,17 @@ export const authClient = createAuthClient({
   baseURL: AUTH_BASE_URL,
   // Cross-site session cookies must ride along on every request.
   fetchOptions: { credentials: 'include' },
+  // anonymousClient() is on both paths: guest sessions (R1-R5) are core, not
+  // platform-specific. The Expo plugin (native only) drives the SecureStore
+  // cookie-jar; web just uses ordinary browser cookies.
   plugins: isWeb
-    ? []
+    ? [anonymousClient()]
     : [
         expoClient({
           scheme: 'prends',
           storagePrefix: 'prends',
           storage: SecureStore,
         }),
+        anonymousClient(),
       ],
 });

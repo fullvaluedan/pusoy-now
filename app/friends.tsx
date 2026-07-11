@@ -1,9 +1,10 @@
 // Friends screen: add by username, incoming/outgoing requests, and the
 // accepted friends list. Every mutating action (add/accept/decline/remove)
-// re-fetches so the lists update without a manual reload. Signed-out players
-// get a sign-in prompt instead of the social surface.
+// re-fetches so the lists update without a manual reload. A guest gets a lazy
+// anonymous session on mount (R2) instead of a sign-in wall -- guests can add
+// friends and view the social surface too, it all keys on userId.
 import { useRouter, useFocusEffect } from 'expo-router';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../components/Avatar';
 import { Button, Card, Field, Header, ScreenContainer } from '../components/ui';
@@ -23,24 +24,35 @@ import { usernameErrorMessage, validateUsernameClient } from '../lib/profile';
 
 export default function Friends() {
   const router = useRouter();
-  const { session, loading } = useAuth();
+  const { session, loading, ensureSession } = useAuth();
+  const [failed, setFailed] = useState(false);
 
-  if (loading) {
-    return (
-      <ScreenContainer>
-        <ActivityIndicator size="large" color={colors.felt} />
-      </ScreenContainer>
-    );
-  }
+  const tryEnsureSession = useCallback(async () => {
+    setFailed(false);
+    const result = await ensureSession();
+    if (result === 'failed') setFailed(true);
+  }, [ensureSession]);
 
-  if (!session) {
+  useEffect(() => {
+    if (!loading && !session) void tryEnsureSession();
+  }, [loading, session, tryEnsureSession]);
+
+  if (failed) {
     return (
       <ScreenContainer>
         <Header title="Friends" onBack={() => router.back()} />
         <Card style={styles.signInCard}>
-          <Text style={styles.signInText}>Sign in to add friends and compare stats.</Text>
-          <Button title="Sign in" onPress={() => router.push('/sign-in')} style={styles.signInBtn} />
+          <Text style={styles.signInText}>Could not start a session. Check your connection and try again.</Text>
+          <Button title="Try again" onPress={() => void tryEnsureSession()} style={styles.signInBtn} />
         </Card>
+      </ScreenContainer>
+    );
+  }
+
+  if (loading || !session) {
+    return (
+      <ScreenContainer>
+        <ActivityIndicator size="large" color={colors.felt} />
       </ScreenContainer>
     );
   }

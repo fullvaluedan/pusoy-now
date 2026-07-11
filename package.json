@@ -36,7 +36,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "export:web": "expo export --platform web",
-    "test": "tsx lib/pusoy/test.ts && tsx lib/pusoy/fullGameTest.ts && tsx lib/profileTest.ts && tsx lib/authTest.ts && tsx lib/entitlementsTest.ts && tsx lib/settingsTest.ts && tsx lib/initialsTest.ts && tsx lib/friends.test.ts && tsx lib/onlineGame.test.ts && tsx supabase/functions/tiktok-auth/handlerTest.ts && tsx components/ui.test.ts",
+    "test": "tsx lib/pusoy/test.ts && tsx lib/pusoy/fullGameTest.ts && tsx lib/profileTest.ts && tsx lib/authTest.ts && tsx lib/entitlementsTest.ts && tsx lib/settingsTest.ts && tsx lib/initialsTest.ts && tsx lib/friends.test.ts && tsx lib/onlineGame.test.ts && tsx lib/guestTest.ts && tsx supabase/functions/tiktok-auth/handlerTest.ts && tsx components/ui.test.ts",
     "test:watch": "tsx --watch lib/pusoy/test.ts",
     "typecheck": "tsc --noEmit"
   },

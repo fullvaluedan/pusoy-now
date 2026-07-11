@@ -290,6 +290,12 @@ export default function SignIn() {
       ) : null}
 
       {mode === 'sign-up' ? (
+        <Text style={styles.guestNotice}>
+          Playing as a guest? Your stats come with you when you create an account.
+        </Text>
+      ) : null}
+
+      {mode === 'sign-up' ? (
         <Checkbox
           checked={marketingConsent}
           onToggle={setMarketingConsent}
@@ -381,6 +387,7 @@ const styles = StyleSheet.create({
   title: { ...typography.heading, color: colors.felt, marginTop: spacing.sm },
   subtitle: { ...typography.label, color: colors.textMuted, marginBottom: spacing.md },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  guestNotice: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.xs },
   consentCheckbox: { marginTop: spacing.xs, marginBottom: spacing.xs },
   providers: { marginTop: spacing.md, gap: spacing.sm + 4 },
   orLabel: { ...typography.caption, color: colors.textFaint, textAlign: 'center' },

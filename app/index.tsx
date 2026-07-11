@@ -12,6 +12,7 @@ import { Button, Card, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { authClient } from '../lib/authClient';
+import { getLocalGuestName } from '../lib/guest';
 
 const LOGO_IMG = require('../assets/art/logo.png');
 const HERO_IMG = require('../assets/art/hero.png');
@@ -25,22 +26,31 @@ const HERO_ASPECT_RATIO = 1536 / 1024;
 export default function Home() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { session, profile } = useAuth();
+  const { session, profile, isAnonymous } = useAuth();
 
   const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
   const heroHeight = contentWidth / HERO_ASPECT_RATIO;
+
+  // The locally-generated guest name (R1), shown immediately -- it exists
+  // before any server session does, so it renders for both a fresh guest and
+  // one who has already gone anonymous server-side.
+  const [guestName, setGuestName] = useState<string | null>(null);
+  useEffect(() => {
+    void getLocalGuestName().then(setGuestName);
+  }, []);
 
   // One-time post-sign-in consent prompt (Round 6 U3): social-login users
   // never see the signup checkbox, so on the first authenticated home render
   // check whether they have a consent row at all. checkedRef guards this to
   // once per signed-in session (and resets on sign-out) so it never re-fires
   // on every render, and either answer POSTs a row so the prompt never
-  // repeats for this account.
+  // repeats for this account. Anonymous sessions never see this at all (R5):
+  // a guest has not agreed to anything yet, so there is nothing to ask.
   const [showConsentPrompt, setShowConsentPrompt] = useState(false);
   const checkedConsentRef = useRef(false);
 
   useEffect(() => {
-    if (!session) {
+    if (!session || isAnonymous) {
       checkedConsentRef.current = false;
       setShowConsentPrompt(false);
       return;
@@ -51,7 +61,7 @@ export default function Home() {
       const { data } = await authClient.$fetch<{ consent: unknown | null }>('/api/consent');
       if (data && data.consent === null) setShowConsentPrompt(true);
     })();
-  }, [session]);
+  }, [session, isAnonymous]);
 
   async function answerConsentPrompt(optIn: boolean) {
     setShowConsentPrompt(false);
@@ -117,7 +127,8 @@ export default function Home() {
         </View>
 
         <SignInEntry
-          signedIn={Boolean(session)}
+          signedIn={Boolean(session) && !isAnonymous}
+          guestName={guestName}
           displayName={profile?.displayName}
           avatarUrl={profile?.avatarUrl}
           onPress={() => router.push('/sign-in')}
@@ -170,29 +181,35 @@ export default function Home() {
   );
 }
 
-// Secondary sign-in entry. Guests get a plain button; signed-in players get a
-// chip carrying their avatar and display name.
+// Secondary sign-in entry. A guest (no session, or an anonymous one) sees
+// their local random name plus a button to save progress under a real
+// account; signed-in players get a chip carrying their avatar and display
+// name.
 function SignInEntry({
   signedIn,
+  guestName,
   displayName,
   avatarUrl,
   onPress,
 }: {
   signedIn: boolean;
+  guestName?: string | null;
   displayName?: string;
   avatarUrl?: string | null;
   onPress: () => void;
 }) {
   if (!signedIn) {
     return (
-      <Button
-        title="Sign in to play online"
-        subtitle="Google, Facebook, TikTok"
-        variant="secondary"
-        align="left"
-        onPress={onPress}
-        style={styles.menuItem}
-      />
+      <>
+        {guestName ? <Text style={styles.guestLine}>Playing as {guestName}</Text> : null}
+        <Button
+          title="Sign in to save your progress"
+          variant="secondary"
+          align="left"
+          onPress={onPress}
+          style={styles.menuItem}
+        />
+      </>
     );
   }
 
@@ -221,6 +238,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.felt,
   },
   menuItem: { marginBottom: spacing.md },
+  guestLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
   consentCard: { marginBottom: spacing.md, gap: spacing.sm },
   consentText: { ...typography.bodyBold, color: colors.textPrimary },
   consentRow: { flexDirection: 'row', gap: spacing.sm },

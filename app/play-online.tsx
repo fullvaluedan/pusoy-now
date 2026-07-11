@@ -1,13 +1,15 @@
 // Play online: host setup. Pick a seat count and a bot difficulty (used to
 // fill any seats nobody joins by start), then create a room and land in its
-// lobby. Signed-out visitors get a sign-in prompt instead -- a room needs a
-// real account behind the host seat.
-import { useState } from 'react';
+// lobby. A guest gets a lazy anonymous session on mount (R2) rather than a
+// sign-in wall -- a room only needs *some* session behind the host seat, not
+// necessarily a real account.
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, Header, ScreenContainer } from '../components/ui';
+import { Button, Header, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
+import { getLocalGuestName } from '../lib/guest';
 import { createRoom, type OnlineBotLevel } from '../lib/rooms';
 
 const SEAT_OPTIONS = [2, 3, 4] as const;
@@ -19,28 +21,27 @@ const LEVEL_OPTIONS: { level: OnlineBotLevel; label: string }[] = [
 
 export default function PlayOnline() {
   const router = useRouter();
-  const { session } = useAuth();
+  const { ensureSession, isAnonymous } = useAuth();
   const [seats, setSeats] = useState<number>(4);
   const [botLevel, setBotLevel] = useState<OnlineBotLevel>('normal');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [guestName, setGuestName] = useState<string | null>(null);
 
-  if (!session) {
-    return (
-      <ScreenContainer>
-        <Header title="Play online" onBack={() => router.back()} />
-        <Card style={styles.signInCard}>
-          <Text style={styles.signInText}>Sign in to host a room and invite friends.</Text>
-          <Button title="Sign in" onPress={() => router.push('/sign-in')} style={styles.signInBtn} />
-        </Card>
-      </ScreenContainer>
-    );
-  }
+  useEffect(() => {
+    void ensureSession();
+    void getLocalGuestName().then(setGuestName);
+  }, [ensureSession]);
 
   async function onCreate() {
     setError(null);
     setCreating(true);
     try {
+      const ready = await ensureSession();
+      if (ready === 'failed') {
+        setError('Could not start a session. Try again.');
+        return;
+      }
       const room = await createRoom(seats, botLevel);
       if (!room) {
         setError('Could not create the room. Try again.');
@@ -58,6 +59,8 @@ export default function PlayOnline() {
   return (
     <ScreenContainer scroll>
       <Header title="Play online" onBack={() => router.back()} />
+
+      {isAnonymous && guestName ? <Text style={styles.guestLine}>Playing as {guestName}</Text> : null}
 
       <Text style={styles.label}>Seats</Text>
       <View style={styles.optionRow}>
@@ -111,9 +114,7 @@ function OptionChip({ label, selected, onPress }: { label: string; selected: boo
 }
 
 const styles = StyleSheet.create({
-  signInCard: { alignItems: 'center', marginTop: spacing.lg },
-  signInText: { ...typography.body, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.md },
-  signInBtn: { alignSelf: 'stretch' },
+  guestLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
   label: { ...typography.label, color: colors.felt, fontWeight: '700', marginTop: spacing.md, marginBottom: spacing.sm },
   hint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
   optionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
