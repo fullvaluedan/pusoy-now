@@ -15,7 +15,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.prends"
+      "bundleIdentifier": "app.prends",
+      "associatedDomains": ["applinks:prends.app"]
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +24,21 @@
         "foregroundImage": "./assets/art/app-icon.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "app.prends"
+      "package": "app.prends",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "prends.app",
+              "pathPrefix": "/join"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/art/app-icon.png",
