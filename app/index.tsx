@@ -5,74 +5,188 @@
 // Online lobby creation/joining and Bluetooth are stubs that show a "coming
 // soon" toast and link to the relevant doc page.
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Avatar } from '../components/Avatar';
+import { Button, ScreenContainer } from '../components/ui';
+import { colors, radii, spacing, typography } from '../lib/theme';
+import { useAuth } from '../lib/auth';
+
+const LOGO_IMG = require('../assets/art/logo.png');
+const HERO_IMG = require('../assets/art/hero.png');
+
+// Content is centered and capped at this width so the hero/logo don't
+// stretch to absurd sizes on a wide desktop browser.
+const MAX_CONTENT_WIDTH = 480;
+// hero.png is 1536x1024 (3:2 landscape).
+const HERO_ASPECT_RATIO = 1536 / 1024;
 
 export default function Home() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const { session, profile } = useAuth();
+
+  const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
+  const heroHeight = contentWidth / HERO_ASPECT_RATIO;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Pusoy Now</Text>
-      <Text style={styles.subtitle}>4-player Filipino card game</Text>
+    <ScreenContainer scroll>
+      <View style={[styles.content, { width: contentWidth }]}>
+        <Image
+          source={LOGO_IMG}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="Pusoy Now logo"
+        />
+        <Text style={styles.subtitle}>4-player Filipino card game</Text>
 
-      <View style={styles.menu}>
-        <Pressable
-          style={[styles.btn, styles.btnPrimary]}
+        <Image
+          source={HERO_IMG}
+          style={[styles.hero, { width: contentWidth, height: heroHeight }]}
+          resizeMode="cover"
+          accessibilityLabel="Pusoy Now table art"
+        />
+
+        <Button
+          title="Play vs Bots"
+          subtitle="No account required"
+          variant="primary"
+          align="left"
           onPress={() => router.push('/bot-select')}
-        >
-          <Text style={styles.btnText}>Play vs Bots</Text>
-          <Text style={styles.btnSub}>No account required</Text>
-        </Pressable>
+          style={styles.menuItem}
+        />
 
-        <Pressable
-          style={[styles.btn, styles.btnSecondary]}
+        {/* Compact nav row */}
+        <View style={styles.navRow}>
+          <Pressable
+            style={styles.navBtn}
+            onPress={() => router.push('/bot-select')}
+          >
+            <Text style={styles.navBtnText}>Play</Text>
+          </Pressable>
+          <Pressable
+            style={styles.navBtn}
+            onPress={() => router.push('/stats')}
+          >
+            <Text style={styles.navBtnText}>Scoreboard</Text>
+          </Pressable>
+          <Pressable
+            style={styles.navBtn}
+            onPress={() => router.push('/settings')}
+          >
+            <Text style={styles.navBtnText}>Settings</Text>
+          </Pressable>
+        </View>
+
+        <SignInEntry
+          signedIn={Boolean(session)}
+          displayName={profile?.displayName}
+          avatarUrl={profile?.avatarUrl}
           onPress={() => router.push('/sign-in')}
-        >
-          <Text style={styles.btnText}>Sign in to play online</Text>
-          <Text style={styles.btnSub}>Apple, Google, Facebook, X, TikTok</Text>
-        </Pressable>
+        />
 
-        <Pressable
-          style={[styles.btn, styles.btnGhost]}
+        <Button
+          title="Leaderboard"
+          variant="ghost"
+          align="left"
           onPress={() => router.push('/leaderboard')}
-        >
-          <Text style={styles.btnText}>Leaderboard</Text>
-        </Pressable>
+          style={styles.menuItem}
+        />
 
-        <Pressable
-          style={[styles.btn, styles.btnGhost]}
+        <Button
+          title="Bluetooth (plane mode)"
+          subtitle="Coming soon"
+          variant="ghost"
+          align="left"
           onPress={() => router.push('/bluetooth-info')}
-        >
-          <Text style={styles.btnText}>Bluetooth (plane mode)</Text>
-          <Text style={styles.btnSub}>Coming soon</Text>
-        </Pressable>
-      </View>
+          style={styles.menuItem}
+        />
 
-      <Text style={styles.footer}>v0.1 vertical slice</Text>
-    </SafeAreaView>
+        <Text style={styles.footer}>v0.1 vertical slice</Text>
+      </View>
+    </ScreenContainer>
+  );
+}
+
+// Secondary sign-in entry. Guests get a plain button; signed-in players get a
+// chip carrying their avatar and display name.
+function SignInEntry({
+  signedIn,
+  displayName,
+  avatarUrl,
+  onPress,
+}: {
+  signedIn: boolean;
+  displayName?: string;
+  avatarUrl?: string | null;
+  onPress: () => void;
+}) {
+  if (!signedIn) {
+    return (
+      <Button
+        title="Sign in to play online"
+        subtitle="Google, Facebook, TikTok"
+        variant="secondary"
+        align="left"
+        onPress={onPress}
+        style={styles.menuItem}
+      />
+    );
+  }
+
+  return (
+    <Pressable style={[styles.chip, styles.menuItem]} onPress={onPress}>
+      <Avatar
+        name={displayName ?? 'Player'}
+        url={avatarUrl}
+        size={40}
+      />
+      <View style={styles.chipTextGroup}>
+        <Text style={styles.chipTitle}>Signed in</Text>
+        <Text style={styles.chipSubtitle} numberOfLines={1}>{displayName}</Text>
+      </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f4f1e8' },
-  title: { fontSize: 40, fontWeight: '800', color: '#0e4a3a', marginTop: 24 },
-  subtitle: { fontSize: 16, color: '#666', marginBottom: 32 },
-  menu: { gap: 14 },
-  btn: {
-    padding: 18,
-    borderRadius: 14,
-    minHeight: 70,
+  content: { alignSelf: 'center', flex: 1 },
+  logo: { width: 96, height: 96, alignSelf: 'center', marginTop: spacing.lg },
+  subtitle: { ...typography.body, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.lg },
+  hero: {
+    borderRadius: radii.lg,
+    marginBottom: spacing.xl,
+    backgroundColor: colors.felt,
+  },
+  menuItem: { marginBottom: spacing.md },
+  navRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  navBtn: {
+    flex: 1,
+    backgroundColor: colors.felt,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  btnPrimary: { backgroundColor: '#0e4a3a' },
-  btnSecondary: { backgroundColor: '#1c7a5d' },
-  btnGhost: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#0e4a3a',
+  navBtnText: {
+    ...typography.label,
+    color: colors.textOnFelt,
+    fontWeight: '700',
   },
-  btnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  btnSub: { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 2 },
-  footer: { textAlign: 'center', color: '#999', marginTop: 'auto' },
+  footer: { textAlign: 'center', color: colors.textFaint, marginTop: spacing.lg },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.feltLight,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  chipTextGroup: { flex: 1 },
+  chipTitle: { color: colors.textOnFelt, fontSize: typography.bodyBold.fontSize, fontWeight: typography.bodyBold.fontWeight },
+  chipSubtitle: { color: colors.textOnFeltMuted, fontSize: typography.caption.fontSize, marginTop: 2 },
 });
