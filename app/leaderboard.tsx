@@ -1,5 +1,5 @@
-// Leaderboard stub. Real implementation will read from public.leaderboard
-// (wins/losses) and public.players (display name, avatar) via Supabase.
+// Leaderboard stub. Real implementation will read wins/losses and player
+// profiles from the online backend (Phase B on Cloudflare D1).
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 import { Button, Card, ScreenContainer } from '../components/ui';
@@ -17,7 +17,7 @@ export default function Leaderboard() {
           Leaderboard is empty. Sign in and play a few games to populate it.
         </Text>
         <Text style={styles.emptyText}>
-          Real data will come from public.leaderboard (Supabase).
+          Real data will come from the online backend in a later round.
         </Text>
       </Card>
 

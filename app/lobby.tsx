@@ -1,9 +1,9 @@
 // Online lobby. Stub for vertical slice.
 //
-// Real implementation will:
-//   - Subscribe to Supabase realtime channel on `games` table
-//   - Show waiting games (status='waiting') and a "Create game" button
-//   - On join, update seat_N to current user, transition to active, deal
+// Real implementation will (Phase B, on Cloudflare Durable Objects + D1):
+//   - Subscribe to the online game channel for waiting games
+//   - Show waiting games and a "Create game" button
+//   - On join, take a seat, transition to active, deal
 //   - Navigate to /game-online
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -15,14 +15,14 @@ export default function Lobby() {
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Online lobby</Text>
       <Text style={styles.subtitle}>
-        Available games will appear here. Supabase realtime is required.
+        Available games will appear here. Online play is coming in a later round.
       </Text>
 
       <View style={styles.empty}>
         <Text style={styles.emptyText}>No games waiting</Text>
         <Pressable
           style={styles.btn}
-          onPress={() => alert('Create game requires Supabase auth. See /sign-in.')}
+          onPress={() => alert('Online play is coming in a later round. See /sign-in to hold an account.')}
         >
           <Text style={styles.btnText}>Create game</Text>
         </Pressable>

@@ -1,6 +1,6 @@
 // Root layout: sets up the Stack navigator and puts the auth session in scope
-// for every screen. AuthProvider is safe to mount with no Supabase config: it
-// reports `configured: false` and the app runs as a guest.
+// for every screen. AuthProvider degrades quietly: with no signed-in session
+// the app simply runs as a guest.
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';

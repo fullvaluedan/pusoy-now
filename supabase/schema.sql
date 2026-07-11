@@ -1,4 +1,11 @@
--- Pusoy Now schema. Run in Supabase SQL editor.
+-- RETIRED (2026-07-11). Accounts moved off Supabase to the Cloudflare auth
+-- Worker in server/ (better-auth on D1); see server/migrations/ for the live
+-- schema. This file is kept only as a reference for the future online-play
+-- tables (games, head-to-head stats) that Phase B will re-home on D1. The app
+-- no longer reads Supabase. The one live piece still under supabase/ is the
+-- deferred TikTok Login bridge in functions/tiktok-auth/ (Deno edge function).
+--
+-- Original note: Pusoy Now schema. Run in Supabase SQL editor.
 
 -- players
 create table if not exists public.players (
