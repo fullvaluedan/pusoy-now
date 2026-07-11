@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button, ScreenContainer } from '../components/ui';
+import { Button, Card, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
 import type { BotLevel } from '../lib/pusoy/types';
 

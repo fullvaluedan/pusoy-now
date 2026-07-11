@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../lib/auth';
 import { EntitlementProvider } from '../lib/entitlements';
-import { colors } from '../lib/theme';
+import { colors, typography } from '../lib/theme';
 
 export default function RootLayout() {
   return (
@@ -18,9 +18,11 @@ export default function RootLayout() {
           <StatusBar style="auto" />
           <Stack
             screenOptions={{
-              headerStyle: { backgroundColor: colors.felt },
-              headerTintColor: colors.textOnFelt,
-              headerTitleStyle: { fontWeight: '700' },
+              headerStyle: { backgroundColor: colors.cream },
+              headerTintColor: colors.textPrimary,
+              headerTitleStyle: { fontWeight: typography.subheading.fontWeight, color: colors.textPrimary },
+              headerTitleAlign: 'center',
+              headerShadowVisible: false,
             }}
           >
             <Stack.Screen name="index" options={{ title: 'Pusoy Now' }} />

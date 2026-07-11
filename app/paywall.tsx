@@ -8,10 +8,13 @@
 // a pointer to buy on the website instead.
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 import { authClient } from '../lib/authClient';
+
+const HERO_IMG = require('../assets/art/paywall-hero.png');
+const BADGE_IMG = require('../assets/art/premium-badge.png');
 
 const BENEFITS = ['No ads', 'Support development'];
 
@@ -50,13 +53,28 @@ export default function Paywall() {
 
   return (
     <ScreenContainer scroll>
-      <Text style={styles.title}>Remove ads</Text>
-      <Text style={styles.price}>$9.99 a year, no ads</Text>
+      <Image
+        source={HERO_IMG}
+        style={styles.hero}
+        resizeMode="contain"
+        accessibilityLabel="Premium paywall hero"
+      />
+
+      <View style={styles.priceGroup}>
+        <Image
+          source={BADGE_IMG}
+          style={styles.badge}
+          resizeMode="contain"
+          accessibilityLabel="Premium badge"
+        />
+        <Text style={styles.title}>Remove ads</Text>
+        <Text style={styles.price}>$9.99 a year, no ads</Text>
+      </View>
 
       <Card style={styles.card}>
         {BENEFITS.map((b) => (
           <View key={b} style={styles.benefitRow}>
-            <Text style={styles.benefitDot}>{'•'}</Text>
+            <Text style={styles.benefitDot}>•</Text>
             <Text style={styles.benefitText}>{b}</Text>
           </View>
         ))}
@@ -84,8 +102,11 @@ export default function Paywall() {
 }
 
 const styles = StyleSheet.create({
-  title: { ...typography.heading, color: colors.felt, marginTop: spacing.sm },
-  price: { ...typography.subheading, color: colors.textPrimary, marginBottom: spacing.md },
+  hero: { width: '100%', maxWidth: 320, height: 240, alignSelf: 'center', marginBottom: spacing.lg },
+  priceGroup: { alignItems: 'center', marginBottom: spacing.lg },
+  badge: { width: 80, height: 32, marginBottom: spacing.sm },
+  title: { ...typography.heading, color: colors.felt },
+  price: { ...typography.subheading, color: colors.textPrimary, marginTop: spacing.xs },
   card: { marginBottom: spacing.lg, gap: spacing.sm },
   benefitRow: { flexDirection: 'row', alignItems: 'center' },
   benefitDot: { color: colors.felt, fontSize: 16, marginRight: spacing.sm },
