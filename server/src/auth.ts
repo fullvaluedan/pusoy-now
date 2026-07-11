@@ -12,7 +12,9 @@
 
 import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
+import { captcha } from 'better-auth/plugins';
 import { D1Dialect } from 'kysely-d1';
+import { sendAuthEmail } from './email';
 
 export interface Env {
   // D1 binding (wrangler.toml). Present on every request; never at module load.
@@ -51,9 +53,25 @@ export function trustedOriginsFor(env: Env): string[] {
   return [APP_SCHEME, ...DEV_ORIGINS, ...extra];
 }
 
+// Captcha is only wired when a Turnstile secret is present. Without it the
+// plugin would reject every sign-up/sign-in for lack of a token, which would
+// break local dev and the dev-mailbox test flow. This mirrors the social
+// providers' feature-detection: the protection turns on the moment the secret
+// exists, no code change. Default endpoints already cover sign-up, sign-in, and
+// password-reset requests.
+function captchaPlugins(env: Env): BetterAuthOptions['plugins'] {
+  if (!env.TURNSTILE_SECRET_KEY) return [];
+  return [
+    captcha({
+      provider: 'cloudflare-turnstile',
+      secretKey: env.TURNSTILE_SECRET_KEY,
+    }),
+  ];
+}
+
 // Build the better-auth options for a request. Split out from `makeAuth` so
-// tests can assert on the resolved config (trustedOrigins, rate limit) without
-// standing up a D1 database.
+// tests can assert on the resolved config (trustedOrigins, rate limit, captcha,
+// verification) without standing up a D1 database.
 export function authOptions(env: Env): BetterAuthOptions {
   return {
     database: {
@@ -64,14 +82,30 @@ export function authOptions(env: Env): BetterAuthOptions {
     baseURL: env.BETTER_AUTH_URL,
     basePath: '/api/auth',
     trustedOrigins: trustedOriginsFor(env),
+    plugins: captchaPlugins(env),
+    emailVerification: {
+      // The verification link (with its one-time token) goes out through the
+      // Resend sender, or the dev-mailbox console log until a key exists.
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendAuthEmail(env, { to: user.email, kind: 'verify', url });
+      },
+      // Send on sign-up (accounts start unverified) and sign the user in the
+      // moment they click the link, so verify lands them straight in the app.
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
+    },
     emailAndPassword: {
       enabled: true,
       // Passwords must be at least 8 chars; the client mirrors this rule so bad
       // input is rejected before any network call.
       minPasswordLength: 8,
-      // U2 flips this to true and wires the verification email. Kept false in U1
-      // so the health/scaffold round has a working sign-up path to smoke-test.
-      requireEmailVerification: false,
+      // Unverified emails cannot sign in (R5): a sign-in attempt before
+      // verification is rejected and re-triggers the verification email.
+      requireEmailVerification: true,
+      // Reset links go through the same sender/dev-mailbox path as verification.
+      sendResetPassword: async ({ user, url }) => {
+        await sendAuthEmail(env, { to: user.email, kind: 'reset', url });
+      },
     },
     session: {
       // 30-day sessions, refreshed when the user is active within a day of
