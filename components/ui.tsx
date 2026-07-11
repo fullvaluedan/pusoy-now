@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii, shadows, spacing, typography } from '../lib/theme';
-import { isButtonInert, resolveButtonTokens, shouldShowFieldError, type ButtonVariant } from '../lib/uiState';
+import { isButtonInert, resolveButtonTokens, resolveCheckboxTokens, shouldShowFieldError, type ButtonVariant } from '../lib/uiState';
 
 // ---------------------------------------------------------------------------
 // ScreenContainer: SafeAreaView + cream background + standard padding.
@@ -320,6 +320,54 @@ const fieldStyles = StyleSheet.create({
     color: colors.dangerSoftText,
     fontSize: typography.caption.fontSize,
   },
+});
+
+// ---------------------------------------------------------------------------
+// Checkbox: pressable box + checkmark, with an inline label. Every usage in
+// this app starts unchecked (see the marketing-consent box on sign-up) - the
+// mark is two rotated borders, the same icon-free trick Header uses for its
+// back chevron.
+// ---------------------------------------------------------------------------
+interface CheckboxProps {
+  checked: boolean;
+  onToggle: (next: boolean) => void;
+  label: string;
+  style?: StyleProp<ViewStyle>;
+}
+
+export function Checkbox({ checked, onToggle, label, style }: CheckboxProps) {
+  const tokens = resolveCheckboxTokens(checked);
+  return (
+    <Pressable style={[checkboxStyles.row, style]} onPress={() => onToggle(!checked)} hitSlop={6}>
+      <View style={[checkboxStyles.box, { backgroundColor: tokens.backgroundColor, borderColor: tokens.borderColor }]}>
+        {tokens.showMark ? <View style={checkboxStyles.mark} /> : null}
+      </View>
+      <Text style={checkboxStyles.label}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const checkboxStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  box: {
+    width: 22,
+    height: 22,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Bottom-left corner of a square, rotated 45deg, reads as a checkmark.
+  mark: {
+    width: 10,
+    height: 6,
+    marginTop: -2,
+    borderLeftWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: colors.textOnFelt,
+    transform: [{ rotate: '-45deg' }],
+  },
+  label: { flex: 1, fontSize: typography.label.fontSize, color: colors.textBody },
 });
 
 // ---------------------------------------------------------------------------

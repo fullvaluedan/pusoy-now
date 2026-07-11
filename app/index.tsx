@@ -4,12 +4,14 @@
 //
 // Online lobby creation/joining and Bluetooth are stubs that show a "coming
 // soon" toast and link to the relevant doc page.
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Avatar } from '../components/Avatar';
-import { Button, ScreenContainer } from '../components/ui';
+import { Button, Card, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
+import { authClient } from '../lib/authClient';
 
 const LOGO_IMG = require('../assets/art/logo.png');
 const HERO_IMG = require('../assets/art/hero.png');
@@ -27,6 +29,34 @@ export default function Home() {
 
   const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
   const heroHeight = contentWidth / HERO_ASPECT_RATIO;
+
+  // One-time post-sign-in consent prompt (Round 6 U3): social-login users
+  // never see the signup checkbox, so on the first authenticated home render
+  // check whether they have a consent row at all. checkedRef guards this to
+  // once per signed-in session (and resets on sign-out) so it never re-fires
+  // on every render, and either answer POSTs a row so the prompt never
+  // repeats for this account.
+  const [showConsentPrompt, setShowConsentPrompt] = useState(false);
+  const checkedConsentRef = useRef(false);
+
+  useEffect(() => {
+    if (!session) {
+      checkedConsentRef.current = false;
+      setShowConsentPrompt(false);
+      return;
+    }
+    if (checkedConsentRef.current) return;
+    checkedConsentRef.current = true;
+    (async () => {
+      const { data } = await authClient.$fetch<{ consent: unknown | null }>('/api/consent');
+      if (data && data.consent === null) setShowConsentPrompt(true);
+    })();
+  }, [session]);
+
+  async function answerConsentPrompt(optIn: boolean) {
+    setShowConsentPrompt(false);
+    void authClient.$fetch('/api/consent', { method: 'POST', body: { optIn, source: 'prompt' } });
+  }
 
   return (
     <ScreenContainer scroll>
@@ -92,6 +122,21 @@ export default function Home() {
           avatarUrl={profile?.avatarUrl}
           onPress={() => router.push('/sign-in')}
         />
+
+        {showConsentPrompt ? (
+          <Card style={styles.consentCard}>
+            <Text style={styles.consentText}>Want game updates by email?</Text>
+            <View style={styles.consentRow}>
+              <Button
+                title="No thanks"
+                variant="ghost"
+                onPress={() => void answerConsentPrompt(false)}
+                style={styles.consentBtn}
+              />
+              <Button title="Yes" variant="secondary" onPress={() => void answerConsentPrompt(true)} style={styles.consentBtn} />
+            </View>
+          </Card>
+        ) : null}
 
         <Button
           title="Friends"
@@ -176,6 +221,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.felt,
   },
   menuItem: { marginBottom: spacing.md },
+  consentCard: { marginBottom: spacing.md, gap: spacing.sm },
+  consentText: { ...typography.bodyBold, color: colors.textPrimary },
+  consentRow: { flexDirection: 'row', gap: spacing.sm },
+  consentBtn: { flex: 1 },
   navRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

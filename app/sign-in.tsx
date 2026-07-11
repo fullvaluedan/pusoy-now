@@ -12,10 +12,11 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { Button, Field, ScreenContainer } from '../components/ui';
+import { Button, Checkbox, Field, ScreenContainer } from '../components/ui';
 import { colors, providerBrand, radii, spacing, typography } from '../lib/theme';
 import { useAuth, type SocialProvider } from '../lib/auth';
 import { validateResetEmail, validateSignIn, validateSignUp } from '../lib/authForms';
+import { authClient } from '../lib/authClient';
 
 // Flip to true once the TikTok bridge is ported to the auth Worker.
 const TIKTOK_ENABLED = false;
@@ -65,6 +66,7 @@ export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -114,9 +116,20 @@ export default function SignIn() {
       setBusy('email');
       try {
         const res = await signUpEmail({ name, email, password });
-        if (res.status === 'error') setError(res.message);
-        else if (res.status === 'signed-in') router.replace('/');
-        // 'verification-pending' flips the whole screen to the pending view.
+        if (res.status === 'error') {
+          setError(res.message);
+        } else {
+          if (res.status === 'signed-in') router.replace('/');
+          // 'verification-pending' flips the whole screen to the pending view.
+          // Fire-and-forget consent capture: this 401s silently if there is no
+          // session yet (verification still pending) - the post-sign-in prompt
+          // on home is the safety net for that case, so signup never blocks on
+          // this call either way.
+          void authClient.$fetch('/api/consent', {
+            method: 'POST',
+            body: { optIn: marketingConsent, source: 'signup' },
+          });
+        }
       } finally {
         setBusy(null);
       }
@@ -237,6 +250,15 @@ export default function SignIn() {
         />
       ) : null}
 
+      {mode === 'sign-up' ? (
+        <Checkbox
+          checked={marketingConsent}
+          onToggle={setMarketingConsent}
+          label="Email me game updates and events. Unsubscribe anytime."
+          style={styles.consentCheckbox}
+        />
+      ) : null}
+
       <Button title={submitLabel} onPress={() => void onSubmitEmail()} loading={busy === 'email'} disabled={busy !== null && busy !== 'email'} />
 
       {error ? (
@@ -311,6 +333,7 @@ const styles = StyleSheet.create({
   title: { ...typography.heading, color: colors.felt, marginTop: spacing.sm },
   subtitle: { ...typography.label, color: colors.textMuted, marginBottom: spacing.md },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  consentCheckbox: { marginTop: spacing.xs, marginBottom: spacing.xs },
   providers: { marginTop: spacing.md, gap: spacing.sm + 4 },
   orLabel: { ...typography.caption, color: colors.textFaint, textAlign: 'center' },
   // Form-level (server) errors: same soft-red validation look as Field's

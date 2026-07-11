@@ -13,6 +13,7 @@ import { d1Store, isPremium, processStripeEvent, requireUserId } from './entitle
 import { constructEvent, createCheckout, stripeConfigured } from './stripe';
 import { configuredProviderIds } from './social';
 import { checkUsername, claimUsername, d1ProfileStore, usernameErrorMessage } from './profile';
+import { d1ConsentStore, getConsent, recordConsent } from './consent';
 import {
   acceptRequest,
   d1FriendStore,
@@ -163,6 +164,31 @@ app.post('/api/username/claim', async (c) => {
     return c.json({ error: 'already-claimed', username: res.username, message: 'You already have a username.' }, 409);
   }
   return c.json({ username: res.username });
+});
+
+// --- Marketing email consent (U3, Round 6) ----------------------------------
+
+// The caller's current consent choice, or null if they have never recorded
+// one. The client uses null to decide whether to show the post-sign-in
+// prompt (home, for social-login users who skip the signup checkbox).
+// Session-gated.
+app.get('/api/consent', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const row = await getConsent(d1ConsentStore(c.env.DB), userId);
+  return c.json({ consent: row });
+});
+
+// Record (or update) the caller's marketing email consent choice. One row per
+// user; re-submitting overwrites it rather than piling up history. Session-gated.
+app.post('/api/consent', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { optIn?: unknown; source?: unknown };
+  const optIn = body.optIn === true;
+  const source = typeof body.source === 'string' && body.source.trim() ? body.source.trim() : 'unknown';
+  const row = await recordConsent(d1ConsentStore(c.env.DB), userId, optIn, source, Date.now());
+  return c.json({ consent: row });
 });
 
 // --- Friends + ranking (U4) ------------------------------------------------
