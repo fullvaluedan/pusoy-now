@@ -8,7 +8,7 @@
 // decision runs off a seeded rng, so the win rate below is reproducible, not a
 // sample that drifts run to run.
 
-import { buildDeck, dealFour, shuffle } from './deck';
+import { buildDeck, dealFour, dealN, shuffle } from './deck';
 import { applyAction, isHandOver, newHand, handFinishOrder } from './engine';
 import { botChoose } from './bot';
 import { makeRng } from './rng';
@@ -179,6 +179,57 @@ ok(
   // Idempotent: a second skip on a finished game is a no-op, not a throw.
   skipToEnd(g);
   ok('skip: second skip on a finished hand is a no-op', g.phase === 'finished');
+}
+
+// --- short-handed sims: N=2 and N=3 complete without deadlock (U6/R13) ----
+
+// Play one N-player hand to completion with a bot in every seat. Deals 13 to
+// each of N players (leftovers dead), then runs the engine to the finish.
+function simulateHandN(n: number, level: BotLevel, rng: Rng): number[] | null {
+  const hands = dealN(shuffle(buildDeck(), rng), n);
+  const ids = Array.from({ length: n }, (_, i) => `p${i}`);
+  let hs = newHand('simN', ids, hands, 1, 'h1', { turnMs: null });
+  const playedCards: Card[] = [];
+  let iter = 0;
+  while (!isHandOver(hs) && iter < MAX_ITER) {
+    iter++;
+    const seat = hs.currentPlayerIndex;
+    if (hs.finishedOrder.includes(seat)) break;
+    const hand = hands[seat];
+    const choice = botChoose(hand, hs.leadCombo, {
+      level,
+      rng,
+      context: { seat, playedCards, handSizes: hands.map((h) => h.length) },
+    });
+    if (choice) {
+      hs = applyAction(hs, seat, hand, { kind: 'play', combo: choice });
+      hands[seat] = hand.filter((c) => !choice.cards.find((pc) => pc.id === c.id));
+      playedCards.push(...choice.cards);
+    } else {
+      hs = applyAction(hs, seat, hand, { kind: 'pass' });
+    }
+  }
+  if (!isHandOver(hs)) return null;
+  return handFinishOrder(hs);
+}
+
+console.log('\nshort-handed seeded sims (50 games each for N=2, N=3)');
+for (const n of [2, 3]) {
+  let completed = 0;
+  let deadlockedN = 0;
+  let badOrder = 0;
+  for (let g = 0; g < 50; g++) {
+    const finish = simulateHandN(n, 'normal', makeRng(7000 + n * 1000 + g));
+    if (finish === null) {
+      deadlockedN++;
+      continue;
+    }
+    completed++;
+    if (finish.length !== n || new Set(finish).size !== n) badOrder++;
+  }
+  ok(`${n}p: all 50 seeded games complete without deadlock`, deadlockedN === 0, { deadlockedN });
+  ok(`${n}p: every finish order is a permutation of its seats`, badOrder === 0, { badOrder });
+  ok(`${n}p: 50 games completed`, completed === 50, { completed });
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

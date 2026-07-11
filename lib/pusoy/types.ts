@@ -45,6 +45,7 @@ export type PlayerStatus = 'playing' | 'passed' | 'finished';
 export interface HandState {
   handId: string;
   roundNumber: number;            // 1..N within a game
+  playerCount: number;            // seats in play, 2-4 (leftover cards dead)
   currentPlayerIndex: number;     // whose turn
   leadPlayerIndex: number;        // who led the current trick
   leadCombo: PlayedCombo | null;  // null = opening play

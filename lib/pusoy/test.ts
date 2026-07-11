@@ -1,9 +1,9 @@
 // Minimal test harness. No jest/vitest dependency for vertical slice.
 // Run:  node --import tsx lib/pusoy/test.ts   (or via npm test)
 
-import { buildDeck, dealFour } from './deck';
+import { buildDeck, dealFour, dealN } from './deck';
 import { detectCombo, compareCombos, canPlay } from './combo';
-import { applyAction, applyTimeout, isHandOver, newHand, TURN_MS } from './engine';
+import { applyAction, applyTimeout, handFinishOrder, isHandOver, newHand, TURN_MS } from './engine';
 import { botChoose } from './bot';
 import { makeRng, NO_WOBBLE } from './rng';
 import { createLocalGame } from './localGame';
@@ -371,6 +371,49 @@ ok('parseLevel falls back on empty string', parseLevel('') === 'normal');
 ok('parseLevel falls back on wrong case (EXPERT)', parseLevel('EXPERT') === 'normal');
 ok('parseLevel falls back on wrong string (hard)', parseLevel('hard') === 'normal');
 ok('parseLevel falls back on array', parseLevel(['expert', 'normal']) === 'normal');
+
+// 10) short-handed play: engine supports 2 to 4 players (R13)
+console.log('short-handed: dealN');
+const dealDeck = buildDeck();
+const deal2 = dealN(dealDeck, 2);
+ok('2p deal: 2 hands of 13', deal2.length === 2 && deal2.every((h) => h.length === 13));
+ok('2p deal: 26 cards dealt, 26 left dead', deal2.flat().length === 26);
+const deal3 = dealN(dealDeck, 3);
+ok('3p deal: 3 hands of 13', deal3.length === 3 && deal3.every((h) => h.length === 13));
+ok('3p deal: 39 cards dealt, 13 left dead', deal3.flat().length === 39);
+const deal4 = dealN(dealDeck, 4);
+ok('4p deal: 52 cards dealt, none dead', deal4.flat().length === 52);
+ok('dealN rejects 1 player', (() => { try { dealN(dealDeck, 1); return false; } catch { return true; } })());
+ok('dealN rejects 5 players', (() => { try { dealN(dealDeck, 5); return false; } catch { return true; } })());
+
+console.log('short-handed: leader rule');
+// 3 of clubs present in a 2p deal: its holder leads.
+const with3c = newHand('t2a', ['p0', 'p1'], [[c('C', '4')], [c('C', '3')]], 1, 'h', { turnMs: null });
+ok('2p leader is the 3 of clubs holder', with3c.currentPlayerIndex === 1);
+ok('2p handState carries playerCount 2', with3c.playerCount === 2);
+// 3 of clubs absent (short-handed, it landed in the dead pile): lowest dealt
+// card leads. 3 of hearts (rank 3, suit H) is lower than any 4, so p1 leads.
+const no3c = newHand('t2b', ['p0', 'p1'], [[c('C', '4'), c('S', '9')], [c('H', '3'), c('D', 'K')]], 1, 'h', { turnMs: null });
+ok('2p leader falls back to lowest-card holder when no 3 of clubs', no3c.currentPlayerIndex === 1);
+
+console.log('short-handed: hand ends at N-1 out');
+// 2p: hand is over as soon as 1 player empties (N-1 = 1).
+let hs2 = newHand('t2c', ['p0', 'p1'], [[c('C', '3')], [c('C', '4')]], 1, 'h', { turnMs: null });
+ok('2p opener holds the 3 of clubs', hs2.currentPlayerIndex === 0);
+hs2 = applyAction(hs2, 0, [c('C', '3')], { kind: 'play', combo: detectCombo([c('C', '3')])! });
+ok('2p hand over once one player is out', isHandOver(hs2));
+ok('2p finish order lists both seats', handFinishOrder(hs2).slice().sort().join(',') === '0,1');
+// 3p: pairs, hand over when 2 of 3 are out.
+const p0h = [c('C', '3'), c('D', '3')];
+const p1h = [c('C', '4'), c('D', '4')];
+const p2h = [c('C', '5'), c('D', '5')];
+let hs3 = newHand('t3', ['p0', 'p1', 'p2'], [p0h, p1h, p2h], 1, 'h', { turnMs: null });
+ok('3p handState carries playerCount 3', hs3.playerCount === 3);
+hs3 = applyAction(hs3, 0, p0h, { kind: 'play', combo: detectCombo([c('C', '3'), c('D', '3')])! });
+ok('3p not over after only 1 out', !isHandOver(hs3));
+hs3 = applyAction(hs3, 1, p1h, { kind: 'play', combo: detectCombo([c('C', '4'), c('D', '4')])! });
+ok('3p over once 2 of 3 are out', isHandOver(hs3));
+ok('3p finish order names all 3 seats', handFinishOrder(hs3).slice().sort().join(',') === '0,1,2');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
