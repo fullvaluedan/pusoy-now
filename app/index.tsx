@@ -55,6 +55,15 @@ export default function Home() {
           style={styles.menuItem}
         />
 
+        <Button
+          title="Play online"
+          subtitle="Host a room and invite friends"
+          variant="secondary"
+          align="left"
+          onPress={() => router.push('/play-online')}
+          style={styles.menuItem}
+        />
+
         {/* Compact nav row */}
         <View style={styles.navRow}>
           <Pressable
