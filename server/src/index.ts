@@ -41,9 +41,13 @@ function webOrigin(env: Env, requestOrigin: string | undefined): string {
   return trusted.find((o) => !o.includes('localhost')) ?? trusted[0] ?? env.BETTER_AUTH_URL ?? '';
 }
 
-// Reflect only trusted origins, and only for the auth API. `credentials: true`
-// is required for the session cookie to be sent and stored by the browser.
-app.use('/api/auth/*', (c, next) => {
+// Reflect only trusted origins across the whole API (auth AND the custom
+// friends/rooms/profile/stats routes) since the app calls all of them
+// cross-site with the session cookie. `credentials: true` is required for the
+// browser to send and store that cookie. Scoping this to only /api/auth/*
+// left the custom routes without CORS headers, so the browser blocked them
+// from any web origin.
+app.use('/api/*', (c, next) => {
   const allowed = trustedOriginsFor(c.env).filter((o) => o.startsWith('http'));
   return cors({
     origin: (origin) => (allowed.includes(origin) ? origin : null),

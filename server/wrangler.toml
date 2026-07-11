@@ -21,7 +21,7 @@ BETTER_AUTH_URL = "https://pusoy-now-auth.fullvaluedan.workers.dev"
 # Cloudflare Pages origin once the web app is deployed (see docs/DEPLOY.md) so
 # invite links and cross-origin sign-in cookies work. trustedOriginsFor() and
 # the CORS layer already reflect this var, so only the value needs setting.
-# TRUSTED_ORIGINS = "https://pusoy-now.pages.dev"
+TRUSTED_ORIGINS = "https://pusoy-now.pages.dev"
 
 # Live game rooms (U7). One Durable Object instance per room code, addressed
 # with getByName(code). SQLite-backed so the WebSocket Hibernation API keeps
