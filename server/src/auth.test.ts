@@ -50,11 +50,28 @@ async function main() {
   );
 
   // --- captcha is feature-detected on the Turnstile secret ------------------
-  ok('captcha is off when no Turnstile secret is set', (opts.plugins ?? []).length === 0);
+  ok(
+    'captcha is off when no Turnstile secret is set',
+    !(opts.plugins ?? []).some((p) => p.id === 'captcha'),
+    (opts.plugins ?? []).map((p) => p.id),
+  );
   const withCaptcha = authOptions(fakeEnv({ TURNSTILE_SECRET_KEY: 'ts-secret' }));
   ok(
     'captcha turns on the moment the secret exists',
     (withCaptcha.plugins ?? []).some((p) => p.id === 'captcha'),
+    (withCaptcha.plugins ?? []).map((p) => p.id),
+  );
+
+  // --- anonymous guest sessions are always on (guest play is core) ----------
+  ok(
+    'the anonymous plugin is wired without any secret',
+    (opts.plugins ?? []).some((p) => p.id === 'anonymous'),
+    (opts.plugins ?? []).map((p) => p.id),
+  );
+  ok(
+    'the anonymous plugin survives captcha composition',
+    (withCaptcha.plugins ?? []).some((p) => p.id === 'anonymous') &&
+      (withCaptcha.plugins ?? []).some((p) => p.id === 'captcha'),
     (withCaptcha.plugins ?? []).map((p) => p.id),
   );
 
