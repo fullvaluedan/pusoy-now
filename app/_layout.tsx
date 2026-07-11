@@ -40,6 +40,7 @@ export default function RootLayout() {
             <Stack.Screen name="leaderboard" options={{ title: 'Leaderboard' }} />
             <Stack.Screen name="stats" options={{ title: 'Scoreboard' }} />
             <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+            <Stack.Screen name="delete-account" options={{ title: 'Delete account' }} />
             <Stack.Screen name="privacy" options={{ title: 'Privacy Policy' }} />
             <Stack.Screen name="terms" options={{ title: 'Terms of Service' }} />
             <Stack.Screen name="profile" options={{ title: 'Profile' }} />

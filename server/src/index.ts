@@ -14,6 +14,7 @@ import { constructEvent, createCheckout, stripeConfigured } from './stripe';
 import { configuredProviderIds } from './social';
 import { checkUsername, claimUsername, d1ProfileStore, usernameErrorMessage } from './profile';
 import { d1ConsentStore, getConsent, recordConsent } from './consent';
+import { appleRevocationHook, d1DeletionStore, deleteAccount, type AppleRevocationEnv } from './deletion';
 import {
   acceptRequest,
   d1FriendStore,
@@ -53,7 +54,7 @@ app.use('/api/*', (c, next) => {
   return cors({
     origin: (origin) => (allowed.includes(origin) ? origin : null),
     allowHeaders: ['Content-Type', 'Authorization'],
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
     exposeHeaders: ['Content-Length'],
     maxAge: 600,
     credentials: true,
@@ -189,6 +190,26 @@ app.post('/api/consent', async (c) => {
   const source = typeof body.source === 'string' && body.source.trim() ? body.source.trim() : 'unknown';
   const row = await recordConsent(d1ConsentStore(c.env.DB), userId, optIn, source, Date.now());
   return c.json({ consent: row });
+});
+
+// --- Account deletion (U4, Round 6) -----------------------------------------
+
+// Store-compliant, irreversible account deletion. Purges the user row (which
+// cascades session/account/entitlement/profile/friendship/stats/consent) plus
+// the email-keyed verification rows, and revokes Apple tokens first when the
+// account is apple-linked and Apple credentials are configured (best-effort;
+// a revocation failure never blocks deletion). Session-gated; the client signs
+// out locally after this succeeds. A stale session for an already-deleted user
+// resolves to no userId and gets the same 401 as any anonymous caller.
+app.delete('/api/account', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  // Apple secrets (U8) are not on the typed Env yet; read them structurally so
+  // revocation stays feature-detected and disabled until they are provisioned.
+  const revokeApple = appleRevocationHook(c.env.DB, c.env as unknown as AppleRevocationEnv);
+  const res = await deleteAccount(d1DeletionStore(c.env.DB), userId, { revokeApple });
+  if (res.status === 'not-found') return c.json({ error: 'not-found' }, 404);
+  return c.json({ deleted: true });
 });
 
 // --- Friends + ranking (U4) ------------------------------------------------
