@@ -90,7 +90,7 @@ export default function Privacy() {
       <Card style={styles.card}>
         <Text style={styles.sectionTitle}>Delete your account</Text>
         <Text style={styles.body}>
-          You can delete your account from within the app: go to Settings and tap "Delete account". You will need to confirm by typing your display name.
+          You can delete your account from within the app: go to Settings and tap "Delete account". You will need to confirm by typing DELETE.
         </Text>
         <Text style={styles.body}>
           You can also delete your account on the web at prends.app/delete-account without the app installed.
