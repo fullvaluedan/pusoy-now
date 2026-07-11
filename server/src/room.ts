@@ -15,6 +15,7 @@ import type { BotLevel, RoundAction } from '../../lib/pusoy/types';
 import {
   advanceBots,
   applySeatAction,
+  canAutoStart,
   canStart,
   createRoomState,
   humanUserIds,
@@ -66,12 +67,26 @@ export class GameRoom extends DurableObject<Env> {
   // Initialize the room if it does not exist yet. The DO does not know its own
   // name, so the Worker passes the room code in. Idempotent: a second create
   // returns the existing room's info.
-  async create(code: string, seats: number, hostUserId: string, botLevel: BotLevel): Promise<RoomInfo> {
+  async create(
+    code: string,
+    seats: number,
+    hostUserId: string,
+    botLevel: BotLevel,
+    opts?: { lobbyDeadlineMs?: number; expectedUserIds?: string[] },
+  ): Promise<RoomInfo> {
     const n = Math.max(2, Math.min(4, Math.floor(seats)));
     if (!this.room) {
-      this.room = createRoomState(code, n, hostUserId, botLevel, Date.now());
+      const now = Date.now();
+      this.room = createRoomState(code, n, hostUserId, botLevel, now);
+      // Matchmade rooms (U3) carry a short lobby deadline: the room auto-starts
+      // when all matched humans connect, or bot-fills at the deadline. Invite
+      // rooms pass no opts and keep the host-only start.
+      if (opts?.lobbyDeadlineMs != null) {
+        this.room.lobbyDeadline = now + opts.lobbyDeadlineMs;
+        this.room.expectedUserIds = opts.expectedUserIds ?? null;
+      }
       await this.persist();
-      await this.ctx.storage.setAlarm(Date.now() + ROOM_TTL_MS);
+      await this.ctx.storage.setAlarm(this.nextAlarm());
     }
     return this.info();
   }
@@ -123,6 +138,13 @@ export class GameRoom extends DurableObject<Env> {
     this.sendView(server, join.seat);
     this.broadcast(server);
 
+    // Matchmade auto-start (U3): once every expected human has arrived, begin
+    // immediately without waiting for the lobby deadline. Invite rooms have no
+    // lobbyDeadline, so canAutoStart is always false for them here.
+    if (canAutoStart(this.room, Date.now())) {
+      await this.startSequence();
+    }
+
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -143,9 +165,7 @@ export class GameRoom extends DurableObject<Env> {
         ws.send(JSON.stringify({ type: 'error', message: startErrorMessage(check) }));
         return;
       }
-      startGame(this.room);
-      advanceBots(this.room);
-      await this.afterProgress();
+      await this.startSequence();
       return;
     }
 
@@ -197,6 +217,26 @@ export class GameRoom extends DurableObject<Env> {
       return;
     }
 
+    // Matchmade lobby (U3): the connect-grace window has a deadline. If the room
+    // can auto-start (>=1 human connected, deadline reached or all expected
+    // arrived) run the same start sequence bots fill the empty seats. If the
+    // deadline passed with zero humans connected, nobody showed - discard it.
+    if (this.room.phase === 'lobby' && this.room.lobbyDeadline != null) {
+      const now = Date.now();
+      if (canAutoStart(this.room, now)) {
+        await this.startSequence();
+        return;
+      }
+      if (now >= this.room.lobbyDeadline) {
+        const anyHuman = this.room.players.some((p) => p.kind === 'human' && p.connected);
+        if (!anyHuman) {
+          await this.ctx.storage.deleteAll();
+          this.room = null;
+          return;
+        }
+      }
+    }
+
     // Room TTL: a room with no connected players is abandoned - clean up.
     const anyConnected = this.room.players.some((p) => p.kind === 'human' && p.connected);
     const idleFor = Date.now() - this.room.createdAt;
@@ -212,6 +252,15 @@ export class GameRoom extends DurableObject<Env> {
 
   // --- Internals ----------------------------------------------------------
 
+  // Deal, run any leading bot turns, then persist + broadcast + re-arm. Shared
+  // by the host 'start' message and the matchmade auto-start paths.
+  private async startSequence(): Promise<void> {
+    if (!this.room) return;
+    startGame(this.room);
+    advanceBots(this.room);
+    await this.afterProgress();
+  }
+
   // After a start/action/timeout: persist, record stats if the hand just
   // finished, broadcast the redacted state, and re-arm the turn alarm.
   private async afterProgress(): Promise<void> {
@@ -223,8 +272,10 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   private nextAlarm(): number {
-    const hs = this.room?.handState;
-    if (this.room?.phase === 'playing' && hs?.turnDeadline != null) return hs.turnDeadline;
+    const r = this.room;
+    if (r?.phase === 'playing' && r.handState?.turnDeadline != null) return r.handState.turnDeadline;
+    // Matchmade lobby: fire at the connect-grace deadline to auto-start/clean up.
+    if (r?.phase === 'lobby' && r.lobbyDeadline != null) return r.lobbyDeadline;
     return Date.now() + ROOM_TTL_MS;
   }
 

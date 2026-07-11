@@ -31,7 +31,7 @@ function ok(name: string, cond: boolean, info?: unknown) {
 }
 
 function fakeEnv(overrides: Partial<Env> = {}): Env {
-  return { DB: {} as D1Database, GAME_ROOM: {} as Env['GAME_ROOM'], BETTER_AUTH_SECRET: 'test-secret', ...overrides };
+  return { DB: {} as D1Database, GAME_ROOM: {} as Env['GAME_ROOM'], MATCHMAKER: {} as Env['MATCHMAKER'], BETTER_AUTH_SECRET: 'test-secret', ...overrides };
 }
 
 const GOOGLE = { GOOGLE_CLIENT_ID: 'gid', GOOGLE_CLIENT_SECRET: 'gsec' };

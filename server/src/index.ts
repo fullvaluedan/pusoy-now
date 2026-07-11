@@ -29,10 +29,11 @@ import { d1StatsStore, fetchStatsMany, sanitizeTotals, syncStats } from './stats
 import { beat, d1PresenceStore } from './presence';
 import { generateRoomCode } from './roomLogic';
 import { GameRoom } from './room';
+import { Matchmaker } from './matchmaker';
 
-// The DO class must be exported from the Worker's entrypoint so the runtime can
-// instantiate it for the GAME_ROOM binding.
-export { GameRoom };
+// The DO classes must be exported from the Worker's entrypoint so the runtime
+// can instantiate them for the GAME_ROOM and MATCHMAKER bindings.
+export { GameRoom, Matchmaker };
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -398,6 +399,33 @@ app.get('/api/rooms/:code/ws', async (c) => {
     body: c.req.raw.body,
   });
   return c.env.GAME_ROOM.getByName(code).fetch(forwarded);
+});
+
+// --- Matchmaking (U3) ------------------------------------------------------
+
+// WebSocket upgrade into the quick-match queue. Session-gated exactly like the
+// rooms WS route: the session is validated here (unauthenticated upgrades are
+// rejected before reaching the DO), then forwarded to the singleton Matchmaker
+// with the resolved identity injected as trusted headers. The username falls
+// back to the session name so guests (no claimed profile username) still carry
+// a display name into the match.
+app.get('/api/matchmaking/ws', async (c) => {
+  if (c.req.header('upgrade') !== 'websocket') return c.json({ error: 'expected websocket' }, 426);
+  const session = await makeAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+  const userId = session?.user?.id;
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const profile = await d1ProfileStore(c.env.DB).getByUserId(userId);
+  const username = profile?.username ?? session.user?.name ?? '';
+
+  const headers = new Headers(c.req.raw.headers);
+  headers.set('X-User-Id', userId);
+  headers.set('X-Username', username);
+  const forwarded = new Request(c.req.raw.url, {
+    method: c.req.raw.method,
+    headers,
+    body: c.req.raw.body,
+  });
+  return c.env.MATCHMAKER.getByName('global').fetch(forwarded);
 });
 
 export default app;

@@ -25,6 +25,9 @@ export interface Env {
   // Durable Object namespace for live game rooms (U7). One DO instance per room
   // code via getByName(code).
   GAME_ROOM: DurableObjectNamespace<import('./room').GameRoom>;
+  // Durable Object namespace for the singleton quick-match queue (U3), addressed
+  // with getByName('global').
+  MATCHMAKER: DurableObjectNamespace<import('./matchmaker').Matchmaker>;
   // Signing secret for sessions/tokens. Set with `wrangler secret put`.
   BETTER_AUTH_SECRET: string;
   // Public base URL of the deployed Worker, e.g. https://pusoy-now-auth.<sub>.workers.dev

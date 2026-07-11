@@ -41,9 +41,21 @@ TRUSTED_ORIGINS = "https://prends.app,https://pusoy-now.pages.dev"
 name = "GAME_ROOM"
 class_name = "GameRoom"
 
+# Singleton quick-match queue (U3). One instance for the whole app via
+# getByName('global'); hibernating WebSockets keep an idle queue free.
+[[durable_objects.bindings]]
+name = "MATCHMAKER"
+class_name = "Matchmaker"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameRoom"]
+
+# Additive DO migration for the Matchmaker class (U3). Tags are additive and
+# irreversible - never edit or reuse v1.
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Matchmaker"]
 
 [observability]
 enabled = true

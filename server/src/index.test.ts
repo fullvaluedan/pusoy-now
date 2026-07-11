@@ -30,6 +30,7 @@ function fakeEnv(overrides: Partial<Env> = {}): Env {
   return {
     DB: {} as D1Database,
     GAME_ROOM: {} as Env['GAME_ROOM'],
+    MATCHMAKER: {} as Env['MATCHMAKER'],
     BETTER_AUTH_SECRET: 'test-secret',
     ...overrides,
   };
