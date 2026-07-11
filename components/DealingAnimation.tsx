@@ -17,7 +17,14 @@ import {
   useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
-import { OpponentCardStack, PlayingCard, CARD_WIDTH, CARD_HEIGHT } from './PlayingCard';
+import {
+  OpponentCardStack,
+  PlayingCard,
+  CARD_WIDTH,
+  CARD_HEIGHT,
+  fanRowLayout,
+  fanCardArc,
+} from './PlayingCard';
 import { colors, layout, withAlpha } from '../lib/theme';
 import type { DealStep, LocalPlayer } from '../lib/pusoy/localGame';
 
@@ -155,14 +162,13 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
   for (let s = 0; s < step; s++) {
     if (dealOrder[s].seat === humanSeat) humanDealt.push(deck[dealOrder[s].cardIndex]);
   }
-  // Fan math mirrors HandRow exactly (same width basis and centering) so each
-  // dealt card lands in the final position the live hand will render it in,
-  // rather than shifting as the hand grows or jumping when play begins.
-  const SIDE_MARGIN = 12;
+  // Fan math is the exact same shared helper HandRow uses (see
+  // components/PlayingCard.tsx: fanRowLayout/fanCardArc) so each dealt card
+  // lands in the final position -- and arc lift/tilt -- the live hand will
+  // render it in, rather than shifting or flattening out when play begins.
+  const totalHumanCards = dealOrder.reduce((n, d) => (d.seat === humanSeat ? n + 1 : n), 0);
   const fanWidth = Math.min(windowWidth, layout.maxTableWidth);
-  const available = fanWidth - SIDE_MARGIN * 2;
-  const stride = Math.min(CARD_WIDTH, (available - CARD_WIDTH) / 12);
-  const fanStartX = (fanWidth - (CARD_WIDTH + stride * 12)) / 2;
+  const { stride, startX: fanStartX } = fanRowLayout(totalHumanCards, fanWidth);
 
   return (
     <Pressable style={styles.overlay} onPress={onDone} onLayout={onLayout}>
@@ -179,11 +185,22 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
       <Text style={styles.dealingLabel}>Dealing…</Text>
 
       <View style={styles.dealHandFan}>
-        {humanDealt.map((c, i) => (
-          <View key={c.id} style={{ position: 'absolute', left: fanStartX + i * stride, bottom: 0 }}>
-            <PlayingCard card={c} />
-          </View>
-        ))}
+        {humanDealt.map((c, i) => {
+          const arc = fanCardArc(i, totalHumanCards);
+          return (
+            <View
+              key={c.id}
+              style={{
+                position: 'absolute',
+                left: fanStartX + i * stride,
+                bottom: 0,
+                transform: [{ translateY: arc.translateY }, { rotate: `${arc.rotateDeg}deg` }],
+              }}
+            >
+              <PlayingCard card={c} />
+            </View>
+          );
+        })}
       </View>
 
       <Animated.View style={[styles.flyingCard, { left: x, top: y, opacity }]}>

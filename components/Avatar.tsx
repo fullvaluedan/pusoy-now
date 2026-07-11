@@ -1,8 +1,8 @@
 // Social avatar or initials disc for player seats.
 // Shows a real image when available; falls back to a themed initial disc if the image fails.
 // Facebook CDN avatar URLs expire, so a broken image is an expected state, not an edge case.
-import { memo, useState } from 'react';
-import { Image, StyleSheet, Text, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { memo, useEffect, useRef, useState } from 'react';
+import { Animated, Image, StyleSheet, Text, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
 import { colors, typography, withAlpha } from '../lib/theme';
 import { avatarInitial } from '../lib/initials';
 
@@ -35,17 +35,40 @@ export const Avatar = memo(function Avatar({
   style,
 }: AvatarProps) {
   const [imageError, setImageError] = useState(false);
+  // Turn-ring pulse: a gold halo around the avatar that breathes gently while
+  // it is this seat's turn. Driven by one Animated.Value looping between 0
+  // and 1; the effect starts/stops the loop as `active` changes and stops it
+  // on unmount, so no seat leaks a running animation once it is no longer
+  // its turn or the screen goes away.
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!active) {
+      pulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [active, pulse]);
+  const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
+  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
 
   const source = url ? { uri: url } : localSource;
   const showImage = source && !imageError;
 
-  const inner = (
+  const circle = (
     <View
       style={[
         styles.container,
         { width: size, height: size, borderRadius: size / 2 },
         active && styles.active,
-        !framed && style,
       ]}
     >
       {showImage ? (
@@ -60,11 +83,36 @@ export const Avatar = memo(function Avatar({
     </View>
   );
 
-  if (!framed) return inner;
+  if (!framed) {
+    return (
+      <View style={[styles.plainWrap, { width: size, height: size }, style]}>
+        {active && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.turnRing,
+              {
+                width: size + 10,
+                height: size + 10,
+                borderRadius: (size + 10) / 2,
+                opacity: ringOpacity,
+                transform: [{ scale: ringScale }],
+              },
+            ]}
+          />
+        )}
+        {circle}
+      </View>
+    );
+  }
 
   // Framed: an unclipped wrapper holds the ring art (behind, larger than the
   // photo so the ornamental band shows around it) and the circular avatar on
   // top. contain keeps the ring undistorted; pointerEvents none keeps it inert.
+  // The turn-ring pulse (when active) sits between the two, its own circle
+  // slightly larger than the photo -- this is the primary "whose turn is it"
+  // cue now; the seat plate itself only carries a faint wash (see
+  // app/game-local.tsx's oppBoxActive).
   const ring = Math.round(size * FRAME_SCALE);
   return (
     <View style={[styles.frameWrap, { width: ring, height: ring }, style]}>
@@ -75,7 +123,22 @@ export const Avatar = memo(function Avatar({
         accessibilityElementsHidden
         importantForAccessibility="no"
       />
-      {inner}
+      {active && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.turnRing,
+            {
+              width: size + 14,
+              height: size + 14,
+              borderRadius: (size + 14) / 2,
+              opacity: ringOpacity,
+              transform: [{ scale: ringScale }],
+            },
+          ]}
+        />
+      )}
+      {circle}
     </View>
   );
 });
@@ -97,9 +160,25 @@ const styles = StyleSheet.create({
     fontSize: typography.caption.fontSize,
     fontWeight: '700',
   },
+  // Wraps a non-framed avatar so the turn-ring pulse (sized larger than the
+  // photo) has somewhere to live without affecting layout: this box stays
+  // exactly `size` x `size`, same as the old unwrapped avatar, so callers'
+  // spacing/margins (passed via `style`) still land on the right element.
+  plainWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   frameWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Pulsing turn-ring halo. Positioned absolutely so it never affects layout;
+  // centers on its parent (frameWrap/plainWrap) the same way frameRing does,
+  // via the parent's alignItems/justifyContent rather than explicit offsets.
+  turnRing: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: colors.gold,
   },
   frameRing: {
     position: 'absolute',

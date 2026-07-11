@@ -37,7 +37,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../components/Avatar';
 import { AdBanner, AD_BANNER_HEIGHT } from '../components/AdBanner';
 import { DealingAnimation } from '../components/DealingAnimation';
-import { OpponentCardStack, PlayingCard, CARD_WIDTH, CARD_HEIGHT } from '../components/PlayingCard';
+import {
+  OpponentCardStack,
+  PlayingCard,
+  CARD_WIDTH,
+  CARD_HEIGHT,
+  fanRowLayout,
+  fanCardArc,
+  FAN_LIFT_MAX,
+} from '../components/PlayingCard';
 import { canPlay, detectCombo } from '../lib/pusoy/combo';
 import { SUIT_VALUE } from '../lib/pusoy/deck';
 import { findLegalPlays } from '../lib/pusoy/bot';
@@ -260,8 +268,15 @@ function SeatPlate({
         <SeatChip passed={passed} place={place} />
       </View>
       <View style={styles.oppStackRow}>
-        <OpponentCardStack count={count} small />
-        <Text style={styles.oppCount}>{count}</Text>
+        <View style={styles.oppStackWrap}>
+          <OpponentCardStack count={count} small />
+          {/* Compact card-count chip, overlapping the stack's bottom-right
+              corner -- the at-a-glance "how many cards do they hold" cue
+              mobile card games use instead of a bare number. */}
+          <View style={styles.cardCountBadge}>
+            <Text style={styles.cardCountBadgeText}>{count}</Text>
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -272,10 +287,14 @@ function SeatPlate({
 // felt and wasted a full bar of vertical space.
 function TopBar({
   title,
+  turnLabel,
   onBack,
   onSkip,
 }: {
   title: string;
+  // Compact, persistent turn/round status chip under the title. Optional so
+  // the finished/loading screens (which reuse TopBar without it) stay as-is.
+  turnLabel?: string;
   onBack: () => void;
   onSkip?: () => void;
 }) {
@@ -284,7 +303,14 @@ function TopBar({
       <Pressable onPress={onBack} hitSlop={12} style={styles.topBarSide}>
         <Text style={styles.topBarBack}>{'←'}</Text>
       </Pressable>
-      <Text style={styles.topBarTitle}>{title}</Text>
+      <View style={styles.topBarCenter}>
+        <Text style={styles.topBarTitle}>{title}</Text>
+        {turnLabel ? (
+          <View style={styles.turnChip}>
+            <Text style={styles.turnChipText} numberOfLines={1}>{turnLabel}</Text>
+          </View>
+        ) : null}
+      </View>
       <View style={[styles.topBarSide, styles.topBarRight]}>
         {onSkip ? (
           <Pressable style={styles.btnSmall} onPress={onSkip}>
@@ -677,12 +703,19 @@ export default function LocalGameScreen() {
   // The play immediately before the current one, ghosted under the pool for a
   // sense of the discards piling up.
   const prevPlay = game.trickHistory[1];
+  // Compact, persistent top-center status: whose turn it is right now. The
+  // gold "Your turn" banner over the hand only appears on the human's own
+  // turn; this chip is always visible so the table never feels ambiguous.
+  const turnLabel = isMyTurn
+    ? 'Your turn'
+    : `${seatName(game, currentSeat, humanDisplayName)}'s turn`;
 
   return (
     <TablePanel>
       <View style={styles.tableColumn}>
         <TopBar
           title={`${LEVEL_LABEL[game.level]} table`}
+          turnLabel={turnLabel}
           onBack={() => router.replace('/')}
           onSkip={onSkip}
         />
@@ -739,32 +772,6 @@ export default function LocalGameScreen() {
               </Text>
             </View>
           )}
-          {/* Play / Pass sit directly under the pool. Pass is the bright red
-              action; Play is to its left. */}
-          <View style={styles.centerActions}>
-            <Pressable
-              style={[styles.btn, styles.btnPrimary, (!isMyTurn || !selLegal) && styles.btnDisabled]}
-              disabled={!isMyTurn || !selLegal}
-              onPress={onPlay}
-            >
-              <Text style={[styles.btnText, styles.btnPrimaryText]}>Play</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.btn,
-                styles.btnPass,
-                (!isMyTurn || lead === null) && styles.btnDisabled,
-              ]}
-              disabled={!isMyTurn || lead === null}
-              onPress={onPass}
-            >
-              <Text style={styles.btnText}>Pass</Text>
-            </Pressable>
-          </View>
-          {autoPassing && (
-            <Text style={styles.autoPass}>No playable hand, passing…</Text>
-          )}
-          {error && <Text style={styles.error}>{error}</Text>}
         </View>
 
       {/* Bottom: the human's seat + hand. */}
@@ -822,6 +829,41 @@ export default function LocalGameScreen() {
           onDropToCenter={playByDrag}
           dropEnabled={isMyTurn && lead !== null}
         />
+
+        {(autoPassing || error) && (
+          <View style={styles.feedbackRow}>
+            {autoPassing && (
+              <Text style={styles.autoPass}>No playable hand, passing…</Text>
+            )}
+            {error && <Text style={styles.error}>{error}</Text>}
+          </View>
+        )}
+
+        {/* Primary action anchored in the bottom-right thumb zone -- the
+            natural spot for a right-handed one-thumb grip. Pass sits beside
+            it (to its left) and keeps the loud danger red; Play is gold and
+            primary. Sort and Skip stay put, above, in the hand toolbar / top
+            bar respectively. */}
+        <View style={styles.bottomActionsRow}>
+          <Pressable
+            style={[
+              styles.btn,
+              styles.btnPass,
+              (!isMyTurn || lead === null) && styles.btnDisabled,
+            ]}
+            disabled={!isMyTurn || lead === null}
+            onPress={onPass}
+          >
+            <Text style={styles.btnText}>Pass</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.btn, styles.btnPrimary, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+            disabled={!isMyTurn || !selLegal}
+            onPress={onPlay}
+          >
+            <Text style={[styles.btnText, styles.btnPrimaryText]}>Play</Text>
+          </Pressable>
+        </View>
       </View>
       </View>
     </TablePanel>
@@ -856,20 +898,18 @@ function HandRow({
   // Capped to the table column so the fan stays composed on wide viewports.
   const { width: windowWidth } = useWindowDimensions();
   const width = Math.min(windowWidth, layout.maxTableWidth);
-  const SIDE_MARGIN = 12;
-  // Total fan width: card width + (n-1) * stride. We pick a stride so the
-  // fan fills the screen minus side margins.
-  const available = width - SIDE_MARGIN * 2;
-  const stride = hand.length > 1 ? Math.min(CARD_WIDTH, (available - CARD_WIDTH) / (hand.length - 1)) : 0;
-  const totalWidth = CARD_WIDTH + stride * (hand.length - 1);
-  // Center the fan horizontally inside the screen.
-  const startX = (width - totalWidth) / 2;
+  // Horizontal spacing (stride + centering) is shared with DealingAnimation
+  // via fanRowLayout so the dealt cards land exactly where this fan renders
+  // them -- see components/PlayingCard.tsx.
+  const { stride, startX } = fanRowLayout(hand.length, width);
   // Fan container height must derive from card HEIGHT, not width: each card
-  // sits at `top: 12` (DraggableCard) so a resting card's bottom edge is at
-  // 12 + CARD_HEIGHT; the +24 leaves headroom below for the card's shadow and
-  // for a selected card's -16px lift, so nothing in the fan is ever clipped.
+  // sits at `top: 12 + FAN_LIFT_MAX` (DraggableCard) so a resting card's
+  // bottom edge is at most `12 + FAN_LIFT_MAX + CARD_HEIGHT`; the +24 leaves
+  // headroom below for the card's shadow and for a selected card's -16px
+  // lift, and the extra FAN_LIFT_MAX accounts for the arc's own lift, so
+  // nothing in the fan is ever clipped.
   return (
-    <View style={[styles.handFan, { height: CARD_HEIGHT + 24 }]}>
+    <View style={[styles.handFan, { height: CARD_HEIGHT + 24 + FAN_LIFT_MAX }]}>
       {hand.map((c, i) => (
         <DraggableCard
           key={c.id}
@@ -919,6 +959,10 @@ function DraggableCard({
   const [dragging, setDragging] = useState(false);
   // The "rest" position for this card in the fan.
   const restX = startX + index * stride;
+  // Shallow-arc fan offset for this card's slot: edges lift up and tilt
+  // outward, center sits at the baseline. Shared with the dealing animation
+  // (see components/PlayingCard.tsx) so cards never jump when dealing ends.
+  const arc = fanCardArc(index, total);
 
   // Claim the gesture on touch-start (not via a child Pressable) so a drag
   // works on the very first press, even on a card that isn't selected yet. On
@@ -967,8 +1011,17 @@ function DraggableCard({
       style={{
         position: 'absolute',
         left: restX,
-        top: 12,
-        transform: [{ translateX: pan.x }, { translateY: pan.y }],
+        // Baseline top is inset by FAN_LIFT_MAX so the arc's upward lift
+        // (translateY below, 0..-FAN_LIFT_MAX) never rises above where the
+        // old flat fan used to sit -- same headroom, just distributed by
+        // the arc instead of being uniform.
+        top: 12 + FAN_LIFT_MAX,
+        transform: [
+          { translateY: arc.translateY },
+          { rotate: `${arc.rotateDeg}deg` },
+          { translateX: pan.x },
+          { translateY: pan.y },
+        ],
         zIndex: dragging ? 100 : index,
       }}
       {...responder.panHandlers}
@@ -1097,14 +1150,29 @@ const styles = StyleSheet.create({
   topBarSide: { width: 116, justifyContent: 'center' },
   topBarRight: { alignItems: 'flex-end' },
   topBarBack: { color: colors.textOnFelt, fontSize: 22, fontWeight: '700' },
+  topBarCenter: { flex: 1, alignItems: 'center', gap: 3 },
   topBarTitle: {
-    flex: 1,
     textAlign: 'center',
     color: colors.textOnFeltMuted,
     fontSize: typography.caption.fontSize,
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  // Compact, persistent turn-status chip, always visible under the title
+  // (unlike the gold "Your turn" banner over the hand, which only shows on
+  // the human's own turn).
+  turnChip: {
+    backgroundColor: withAlpha(colors.black, 0.25),
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 1,
+    borderRadius: 999,
+    maxWidth: 180,
+  },
+  turnChipText: {
+    color: colors.textOnFelt,
+    fontSize: typography.tiny.fontSize,
+    fontWeight: '700',
   },
 
   // Opponents — three seat plates arcing around the top of the table.
@@ -1126,17 +1194,35 @@ const styles = StyleSheet.create({
   },
   // The middle seat sits higher, arcing the row around the table's far edge.
   oppBoxRaised: { marginTop: 0 },
+  // The avatar's own turn-ring (see components/Avatar.tsx) now carries most of
+  // the "whose turn" signal, so the plate itself only needs a whisper of gold
+  // rather than a full wash + border.
   oppBoxActive: {
-    backgroundColor: withAlpha(colors.gold, 0.25),
+    backgroundColor: withAlpha(colors.gold, 0.08),
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: withAlpha(colors.gold, 0.6),
   },
   oppBoxDone: { opacity: 0.55 },
   oppAvatarMargin: { marginBottom: spacing.sm },
   oppNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
   oppName: { color: colors.textOnFelt, fontSize: 15, fontWeight: '700' },
-  oppStackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
-  oppCount: { color: colors.textOnFelt, fontSize: 24, fontWeight: '700' },
+  oppStackRow: { flexDirection: 'row', alignItems: 'center' },
+  oppStackWrap: { position: 'relative' },
+  cardCountBadge: {
+    position: 'absolute',
+    right: -6,
+    bottom: -2,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    backgroundColor: colors.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.felt,
+  },
+  cardCountBadgeText: { color: colors.felt, fontSize: 11, fontWeight: '800' },
 
   // Seat status chips: PASS while sitting out, place medal once out of cards.
   seatChip: {
@@ -1246,12 +1332,20 @@ const styles = StyleSheet.create({
     borderTopColor: withAlpha(colors.white, 0.1),
   },
   actionsInner: { flexDirection: 'row', gap: spacing.md - 2 },
-  // Play / Pass under the center pool.
-  centerActions: {
+  // Play / Pass anchored bottom-right, under the hand -- the thumb zone for a
+  // one-handed portrait grip. Play (primary, gold) sits in the outer corner;
+  // Pass (danger red) sits beside it.
+  bottomActionsRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
     gap: spacing.md,
-    marginTop: spacing.md,
+    paddingHorizontal: spacing.lg - 4,
+    marginTop: spacing.sm,
+  },
+  feedbackRow: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg - 4,
   },
   // Play / Pass / Sort share one height + radius family so they read as one
   // button set; Sort stays visually secondary via smaller padding/font.

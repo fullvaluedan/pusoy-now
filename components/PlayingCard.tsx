@@ -30,6 +30,53 @@ const CARD_H = 92;
 export const CARD_WIDTH = CARD_W;
 export const CARD_HEIGHT = CARD_H;
 
+// Shared "held fan" hand-layout geometry. Both the interactive hand (HandRow
+// in app/game-local.tsx) and the dealing animation use these so a dealt card
+// lands in the exact spot -- horizontal position, tilt, and lift -- that the
+// live hand renders it in once dealing ends. Keeping the math in one place
+// (instead of duplicating it in both files) is what keeps them in sync; if
+// they drifted, the hand would visibly jump/flatten when the deal finishes.
+
+// Horizontal spacing: the stride between adjacent card left-edges, and the
+// x-offset of the first card, centering the whole fan inside `viewportWidth`
+// with `sideMargin` of breathing room on each side. Stride shrinks toward
+// zero (more overlap) as `total` grows so the whole hand always fits, but is
+// capped so a full 13-card hand keeps ~65-75% overlap between neighbors
+// instead of spreading too thin on a narrow phone.
+export function fanRowLayout(
+  total: number,
+  viewportWidth: number,
+  sideMargin = 28,
+): { stride: number; startX: number } {
+  const available = viewportWidth - sideMargin * 2;
+  const fitStride = total > 1 ? (available - CARD_WIDTH) / (total - 1) : 0;
+  const stride = total > 1 ? Math.min(CARD_WIDTH, fitStride) : 0;
+  const totalWidth = CARD_WIDTH + stride * Math.max(0, total - 1);
+  const startX = (viewportWidth - totalWidth) / 2;
+  return { stride, startX };
+}
+
+// Max upward lift (px) of the edge cards in the arc, relative to the center
+// card. Callers should inset their resting `top` by this amount so the
+// highest point of the arc (the edges) lines up with the flat fan's old
+// resting position, instead of poking above it.
+export const FAN_LIFT_MAX = 10;
+const FAN_ROTATE_MAX_DEG = 9;
+
+// Per-card arc offset for card `index` of `total`: a shallow "smile" curve
+// where the center card sits at the baseline and both edges lift up
+// (negative translateY) and tilt outward a few degrees, like a fan held in
+// the hand. Symmetric around the center card.
+export function fanCardArc(index: number, total: number): { translateY: number; rotateDeg: number } {
+  if (total <= 1) return { translateY: 0, rotateDeg: 0 };
+  const center = (total - 1) / 2;
+  const t = (index - center) / center; // -1 (left edge) .. 0 (center) .. 1 (right edge)
+  return {
+    translateY: -FAN_LIFT_MAX * t * t,
+    rotateDeg: FAN_ROTATE_MAX_DEG * t,
+  };
+}
+
 interface Props {
   card?: Card;
   faceDown?: boolean;
