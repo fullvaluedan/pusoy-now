@@ -1,12 +1,13 @@
-// Play online: host setup. Pick a seat count and a bot difficulty (used to
-// fill any seats nobody joins by start), then create a room and land in its
-// lobby. A guest gets a lazy anonymous session on mount (R2) rather than a
-// sign-in wall -- a room only needs *some* session behind the host seat, not
-// necessarily a real account.
+// Play online: two paths. "Quick match" drops the player into the 30-second
+// matchmaking waiting room (app/matchmaking.tsx); "Play with friends" is the
+// existing host setup -- pick a seat count and a bot difficulty (used to fill
+// any seats nobody joins by start), then create a room and land in its lobby.
+// A guest gets a lazy anonymous session on mount (R2) rather than a sign-in
+// wall -- neither path needs a real account, just *some* session behind a seat.
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button, Header, ScreenContainer } from '../components/ui';
+import { Button, Card, Header, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { getLocalGuestName } from '../lib/guest';
@@ -62,40 +63,52 @@ export default function PlayOnline() {
 
       {isAnonymous && guestName ? <Text style={styles.guestLine}>Playing as {guestName}</Text> : null}
 
-      <Text style={styles.label}>Seats</Text>
-      <View style={styles.optionRow}>
-        {SEAT_OPTIONS.map((n) => (
-          <OptionChip key={n} label={String(n)} selected={seats === n} onPress={() => setSeats(n)} />
-        ))}
-      </View>
+      <Card style={styles.card}>
+        <Text style={styles.cardTitle}>Quick match</Text>
+        <Text style={styles.cardSubtitle}>Play against people online. 30 seconds max wait.</Text>
+        <Button title="Find a game" onPress={() => router.push('/matchmaking')} style={styles.cardBtn} />
+      </Card>
 
-      <Text style={styles.label}>Bot difficulty</Text>
-      <Text style={styles.hint}>Fills any seats nobody has joined by the time you start.</Text>
-      <View style={styles.optionRow}>
-        {LEVEL_OPTIONS.map((o) => (
-          <OptionChip
-            key={o.level}
-            label={o.label}
-            selected={botLevel === o.level}
-            onPress={() => setBotLevel(o.level)}
-          />
-        ))}
-      </View>
+      <Card style={styles.card}>
+        <Text style={styles.cardTitle}>Play with friends</Text>
+        <Text style={styles.cardSubtitle}>Host a room and share the invite link.</Text>
 
-      {error ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
+        <Text style={styles.label}>Seats</Text>
+        <View style={styles.optionRow}>
+          {SEAT_OPTIONS.map((n) => (
+            <OptionChip key={n} label={String(n)} selected={seats === n} onPress={() => setSeats(n)} />
+          ))}
         </View>
-      ) : null}
 
-      <Button
-        title="Create room"
-        subtitle={`${seats} seats`}
-        align="left"
-        loading={creating}
-        onPress={() => void onCreate()}
-        style={styles.createBtn}
-      />
+        <Text style={styles.label}>Bot difficulty</Text>
+        <Text style={styles.hint}>Fills any seats nobody has joined by the time you start.</Text>
+        <View style={styles.optionRow}>
+          {LEVEL_OPTIONS.map((o) => (
+            <OptionChip
+              key={o.level}
+              label={o.label}
+              selected={botLevel === o.level}
+              onPress={() => setBotLevel(o.level)}
+            />
+          ))}
+        </View>
+
+        {error ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
+        <Button
+          title="Create room"
+          subtitle={`${seats} seats`}
+          variant="secondary"
+          align="left"
+          loading={creating}
+          onPress={() => void onCreate()}
+          style={styles.createBtn}
+        />
+      </Card>
     </ScreenContainer>
   );
 }
@@ -115,6 +128,10 @@ function OptionChip({ label, selected, onPress }: { label: string; selected: boo
 
 const styles = StyleSheet.create({
   guestLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  card: { marginBottom: spacing.lg },
+  cardTitle: { ...typography.subheading, color: colors.felt },
+  cardSubtitle: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.md },
+  cardBtn: { marginTop: spacing.xs },
   label: { ...typography.label, color: colors.felt, fontWeight: '700', marginTop: spacing.md, marginBottom: spacing.sm },
   hint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
   optionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
