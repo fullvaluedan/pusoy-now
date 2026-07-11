@@ -9,8 +9,18 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { makeAuth, trustedOriginsFor, type Env } from './auth';
+import { d1Store, isPremium, processStripeEvent, requireUserId } from './entitlements';
+import { constructEvent, createCheckout, stripeConfigured } from './stripe';
 
 const app = new Hono<{ Bindings: Env }>();
+
+// The web origin to send a checkout return to: the request's Origin if it is
+// trusted, else the first configured web origin, else the Worker's own URL.
+function webOrigin(env: Env, requestOrigin: string | undefined): string {
+  const trusted = trustedOriginsFor(env).filter((o) => o.startsWith('http'));
+  if (requestOrigin && trusted.includes(requestOrigin)) return requestOrigin;
+  return trusted.find((o) => !o.includes('localhost')) ?? trusted[0] ?? env.BETTER_AUTH_URL ?? '';
+}
 
 // Reflect only trusted origins, and only for the auth API. `credentials: true`
 // is required for the session cookie to be sent and stored by the browser.
@@ -34,5 +44,55 @@ app.get('/health', (c) => c.json({ ok: true }));
 // better-auth owns sign-up / sign-in / verify / reset / callbacks under this
 // prefix. Built per request because the D1 binding lives on env.
 app.on(['GET', 'POST'], '/api/auth/*', (c) => makeAuth(c.env).handler(c.req.raw));
+
+// --- Entitlements + Stripe (U5) -------------------------------------------
+
+// The client reads this on auth load to know free vs premium. Session-gated.
+app.get('/api/entitlement', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const until = await d1Store(c.env.DB).getPremiumUntil(userId);
+  return c.json({ premium: isPremium(until, Date.now()), premiumUntil: until });
+});
+
+// Create a Stripe Checkout Session for the yearly no-ads offer (web only).
+app.post('/api/stripe/checkout', async (c) => {
+  if (!stripeConfigured(c.env)) return c.json({ error: 'not configured' }, 503);
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const session = await makeAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+  try {
+    const url = await createCheckout(c.env, {
+      userId,
+      email: session?.user?.email,
+      origin: webOrigin(c.env, c.req.header('origin')),
+    });
+    return c.json({ url });
+  } catch (e) {
+    return c.json({ error: 'checkout failed', message: (e as Error).message }, 502);
+  }
+});
+
+// Stripe calls this. Verify the signature, then flip the entitlement exactly
+// once (idempotent on retry). The raw body is required for verification, so it
+// is read as text and never parsed before the signature check.
+app.post('/api/stripe/webhook', async (c) => {
+  if (!stripeConfigured(c.env) || !c.env.STRIPE_WEBHOOK_SECRET) {
+    return c.json({ error: 'not configured' }, 503);
+  }
+  const signature = c.req.header('stripe-signature');
+  if (!signature) return c.json({ error: 'missing signature' }, 400);
+
+  const payload = await c.req.text();
+  let event;
+  try {
+    event = await constructEvent(c.env, payload, signature);
+  } catch {
+    return c.json({ error: 'bad signature' }, 400);
+  }
+
+  const { applied } = await processStripeEvent(d1Store(c.env.DB), event, Date.now());
+  return c.json({ received: true, applied });
+});
 
 export default app;

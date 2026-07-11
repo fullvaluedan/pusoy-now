@@ -34,6 +34,13 @@ export interface Env {
   EMAIL_FROM?: string;
   // --- U2: Turnstile captcha (managed widget) -------------------------------
   TURNSTILE_SECRET_KEY?: string;
+  // --- U5: Stripe (web checkout for the $9.99/year no-ads offer) -------------
+  // All secret; set with `wrangler secret put`. Until they exist the money
+  // endpoints report "not configured" and the paywall stays in test/coming-soon
+  // mode. STRIPE_PRICE_ID is the yearly price (a user prerequisite).
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PRICE_ID?: string;
 }
 
 // The app's own deep-link scheme is always trusted: sessions must survive the
