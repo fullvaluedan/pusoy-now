@@ -2,6 +2,19 @@
 
 This runbook walks through shipping the web app to Cloudflare Pages so invite links (`/join/CODE`) are real URLs.
 
+## 0. Apply D1 migrations to the REMOTE database (do this first)
+
+Migrations run locally for tests but are NOT auto-applied to the deployed D1.
+After any new migration lands, run:
+
+```bash
+cd server
+npx wrangler d1 migrations apply pusoy-now --remote
+```
+
+Skipping this makes usernames, friends, ranking, and stats sync return 500 on
+the live Worker even though the code is correct (the tables do not exist yet).
+
 ## 1. Build the static web export
 
 ```bash
