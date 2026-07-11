@@ -4,8 +4,12 @@ Accounts run on the Cloudflare auth Worker in `server/` (better-auth on D1),
 deployed at:
 
 ```
-https://pusoy-now-auth.fullvaluedan.workers.dev
+https://api.prends.app
 ```
+
+(U5: this used to be the `pusoy-now-auth.fullvaluedan.workers.dev`
+workers.dev URL; the Worker now answers at the `api.prends.app` custom
+domain instead. The Worker's internal name, `pusoy-now-auth`, is unchanged.)
 
 Email/password works today. Google and Facebook sign-in are wired but stay
 disabled until you register an OAuth app with each provider and set its
@@ -19,11 +23,28 @@ are never committed. After setting or changing a secret, redeploy:
 
 ## Redirect URIs (register these exactly)
 
-- Google: `https://pusoy-now-auth.fullvaluedan.workers.dev/api/auth/callback/google`
-- Facebook: `https://pusoy-now-auth.fullvaluedan.workers.dev/api/auth/callback/facebook`
+- Google: `https://api.prends.app/api/auth/callback/google`
+- Facebook: `https://api.prends.app/api/auth/callback/facebook`
 
-The app's own deep-link scheme `pusoynow://` and the web origin are already in
-the Worker's `trustedOrigins`; you do not register those with the providers.
+**U5 operator action required:** these redirect URIs changed when the Worker
+moved from the workers.dev subdomain to `api.prends.app`. The OLD URIs
+(`https://pusoy-now-auth.fullvaluedan.workers.dev/api/auth/callback/<provider>`)
+must be re-registered as the NEW ones above in both the Google Cloud Console
+and Meta for Developers — see the provider-specific steps below for exactly
+where. Until both consoles are updated, OAuth sign-in on the new domain will
+fail with a redirect_uri_mismatch error even though the Worker itself is
+correctly configured. Leaving the old URI registered alongside the new one
+during the transition is harmless (Google/Facebook allow multiple redirect
+URIs per app) and gives you a rollback path.
+
+After the Worker's public URL changes, the app must also be **re-exported**
+(`npm run export:web`) and redeployed — `EXPO_PUBLIC_AUTH_URL` (and its
+`https://api.prends.app` fallback in `lib/authClient.ts`) bakes into the web
+bundle at export time, so an already-exported `dist/` still points at the
+old Worker URL until it is rebuilt. See `docs/DEPLOY.md` step 5.
+
+The app's own deep-link scheme and the web origin are already in the
+Worker's `trustedOrigins`; you do not register those with the providers.
 
 ## Google
 
@@ -82,7 +103,7 @@ Set the same way (`wrangler secret put`), each optional until you need it:
 
 ```bash
 # Which providers are live right now:
-curl https://pusoy-now-auth.fullvaluedan.workers.dev/api/providers
+curl https://api.prends.app/api/providers
 ```
 
 Once a provider's secrets are set and deployed, its id appears in that list and

@@ -18,8 +18,7 @@ import * as SecureStore from 'expo-secure-store';
 
 // The deployed auth Worker. Overridable via env so a local `wrangler dev` or a
 // staging Worker can be pointed at without touching code.
-export const AUTH_BASE_URL =
-  process.env.EXPO_PUBLIC_AUTH_URL ?? 'https://pusoy-now-auth.fullvaluedan.workers.dev';
+export const AUTH_BASE_URL = process.env.EXPO_PUBLIC_AUTH_URL ?? 'https://api.prends.app';
 
 const isWeb = Platform.OS === 'web';
 

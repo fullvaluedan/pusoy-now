@@ -142,8 +142,13 @@ export function authOptions(env: Env): BetterAuthOptions {
       max: 100,
     },
     advanced: {
-      // The app is served cross-site from the Worker origin, so session cookies
-      // need SameSite=None; Secure to ride along on fetch/XHR.
+      // U5: web (prends.app) and API (api.prends.app) now share a registrable
+      // domain, which makes browser requests same-site — SameSite=Lax would be
+      // sufficient and is the better CSRF posture. This stays at `none` for now
+      // ONLY because pusoy-now.pages.dev (a genuinely cross-site origin) must
+      // keep working during the domain transition (TRUSTED_ORIGINS in
+      // wrangler.toml carries both). Once pages.dev is retired and dropped from
+      // TRUSTED_ORIGINS, flip this to `sameSite: 'lax'`.
       defaultCookieAttributes: {
         sameSite: 'none',
         secure: true,
