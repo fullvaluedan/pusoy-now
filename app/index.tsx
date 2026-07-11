@@ -85,6 +85,15 @@ export default function Home() {
         />
 
         <Button
+          title="Friends"
+          subtitle="Add friends and see the ranking"
+          variant="ghost"
+          align="left"
+          onPress={() => router.push('/friends')}
+          style={styles.menuItem}
+        />
+
+        <Button
           title="Leaderboard"
           variant="ghost"
           align="left"
