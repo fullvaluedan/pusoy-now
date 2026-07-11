@@ -21,6 +21,42 @@ PALETTE = (
 )
 
 ASSETS = [
+    # --- Round 4 monetization art ---
+    {
+        "name": "paywall-hero",
+        "size": "1024x1024",
+        "background": "opaque",
+        "prompt": (
+            "Friendly premium upgrade illustration for a card game: a fanned "
+            "hand of classic playing cards with a gold crown resting on top, "
+            "a small burst of sparkle accents around it, on a warm cream "
+            "background. Celebratory but tasteful, flat vector print style, "
+            "no text, no gradients, generous negative space. " + PALETTE
+        ),
+    },
+    {
+        "name": "premium-badge",
+        "size": "1024x1024",
+        "background": "opaque",
+        "prompt": (
+            "A single gold crown emblem badge, simple and bold, centered on "
+            "a plain warm cream background, thin ink outline, small red gem "
+            "accent. Flat vector, crisp, no text, no gradients, readable at "
+            "small size. " + PALETTE
+        ),
+    },
+    {
+        "name": "ad-placeholder",
+        "size": "1536x1024",
+        "background": "opaque",
+        "prompt": (
+            "Wide house-ad banner placeholder for a card game: a subtle "
+            "pattern of small suit pips (spade, heart, club, diamond) on a "
+            "deep forest green field with a thin gold inner border, leaving "
+            "a clear empty center band. Calm, unobtrusive, flat vector, no "
+            "text, no gradients. " + PALETTE
+        ),
+    },
     {
         "name": "card-back",
         "size": "1024x1536",
