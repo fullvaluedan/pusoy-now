@@ -37,3 +37,50 @@ export function pickDisplayName(user: AuthUser): string {
 export function pickAvatarUrl(user: AuthUser): string | null {
   return str(user.image);
 }
+
+// --- Username (client mirror of the Worker's rules) ------------------------
+//
+// The Worker (server/src/profile.ts) is the authority, but the claim field
+// mirrors its rules so a bad handle is rejected inline before any network call.
+// Keep these two in sync.
+
+export const USERNAME_MIN = 3;
+export const USERNAME_MAX = 20;
+
+export type UsernameError = 'length' | 'charset' | 'reserved';
+
+const RESERVED_USERNAMES = new Set([
+  'admin', 'administrator', 'root', 'system', 'support', 'help', 'api',
+  'moderator', 'mod', 'staff', 'official', 'pusoy', 'pusoynow', 'owner',
+  'me', 'you', 'null', 'undefined',
+]);
+
+export type UsernameValidation =
+  | { ok: true; username: string }
+  | { ok: false; reason: UsernameError };
+
+// Normalize (trim + lowercase) then validate. Returns the canonical form.
+export function validateUsernameClient(raw: string): UsernameValidation {
+  const username = raw.trim().toLowerCase();
+  if (username.length < USERNAME_MIN || username.length > USERNAME_MAX) {
+    return { ok: false, reason: 'length' };
+  }
+  if (!/^[a-z0-9_]+$/.test(username)) {
+    return { ok: false, reason: 'charset' };
+  }
+  if (RESERVED_USERNAMES.has(username)) {
+    return { ok: false, reason: 'reserved' };
+  }
+  return { ok: true, username };
+}
+
+export function usernameErrorMessage(reason: UsernameError): string {
+  switch (reason) {
+    case 'length':
+      return `Username must be ${USERNAME_MIN} to ${USERNAME_MAX} characters.`;
+    case 'charset':
+      return 'Use only lowercase letters, numbers, and underscores.';
+    case 'reserved':
+      return 'That username is not available.';
+  }
+}

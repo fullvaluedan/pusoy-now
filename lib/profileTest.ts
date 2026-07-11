@@ -6,7 +6,7 @@
 // node harness never imports react-native. Same minimal ok() harness as the
 // engine tests. Run: tsx lib/profileTest.ts (or via npm test)
 
-import { pickAvatarUrl, pickDisplayName, type AuthUser } from './profile';
+import { pickAvatarUrl, pickDisplayName, validateUsernameClient, type AuthUser } from './profile';
 
 let pass = 0;
 let fail = 0;
@@ -44,6 +44,25 @@ function main() {
   // Type-level anchor: the helpers accept a bare AuthUser subset.
   const u: AuthUser = { name: 'Test', email: 't@e.co', image: null };
   ok('AuthUser shape is accepted', pickDisplayName(u) === 'Test' && pickAvatarUrl(u) === null);
+
+  // --- username client mirror ----------------------------------------------
+  ok('a clean handle validates', validateUsernameClient('ada_42').ok === true);
+  ok('mixed case is lowercased', (() => {
+    const r = validateUsernameClient('AdaLovelace');
+    return r.ok && r.username === 'adalovelace';
+  })());
+  ok('too short is rejected as length', (() => {
+    const r = validateUsernameClient('ab');
+    return !r.ok && r.reason === 'length';
+  })());
+  ok('spaces are rejected as charset', (() => {
+    const r = validateUsernameClient('a b');
+    return !r.ok && r.reason === 'charset';
+  })());
+  ok('a reserved handle is rejected', (() => {
+    const r = validateUsernameClient('admin');
+    return !r.ok && r.reason === 'reserved';
+  })());
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
