@@ -1349,12 +1349,14 @@ const styles = StyleSheet.create({
   },
   // Play / Pass / Sort share one height + radius family so they read as one
   // button set; Sort stays visually secondary via smaller padding/font.
+  // v2: pill corners (radii.pill) to match the full-width pill buttons used
+  // everywhere else in the app; cosmetic only, nothing else here changed.
   btn: {
     backgroundColor: colors.feltLight,
     minHeight: 44,
     paddingVertical: spacing.sm + 4,
     paddingHorizontal: spacing.xxl,
-    borderRadius: radii.md,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1371,7 +1373,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingVertical: spacing.xs + 2,
     paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
+    borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: withAlpha(colors.white, 0.3),
     alignItems: 'center',
