@@ -59,3 +59,19 @@ Worker: pusoy-now-auth at https://api.prends.app (workers.dev kept alive for tra
 | 28 | Apple sign-in feature detection | PASS (config-off) | /api/providers returns [] until APPLE_* secrets are set; button hidden accordingly |
 
 Still pending: #18 (two-account live game: WS redaction + LEFT TABLE drop-out label), Apple web round-trip + iOS TestFlight flow (needs portal secrets + first build), OAuth redirect re-registration once Google/Facebook credentials are actually provisioned.
+
+## Round 7 (guest play + matchmaking, live on prends.app) — 2026-07-11
+
+Worker: api.prends.app (GameRoom + new Matchmaker DOs, migrations 0006/0007). Web: prends.app.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| 29 | Anonymous sign-in live | PASS | POST /api/auth/sign-in/anonymous -> session + generated name (NimbleMongoose-2520) + isAnonymous |
+| 30 | Guest ranks under random name | PASS | /api/friends/ranking with anon session shows name, no username |
+| 31 | Anonymous account fully deletable | PASS | DELETE /api/account as anon -> {deleted:true}; both test guests purged |
+| 32 | Presence beat public + validated | PASS | valid UUID -> {count}; malformed -> 400; live chip shows "1 online" on prends.app |
+| 33 | Matchmaking WS session-gated | PASS | upgrade with session -> 101; solo queue -> 30s countdown -> auto-started room vs 3 expert bots (YCSC4C) with turn timer, no host action |
+| 34 | Custom /api routes reachable from real browsers | PASS (after fix) | authClient.$fetch joined paths onto /api/auth (all custom routes 404ed in-browser; only curl checks ever passed). Fixed with apiUrl() absolute URLs; entitlement + ranking 200 from prends.app |
+| 35 | ensureSession never double-mints guests | PASS (after fix) | pre-hydration race called signIn.anonymous over an existing anon session (400 dead-end); now getSession-first with race recovery |
+
+Round 7 lesson repeated from Rounds 5/6: endpoint checks MUST run in a real browser through the real bundle. curl passes are necessary, not sufficient.
