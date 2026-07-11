@@ -148,9 +148,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (!ensureSessionOnceRef.current) {
     ensureSessionOnceRef.current = singleFlight(async (): Promise<EnsureSessionResult> => {
       if (sessionRef.current) return 'ok';
+      // The React session state may not have hydrated yet (screens call this on
+      // mount), so confirm against the server before minting a new anonymous
+      // user: a cookie-carrying getSession is authoritative, and calling
+      // signIn.anonymous over an existing anonymous session is a 400.
+      try {
+        const existing = await authClient.getSession();
+        if (existing?.data?.session) return 'ok';
+      } catch {
+        // network hiccup; fall through and let signIn.anonymous decide
+      }
       try {
         const res = (await authClient.signIn.anonymous()) as ClientResponse;
-        if (res?.error) return 'failed';
+        if (res?.error) {
+          // Already-anonymous race lost anyway: re-check before failing so the
+          // user never sees a dead-end error while holding a valid session.
+          const after = await authClient.getSession().catch(() => null);
+          return after?.data?.session ? 'ok' : 'failed';
+        }
       } catch {
         return 'failed';
       }
