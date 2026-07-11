@@ -11,6 +11,7 @@ import { cors } from 'hono/cors';
 import { makeAuth, trustedOriginsFor, type Env } from './auth';
 import { d1Store, isPremium, processStripeEvent, requireUserId } from './entitlements';
 import { constructEvent, createCheckout, stripeConfigured } from './stripe';
+import { configuredProviderIds } from './social';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -40,6 +41,10 @@ app.use('/api/auth/*', (c, next) => {
 // the D1 binding is present so a broken deploy is obvious from the response.
 app.get('/', (c) => c.json({ service: 'pusoy-now-auth', ok: true, db: Boolean(c.env.DB) }));
 app.get('/health', (c) => c.json({ ok: true }));
+
+// Which social providers are fully configured, so the client can show only the
+// buttons that will work (and leave the rest disabled) without guessing.
+app.get('/api/providers', (c) => c.json({ providers: configuredProviderIds(c.env) }));
 
 // better-auth owns sign-up / sign-in / verify / reset / callbacks under this
 // prefix. Built per request because the D1 binding lives on env.

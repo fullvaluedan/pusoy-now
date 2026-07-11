@@ -15,6 +15,7 @@ import type { BetterAuthOptions } from 'better-auth';
 import { captcha } from 'better-auth/plugins';
 import { D1Dialect } from 'kysely-d1';
 import { sendAuthEmail } from './email';
+import { socialProvidersFor } from './social';
 
 export interface Env {
   // D1 binding (wrangler.toml). Present on every request; never at module load.
@@ -34,6 +35,11 @@ export interface Env {
   EMAIL_FROM?: string;
   // --- U2: Turnstile captcha (managed widget) -------------------------------
   TURNSTILE_SECRET_KEY?: string;
+  // --- U3: social providers (feature-detected; buttons disabled until set) ---
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  FACEBOOK_CLIENT_ID?: string;
+  FACEBOOK_CLIENT_SECRET?: string;
   // --- U5: Stripe (web checkout for the $9.99/year no-ads offer) -------------
   // All secret; set with `wrangler secret put`. Until they exist the money
   // endpoints report "not configured" and the paywall stays in test/coming-soon
@@ -90,6 +96,9 @@ export function authOptions(env: Env): BetterAuthOptions {
     basePath: '/api/auth',
     trustedOrigins: trustedOriginsFor(env),
     plugins: captchaPlugins(env),
+    // Google + Facebook, each included only when its id/secret pair exists.
+    // Avatars and names are mapped onto the user row on first sign-in.
+    socialProviders: socialProvidersFor(env),
     emailVerification: {
       // The verification link (with its one-time token) goes out through the
       // Resend sender, or the dev-mailbox console log until a key exists.
