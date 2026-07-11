@@ -849,7 +849,17 @@ export default function LocalGameScreen() {
             it (to its left) and keeps the loud danger red; Play is gold and
             primary. Sort and Skip stay put, above, in the hand toolbar / top
             bar respectively. */}
+        {/* Play and Pass share one row (so they line up vertically) but are
+            pushed to opposite ends: Play on the left, Pass hard against the
+            right edge, so the two are well separated and never mis-tapped. */}
         <View style={styles.bottomActionsRow}>
+          <Pressable
+            style={[styles.btn, styles.btnPrimary, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+            disabled={!isMyTurn || !selLegal}
+            onPress={onPlay}
+          >
+            <Text style={[styles.btnText, styles.btnPrimaryText]}>Play</Text>
+          </Pressable>
           <Pressable
             style={[
               styles.btn,
@@ -860,13 +870,6 @@ export default function LocalGameScreen() {
             onPress={onPass}
           >
             <Text style={styles.btnText}>Pass</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.btn, styles.btnPrimary, (!isMyTurn || !selLegal) && styles.btnDisabled]}
-            disabled={!isMyTurn || !selLegal}
-            onPress={onPlay}
-          >
-            <Text style={[styles.btnText, styles.btnPrimaryText]}>Play</Text>
           </Pressable>
         </View>
       </View>
@@ -1342,9 +1345,8 @@ const styles = StyleSheet.create({
   // Pass (danger red) sits beside it.
   bottomActionsRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: spacing.md,
     paddingHorizontal: spacing.lg - 4,
     marginTop: spacing.sm,
   },
