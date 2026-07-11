@@ -174,6 +174,20 @@ but needs an OpenAI image API key — ping me and I'll run it.
 
 ---
 
+## 6. Ads (when ready)
+
+Ads are post-launch work. Once the app is live on both stores for a week or two
+and you're ready to add a revenue stream, follow the AdMob setup runbook:
+[docs/ADS-SETUP.md](ADS-SETUP.md).
+
+The short version: create an AdMob account, register the app, add app-ads.txt,
+install the SDK via Expo config plugin, then wire the AdBanner component. The
+entitlement system is already in place (premium users skip ads); you only need
+to set `enforced: true` in `lib/entitlementRules.ts` once the premium paywall is
+ready.
+
+---
+
 ## What's already done (for reference)
 
 - ✅ API live at `https://api.prends.app` (custom domain)
