@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# agent worktrees
+.claude/worktrees/
+
 # Expo
 .expo/
 dist/
