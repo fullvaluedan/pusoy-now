@@ -1,9 +1,10 @@
-// Home: mode picker. For the vertical slice we have:
-//   - Play vs Bots (no account needed, runs locally)
-//   - Sign in to play online (links to sign-in screen)
-//
-// Online lobby creation/joining and Bluetooth are stubs that show a "coming
-// soon" toast and link to the relevant doc page.
+// Home: single clear hierarchy (Round 7 U6).
+//   - Header row: small logo left, Players Online chip top-right.
+//   - Hero art, title + subtitle.
+//   - One primary CTA (Play vs bots), two secondary CTAs (Play online, How to
+//     play), then a quiet ghost-button list for the rest.
+//   - Identity line at the bottom: guest name + sign-in nudge, or the
+//     signed-in avatar chip.
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -24,6 +25,7 @@ const HERO_IMG = require('../assets/art/hero.png');
 const MAX_CONTENT_WIDTH = 480;
 // hero.png is 1536x1024 (3:2 landscape).
 const HERO_ASPECT_RATIO = 1536 / 1024;
+const LOGO_SIZE = 72;
 
 export default function Home() {
   const router = useRouter();
@@ -71,20 +73,20 @@ export default function Home() {
     void authClient.$fetch('/api/consent', { method: 'POST', body: { optIn, source: 'prompt' } });
   }
 
+  const signedIn = Boolean(session) && !isAnonymous;
+
   return (
     <ScreenContainer scroll>
       <View style={[styles.content, { width: contentWidth }]}>
-        <View style={styles.presenceRow}>
+        <View style={styles.headerRow}>
+          <Image
+            source={LOGO_IMG}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="Prends logo"
+          />
           <PresenceChip count={onlineCount} />
         </View>
-
-        <Image
-          source={LOGO_IMG}
-          style={styles.logo}
-          resizeMode="contain"
-          accessibilityLabel="Prends logo"
-        />
-        <Text style={styles.subtitle}>4-player Filipino card game</Text>
 
         <Image
           source={HERO_IMG}
@@ -93,9 +95,12 @@ export default function Home() {
           accessibilityLabel="Prends table art"
         />
 
+        <Text style={styles.title}>Prends</Text>
+        <Text style={styles.subtitle}>Pusoy Dos - the Filipino climbing card game</Text>
+
         <Button
-          title="Play vs Bots"
-          subtitle="No account required"
+          title="Play"
+          subtitle="Jump into a game vs smart bots"
           variant="primary"
           align="left"
           onPress={() => router.push('/bot-select')}
@@ -104,37 +109,54 @@ export default function Home() {
 
         <Button
           title="Play online"
-          subtitle="Host a room and invite friends"
+          subtitle="Quick match or invite friends"
           variant="secondary"
           align="left"
           onPress={() => router.push('/play-online')}
           style={styles.menuItem}
         />
 
-        {/* Compact nav row */}
-        <View style={styles.navRow}>
-          <Pressable
-            style={styles.navBtn}
-            onPress={() => router.push('/bot-select')}
-          >
-            <Text style={styles.navBtnText}>Play</Text>
-          </Pressable>
-          <Pressable
-            style={styles.navBtn}
+        <Button
+          title="How to play"
+          variant="secondary"
+          align="left"
+          onPress={() => router.push('/how-to-play')}
+          style={styles.menuItem}
+        />
+
+        <View style={styles.quietSection}>
+          <Button
+            title="Leaderboard"
+            variant="ghost"
+            align="left"
+            onPress={() => router.push('/friends-rank')}
+            style={styles.quietItem}
+          />
+          <Button
+            title="Friends"
+            variant="ghost"
+            align="left"
+            onPress={() => router.push('/friends')}
+            style={styles.quietItem}
+          />
+          <Button
+            title="Scoreboard"
+            variant="ghost"
+            align="left"
             onPress={() => router.push('/stats')}
-          >
-            <Text style={styles.navBtnText}>Scoreboard</Text>
-          </Pressable>
-          <Pressable
-            style={styles.navBtn}
+            style={styles.quietItem}
+          />
+          <Button
+            title="Settings"
+            variant="ghost"
+            align="left"
             onPress={() => router.push('/settings')}
-          >
-            <Text style={styles.navBtnText}>Settings</Text>
-          </Pressable>
+            style={styles.quietItem}
+          />
         </View>
 
-        <SignInEntry
-          signedIn={Boolean(session) && !isAnonymous}
+        <IdentityLine
+          signedIn={signedIn}
           guestName={guestName}
           displayName={profile?.displayName}
           avatarUrl={profile?.avatarUrl}
@@ -155,44 +177,15 @@ export default function Home() {
             </View>
           </Card>
         ) : null}
-
-        <Button
-          title="Friends"
-          subtitle="Add friends and see the ranking"
-          variant="ghost"
-          align="left"
-          onPress={() => router.push('/friends')}
-          style={styles.menuItem}
-        />
-
-        <Button
-          title="Leaderboard"
-          variant="ghost"
-          align="left"
-          onPress={() => router.push('/leaderboard')}
-          style={styles.menuItem}
-        />
-
-        <Button
-          title="Bluetooth (plane mode)"
-          subtitle="Coming soon"
-          variant="ghost"
-          align="left"
-          onPress={() => router.push('/bluetooth-info')}
-          style={styles.menuItem}
-        />
-
-        <Text style={styles.footer}>v0.1 vertical slice</Text>
       </View>
     </ScreenContainer>
   );
 }
 
-// Secondary sign-in entry. A guest (no session, or an anonymous one) sees
-// their local random name plus a button to save progress under a real
-// account; signed-in players get a chip carrying their avatar and display
-// name.
-function SignInEntry({
+// Bottom identity line. A guest (no session, or an anonymous one) sees their
+// local random name plus a button to save progress under a real account;
+// signed-in players get a Card row carrying their avatar and display name.
+function IdentityLine({
   signedIn,
   guestName,
   displayName,
@@ -207,79 +200,57 @@ function SignInEntry({
 }) {
   if (!signedIn) {
     return (
-      <>
+      <View style={styles.identityWrap}>
         {guestName ? <Text style={styles.guestLine}>Playing as {guestName}</Text> : null}
-        <Button
-          title="Sign in to save your progress"
-          variant="secondary"
-          align="left"
-          onPress={onPress}
-          style={styles.menuItem}
-        />
-      </>
+        <Button title="Sign in to save your progress" variant="ghost" align="left" onPress={onPress} />
+      </View>
     );
   }
 
   return (
-    <Pressable style={[styles.chip, styles.menuItem]} onPress={onPress}>
-      <Avatar
-        name={displayName ?? 'Player'}
-        url={avatarUrl}
-        size={40}
-      />
-      <View style={styles.chipTextGroup}>
-        <Text style={styles.chipTitle}>Signed in</Text>
-        <Text style={styles.chipSubtitle} numberOfLines={1}>{displayName}</Text>
-      </View>
+    <Pressable onPress={onPress} style={styles.identityWrap}>
+      <Card style={styles.identityCard}>
+        <Avatar name={displayName ?? 'Player'} url={avatarUrl} size={40} />
+        <View style={styles.identityTextGroup}>
+          <Text style={styles.identityTitle}>Signed in</Text>
+          <Text style={styles.identitySubtitle} numberOfLines={1}>{displayName}</Text>
+        </View>
+      </Card>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   content: { alignSelf: 'center', flex: 1 },
-  presenceRow: { flexDirection: 'row', justifyContent: 'flex-end' },
-  logo: { width: 96, height: 96, alignSelf: 'center', marginTop: spacing.lg },
-  subtitle: { ...typography.body, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.lg },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  logo: { width: LOGO_SIZE, height: LOGO_SIZE },
   hero: {
     borderRadius: radii.lg,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
     backgroundColor: colors.felt,
   },
+  title: { ...typography.title, color: colors.textPrimary, textAlign: 'center' },
+  subtitle: { ...typography.body, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.lg },
   menuItem: { marginBottom: spacing.md },
+  quietSection: { marginBottom: spacing.md },
+  quietItem: { marginBottom: spacing.xs },
+  identityWrap: { marginBottom: spacing.md },
   guestLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
   consentCard: { marginBottom: spacing.md, gap: spacing.sm },
   consentText: { ...typography.bodyBold, color: colors.textPrimary },
   consentRow: { flexDirection: 'row', gap: spacing.sm },
   consentBtn: { flex: 1 },
-  navRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  navBtn: {
-    flex: 1,
-    backgroundColor: colors.felt,
-    borderRadius: radii.lg,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navBtnText: {
-    ...typography.label,
-    color: colors.textOnFelt,
-    fontWeight: '700',
-  },
-  footer: { textAlign: 'center', color: colors.textFaint, marginTop: spacing.lg },
-  chip: {
+  identityCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.feltLight,
-    borderRadius: radii.lg,
-    padding: spacing.md,
     gap: spacing.md,
   },
-  chipTextGroup: { flex: 1 },
-  chipTitle: { color: colors.textOnFelt, fontSize: typography.bodyBold.fontSize, fontWeight: typography.bodyBold.fontWeight },
-  chipSubtitle: { color: colors.textOnFeltMuted, fontSize: typography.caption.fontSize, marginTop: 2 },
+  identityTextGroup: { flex: 1 },
+  identityTitle: { ...typography.bodyBold, color: colors.textPrimary },
+  identitySubtitle: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
 });

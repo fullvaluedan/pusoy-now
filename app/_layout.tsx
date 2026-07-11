@@ -26,8 +26,8 @@ export default function RootLayout() {
             }}
           >
             <Stack.Screen name="index" options={{ title: 'Prends' }} />
+            <Stack.Screen name="how-to-play" options={{ title: 'How to play' }} />
             <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
-            <Stack.Screen name="lobby" options={{ title: 'Lobby' }} />
             <Stack.Screen name="bot-select" options={{ title: 'Pick opponents' }} />
             {/* The game draws its own slim in-table top bar; the default header
                 would stack a second bar above the felt and clash with it. */}
