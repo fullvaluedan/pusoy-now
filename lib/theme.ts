@@ -41,6 +41,19 @@ export const colors = {
   dangerLight: '#ff8f8f', // secondary danger state (selection doesn't beat lead)
   success: '#7bed9f', // legal/selected-ok state text
   neutral: '#7f8c8d', // secondary action (Pass button)
+
+  // v2 "clean product" tokens ------------------------------------------------
+  // Disabled controls get a pale fill + muted text instead of a dimmed
+  // opacity, so an inert Button/Field reads as switched off rather than
+  // as its normal color washed out.
+  disabledFill: '#e5e1d4',
+  disabledText: '#a39c8a',
+  // Inline validation banner shown under a Field when its `error` prop is
+  // set: a soft/pale red, distinct from the brighter in-game `danger` used
+  // on the table for illegal-play feedback.
+  dangerSoftBg: '#fbe9e7',
+  dangerSoftBorder: '#f2c6c0',
+  dangerSoftText: '#b3261e',
 } as const;
 
 // Compose an rgba() string from a hex color token + alpha, so translucent
@@ -67,6 +80,22 @@ export const radii = {
   sm: 10,
   md: 12,
   lg: 14,
+  // v2: fully rounded ends for full-width pill buttons (>= half the
+  // control's height so it always renders as a stadium/pill shape).
+  pill: 999,
+} as const;
+
+// v2 soft-shadow used on borderless rounded Cards (and other elevated
+// surfaces) instead of a hard border, so panels read as gently lifted off
+// the cream background. Spread as a style object: `style={[styles.x, shadows.card]}`.
+export const shadows = {
+  card: {
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3, // Android shadow equivalent; ignored on iOS/web
+  },
 } as const;
 
 // Layout constraints shared across screens. The game table (and the dealing
@@ -107,6 +136,6 @@ export const providerBrand = {
   tiktok: '#010101',
 } as const;
 
-export const theme = { colors, spacing, radii, typography, providerBrand } as const;
+export const theme = { colors, spacing, radii, typography, providerBrand, shadows } as const;
 
 export type Theme = typeof theme;
