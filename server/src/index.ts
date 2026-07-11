@@ -24,6 +24,12 @@ import {
   sendRequest,
 } from './friends';
 import { d1StatsStore, fetchStatsMany, sanitizeTotals, syncStats } from './stats';
+import { generateRoomCode } from './roomLogic';
+import { GameRoom } from './room';
+
+// The DO class must be exported from the Worker's entrypoint so the runtime can
+// instantiate it for the GAME_ROOM binding.
+export { GameRoom };
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -274,6 +280,58 @@ app.post('/api/stats/sync', async (c) => {
   const next = sanitizeTotals(body);
   const res = await syncStats(d1StatsStore(c.env.DB), userId, next, Date.now());
   return c.json(res);
+});
+
+// --- Online rooms (U7) -----------------------------------------------------
+
+// Create a room. The caller becomes the host at seat 0; seats (2-4) and the bot
+// difficulty for unfilled seats are chosen now. Returns the code plus a public
+// web link (Pages origin) and an app deep link. Session-gated.
+app.post('/api/rooms', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { seats?: unknown; botLevel?: unknown };
+  const seats = Math.max(2, Math.min(4, Math.floor(Number(body.seats) || 4)));
+  const botLevel = body.botLevel === 'easy' || body.botLevel === 'expert' ? body.botLevel : 'normal';
+  const code = generateRoomCode();
+  await c.env.GAME_ROOM.getByName(code).create(seats, userId, botLevel);
+  const origin = webOrigin(c.env, c.req.header('origin'));
+  return c.json({
+    code,
+    link: `${origin}/join/${code}`,
+    deepLink: `pusoynow://join/${code}`,
+  });
+});
+
+// Lobby info for a room (no hands). Session-gated. A missing room is 404.
+app.get('/api/rooms/:code', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const code = c.req.param('code').toUpperCase();
+  const info = await c.env.GAME_ROOM.getByName(code).info();
+  if (!info.code) return c.json({ error: 'not-found' }, 404);
+  return c.json(info);
+});
+
+// WebSocket upgrade into a room. The session is validated here (unauthenticated
+// upgrades are rejected before reaching the DO), then the request is forwarded
+// to the room DO with the resolved identity injected as trusted headers.
+app.get('/api/rooms/:code/ws', async (c) => {
+  if (c.req.header('upgrade') !== 'websocket') return c.json({ error: 'expected websocket' }, 426);
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const code = c.req.param('code').toUpperCase();
+  const profile = await d1ProfileStore(c.env.DB).getByUserId(userId);
+
+  const headers = new Headers(c.req.raw.headers);
+  headers.set('X-User-Id', userId);
+  headers.set('X-Username', profile?.username ?? '');
+  const forwarded = new Request(c.req.raw.url, {
+    method: c.req.raw.method,
+    headers,
+    body: c.req.raw.body,
+  });
+  return c.env.GAME_ROOM.getByName(code).fetch(forwarded);
 });
 
 export default app;

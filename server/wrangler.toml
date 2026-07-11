@@ -21,5 +21,16 @@ BETTER_AUTH_URL = "https://pusoy-now-auth.fullvaluedan.workers.dev"
 # deployed web origin when the app ships to the web.
 # TRUSTED_ORIGINS = "https://your-web-origin"
 
+# Live game rooms (U7). One Durable Object instance per room code, addressed
+# with getByName(code). SQLite-backed so the WebSocket Hibernation API keeps
+# idle rooms free and room state survives eviction/reconnect.
+[[durable_objects.bindings]]
+name = "GAME_ROOM"
+class_name = "GameRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
+
 [observability]
 enabled = true

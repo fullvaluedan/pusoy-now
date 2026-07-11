@@ -57,6 +57,7 @@ export function newHand(
     lastPlay: null,
     passed: [],
     finishedOrder: [],
+    turnMs,
     turnDeadline: turnMs === null ? null : now + turnMs,
     turnStartedAt: now,
   };
@@ -158,7 +159,7 @@ export function applyAction(
 
   const now = Date.now();
   next.turnStartedAt = now;
-  next.turnDeadline = state.turnDeadline === null ? null : now + TURN_MS;
+  next.turnDeadline = next.turnMs == null ? null : now + next.turnMs;
   return next;
 }
 
@@ -192,7 +193,7 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
     }
     const now = Date.now();
     next.turnStartedAt = now;
-    next.turnDeadline = state.turnDeadline === null ? null : now + TURN_MS;
+    next.turnDeadline = state.turnMs == null ? null : now + state.turnMs;
     return next;
   }
   if (alive.length === 1) {
@@ -206,7 +207,7 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
     next.currentPlayerIndex = alive[0];
     const now = Date.now();
     next.turnStartedAt = now;
-    next.turnDeadline = state.turnDeadline === null ? null : now + TURN_MS;
+    next.turnDeadline = state.turnMs == null ? null : now + state.turnMs;
     return next;
   }
   let i = (playerIndex + 1) % n;
@@ -217,7 +218,7 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
     passed,
     currentPlayerIndex: i,
     turnStartedAt: now,
-    turnDeadline: state.turnDeadline === null ? null : now + TURN_MS,
+    turnDeadline: state.turnMs == null ? null : now + state.turnMs,
   };
 }
 

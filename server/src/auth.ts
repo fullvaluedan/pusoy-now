@@ -20,6 +20,9 @@ import { socialProvidersFor } from './social';
 export interface Env {
   // D1 binding (wrangler.toml). Present on every request; never at module load.
   DB: D1Database;
+  // Durable Object namespace for live game rooms (U7). One DO instance per room
+  // code via getByName(code).
+  GAME_ROOM: DurableObjectNamespace<import('./room').GameRoom>;
   // Signing secret for sessions/tokens. Set with `wrangler secret put`.
   BETTER_AUTH_SECRET: string;
   // Public base URL of the deployed Worker, e.g. https://pusoy-now-auth.<sub>.workers.dev

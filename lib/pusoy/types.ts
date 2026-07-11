@@ -52,6 +52,7 @@ export interface HandState {
   lastPlay: { playerIndex: number; combo: PlayedCombo } | null;
   passed: number[];               // indexes that passed this trick
   finishedOrder: number[];        // indexes in the order they emptied
+  turnMs: number | null;          // per-turn duration; null = untimed (bot mode)
   turnDeadline: number | null;    // epoch ms
   turnStartedAt: number | null;
 }

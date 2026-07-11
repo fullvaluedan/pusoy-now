@@ -29,6 +29,7 @@ function ok(name: string, cond: boolean, info?: unknown) {
 function fakeEnv(overrides: Partial<Env> = {}): Env {
   return {
     DB: {} as D1Database,
+    GAME_ROOM: {} as Env['GAME_ROOM'],
     BETTER_AUTH_SECRET: 'test-secret',
     ...overrides,
   };
