@@ -51,7 +51,7 @@ export type UsernameError = 'length' | 'charset' | 'reserved';
 
 const RESERVED_USERNAMES = new Set([
   'admin', 'administrator', 'root', 'system', 'support', 'help', 'api',
-  'moderator', 'mod', 'staff', 'official', 'pusoy', 'pusoynow', 'owner',
+  'moderator', 'mod', 'staff', 'official', 'pusoy', 'pusoynow', 'prends', 'owner',
   'me', 'you', 'null', 'undefined',
 ]);
 

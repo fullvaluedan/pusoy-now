@@ -35,7 +35,7 @@ export default function Home() {
           source={LOGO_IMG}
           style={styles.logo}
           resizeMode="contain"
-          accessibilityLabel="Pusoy Now logo"
+          accessibilityLabel="Prends logo"
         />
         <Text style={styles.subtitle}>4-player Filipino card game</Text>
 
@@ -43,7 +43,7 @@ export default function Home() {
           source={HERO_IMG}
           style={[styles.hero, { width: contentWidth, height: heroHeight }]}
           resizeMode="cover"
-          accessibilityLabel="Pusoy Now table art"
+          accessibilityLabel="Prends table art"
         />
 
         <Button

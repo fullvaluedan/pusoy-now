@@ -25,7 +25,7 @@ export default function RootLayout() {
               headerShadowVisible: false,
             }}
           >
-            <Stack.Screen name="index" options={{ title: 'Pusoy Now' }} />
+            <Stack.Screen name="index" options={{ title: 'Prends' }} />
             <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
             <Stack.Screen name="lobby" options={{ title: 'Lobby' }} />
             <Stack.Screen name="bot-select" options={{ title: 'Pick opponents' }} />

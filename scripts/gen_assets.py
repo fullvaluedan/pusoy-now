@@ -86,9 +86,9 @@ ASSETS = [
         "size": "1024x1024",
         "background": "opaque",  # gpt-image-2 rejects transparent; rembg later if needed
         "prompt": (
-            "Minimal emblem logo for a Filipino card game called PUSOY NOW. "
+            "Minimal emblem logo for a Filipino card game called PRENDS. "
             "Three fanned playing cards (red heart ace, black spade ace, "
-            "green-backed card) above the wordmark 'PUSOY NOW' in a bold "
+            "green-backed card) above the wordmark 'PRENDS' in a bold "
             "clean slab typeface, ink color. Flat vector, crisp edges, no "
             "gradients, plain solid warm cream #f4f1e8 background. " + PALETTE
         ),

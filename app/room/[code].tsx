@@ -16,14 +16,14 @@ import { useOnlineRoom, type OnlineRoomView } from '../../lib/onlineGame';
 import type { Card as CardT, PlayedCombo } from '../../lib/pusoy/types';
 
 // Web falls back to this app's own /join/[code] route on its own origin;
-// native falls back to the pusoynow:// deep link. Both are overridden by the
+// native falls back to the prends:// deep link. Both are overridden by the
 // server-provided `link`/`deepLink` route params when play-online passed them
 // through (see app/play-online.tsx).
 function deriveJoinLink(code: string): string {
   if (Platform.OS === 'web') {
     return typeof window !== 'undefined' ? `${window.location.origin}/join/${code}` : `/join/${code}`;
   }
-  return `pusoynow://join/${code}`;
+  return `prends://join/${code}`;
 }
 
 function playerLabel(view: OnlineRoomView, seat: number): string {

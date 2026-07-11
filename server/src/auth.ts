@@ -29,8 +29,8 @@ export interface Env {
   // Used for callback URLs and email links. Optional in local dev.
   BETTER_AUTH_URL?: string;
   // Comma-separated extra web origins allowed to talk to the auth API
-  // (e.g. "http://localhost:8095,https://pusoynow.pages.dev"). The app's own
-  // `pusoynow://` scheme is always trusted regardless of this value.
+  // (e.g. "http://localhost:8095,https://prends.pages.dev"). The app's own
+  // `prends://` scheme is always trusted regardless of this value.
   TRUSTED_ORIGINS?: string;
   // --- U2: email verification via Resend (dev-mailbox mode until set) --------
   RESEND_API_KEY?: string;
@@ -55,7 +55,7 @@ export interface Env {
 // The app's own deep-link scheme is always trusted: sessions must survive the
 // native OAuth/verify round trip back into the app. Web origins are additive
 // and come from env so staging/prod URLs never require a code change.
-const APP_SCHEME = 'pusoynow://';
+const APP_SCHEME = 'prends://';
 
 // Local Expo/web dev origins. Kept here so `wrangler dev` works out of the box
 // without a TRUSTED_ORIGINS secret; production adds its origin via env.

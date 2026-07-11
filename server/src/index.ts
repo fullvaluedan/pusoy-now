@@ -303,7 +303,7 @@ app.post('/api/rooms', async (c) => {
   return c.json({
     code,
     link: `${origin}/join/${code}`,
-    deepLink: `pusoynow://join/${code}`,
+    deepLink: `prends://join/${code}`,
   });
 });
 

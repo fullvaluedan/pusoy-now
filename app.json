@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Pusoy Now",
-    "slug": "pusoy-now",
+    "name": "Prends",
+    "slug": "prends",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/art/app-icon.png",
@@ -11,11 +11,11 @@
       "resizeMode": "cover",
       "backgroundColor": "#0e4a3a"
     },
-    "scheme": "pusoynow",
+    "scheme": "prends",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pusoynow.app"
+      "bundleIdentifier": "app.prends"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +23,7 @@
         "foregroundImage": "./assets/art/app-icon.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.pusoynow.app"
+      "package": "app.prends"
     },
     "web": {
       "favicon": "./assets/art/app-icon.png",

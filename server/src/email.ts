@@ -23,8 +23,8 @@ export interface AuthEmail {
 }
 
 const SUBJECTS: Record<AuthEmailKind, string> = {
-  verify: 'Verify your email for Pusoy Now',
-  reset: 'Reset your Pusoy Now password',
+  verify: 'Verify your email for Prends',
+  reset: 'Reset your Prends password',
 };
 
 // Plain-text bodies. No em dashes, no emojis (UI copy rules), and no HTML so
@@ -32,7 +32,7 @@ const SUBJECTS: Record<AuthEmailKind, string> = {
 export function emailBody(kind: AuthEmailKind, url: string): string {
   if (kind === 'verify') {
     return [
-      'Welcome to Pusoy Now.',
+      'Welcome to Prends.',
       '',
       'Confirm this email address to finish creating your account:',
       url,
@@ -41,7 +41,7 @@ export function emailBody(kind: AuthEmailKind, url: string): string {
     ].join('\n');
   }
   return [
-    'We received a request to reset your Pusoy Now password.',
+    'We received a request to reset your Prends password.',
     '',
     'Use this link to choose a new password:',
     url,
@@ -58,7 +58,7 @@ export function emailMode(env: Env): 'resend' | 'dev-mailbox' {
 
 // Resend's shared sandbox sender works without domain verification for early
 // testing; production sets EMAIL_FROM to a verified domain address.
-const DEFAULT_FROM = 'Pusoy Now <onboarding@resend.dev>';
+const DEFAULT_FROM = 'Prends <onboarding@resend.dev>';
 
 export async function sendAuthEmail(
   env: Env,

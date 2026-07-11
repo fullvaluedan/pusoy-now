@@ -3,7 +3,7 @@
 // Platform split (the plan's session decision):
 //   native  the @better-auth/expo plugin keeps the session in a SecureStore
 //           cookie-jar (Keychain / encrypted prefs) and drives the OAuth
-//           browser hop back through the pusoynow:// scheme.
+//           browser hop back through the prends:// scheme.
 //   web     ordinary browser cookies. The Expo plugin is undocumented on
 //           react-native-web, so it is left off and requests just send
 //           credentials; web flows are verified manually.
@@ -31,8 +31,8 @@ export const authClient = createAuthClient({
     ? []
     : [
         expoClient({
-          scheme: 'pusoynow',
-          storagePrefix: 'pusoynow',
+          scheme: 'prends',
+          storagePrefix: 'prends',
           storage: SecureStore,
         }),
       ],

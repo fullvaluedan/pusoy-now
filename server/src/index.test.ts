@@ -38,7 +38,7 @@ function fakeEnv(overrides: Partial<Env> = {}): Env {
 function main() {
   // --- trustedOrigins -------------------------------------------------------
   const base = trustedOriginsFor(fakeEnv());
-  ok('app scheme is always trusted', base.includes('pusoynow://'));
+  ok('app scheme is always trusted', base.includes('prends://'));
   ok('local dev origin is trusted', base.includes('http://localhost:8095'));
   ok(
     'a forged web origin is not trusted',
@@ -46,9 +46,9 @@ function main() {
     base,
   );
 
-  const withExtra = trustedOriginsFor(fakeEnv({ TRUSTED_ORIGINS: 'https://pusoynow.pages.dev, https://foo.dev' }));
-  ok('configured web origins are added', withExtra.includes('https://pusoynow.pages.dev') && withExtra.includes('https://foo.dev'));
-  ok('the scheme survives alongside configured origins', withExtra.includes('pusoynow://'));
+  const withExtra = trustedOriginsFor(fakeEnv({ TRUSTED_ORIGINS: 'https://prends.pages.dev, https://foo.dev' }));
+  ok('configured web origins are added', withExtra.includes('https://prends.pages.dev') && withExtra.includes('https://foo.dev'));
+  ok('the scheme survives alongside configured origins', withExtra.includes('prends://'));
 
   const blank = trustedOriginsFor(fakeEnv({ TRUSTED_ORIGINS: '  ,  , ' }));
   ok('empty TRUSTED_ORIGINS entries are dropped', !blank.includes(''));

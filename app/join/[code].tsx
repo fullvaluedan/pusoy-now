@@ -1,4 +1,4 @@
-// Join-link landing page. A shared room link (web or the pusoynow://join deep
+// Join-link landing page. A shared room link (web or the prends://join deep
 // link) lands here first. Signed-out visitors are asked to sign in (so they
 // come back with a session); once signed in the actual join happens over the
 // room WebSocket, so this just hands off to the room screen.

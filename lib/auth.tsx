@@ -72,7 +72,7 @@ function redirectTarget(path: string): string {
   if (Platform.OS === 'web') {
     return typeof window !== 'undefined' ? window.location.origin : '/';
   }
-  return `pusoynow://${path}`;
+  return `prends://${path}`;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

@@ -17,7 +17,7 @@ export function AdBanner() {
 
   return (
     <View style={styles.banner}>
-      <Text style={styles.text} numberOfLines={1}>Pusoy Now - ad space</Text>
+      <Text style={styles.text} numberOfLines={1}>Prends - ad space</Text>
     </View>
   );
 }

@@ -111,7 +111,7 @@ export default function Settings() {
       </Card>
 
       {/* Version footer */}
-      <Text style={styles.version}>Pusoy Now v{appVersion}</Text>
+      <Text style={styles.version}>Prends v{appVersion}</Text>
 
       <Button
         title="Back"

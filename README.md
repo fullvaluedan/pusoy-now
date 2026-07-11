@@ -1,4 +1,4 @@
-# Pusoy Now
+# Prends
 
 A 4-player Pusoy Dos card game for iOS and Android. Built with React Native + Expo.
 
