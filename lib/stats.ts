@@ -9,6 +9,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { BotLevel } from './pusoy/types';
+import { authClient } from './authClient';
+import { aggregateTotals } from './statsAgg';
 
 const KEY = 'pusoy_bot_stats_v1';
 
@@ -100,4 +102,23 @@ export async function recordGame(level: BotLevel, rank: number): Promise<void> {
 
 export async function clearStats(): Promise<void> {
   await writeRaw(JSON.stringify(emptyStats()));
+}
+
+// Push the player's cumulative totals to the Worker so they count toward the
+// friends ranking (R6). Fire-and-forget: for a signed-in user the cookie rides
+// along and the monotonic upsert applies; a guest gets a 401 and this is a
+// no-op, so guest stats stay local-only. Any failure is swallowed - the next
+// counted game retries with the (higher) latest total. Call after recordGame.
+export async function pushStatsSync(): Promise<{ applied: boolean } | null> {
+  try {
+    const totals = aggregateTotals(await loadStats());
+    const { data, error } = await authClient.$fetch<{ applied: boolean }>('/api/stats/sync', {
+      method: 'POST',
+      body: totals,
+    });
+    if (error || !data) return null;
+    return data;
+  } catch {
+    return null;
+  }
 }

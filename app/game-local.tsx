@@ -50,7 +50,7 @@ import { canPlay, detectCombo } from '../lib/pusoy/combo';
 import { SUIT_VALUE } from '../lib/pusoy/deck';
 import { findLegalPlays } from '../lib/pusoy/bot';
 import { parseLevel } from '../lib/pusoy/level';
-import { recordGame } from '../lib/stats';
+import { pushStatsSync, recordGame } from '../lib/stats';
 import { incrementGameCounter } from '../lib/gameCounter';
 import { colors, layout, radii, spacing, typography, withAlpha } from '../lib/theme';
 import { useAuth } from '../lib/auth';
@@ -325,7 +325,7 @@ function TopBar({
 export default function LocalGameScreen() {
   const params = useLocalSearchParams<{ bots: string; level: string }>();
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, session } = useAuth();
   const botCount = Math.max(1, Math.min(3, Number(params.bots) || 3));
   const level = parseLevel(params.level);
   // A signed-in player sits at their own name; a guest is just "You".
@@ -411,7 +411,12 @@ export default function LocalGameScreen() {
     const seat = findHumanSeat(game);
     const rank = game.finishOrder.indexOf(seat) + 1;
     if (rank >= 1 && rank <= 4) {
-      void recordGame(game.level, rank);
+      // Record locally first, then (for signed-in players) sync the updated
+      // cumulative totals to D1 so they count toward the friends ranking.
+      // Guests stay local-only. See lib/stats.pushStatsSync.
+      void recordGame(game.level, rank).then(() => {
+        if (session) void pushStatsSync();
+      });
       void incrementGameCounter(game.level);
     }
   }, [game, tick]);
