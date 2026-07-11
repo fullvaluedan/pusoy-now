@@ -1,4 +1,4 @@
-// Settings screen: toggles for sound/haptics, navigation to account/ads/legal, version footer.
+// Settings screen: toggles for sound/haptics, navigation to account/legal, version footer.
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
@@ -73,21 +73,13 @@ export default function Settings() {
         />
       </Card>
 
-      {/* Account & Ads group */}
+      {/* Account group */}
       <Card style={styles.card}>
         <Text style={styles.groupHeading}>Account</Text>
         <Row
           label="Profile"
           type="nav"
           onPress={() => router.push('/profile')}
-        />
-      </Card>
-
-      <Card style={styles.card}>
-        <Row
-          label="Remove ads"
-          type="nav"
-          onPress={() => router.push('/paywall')}
         />
       </Card>
 
