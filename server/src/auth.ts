@@ -43,6 +43,16 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   FACEBOOK_CLIENT_ID?: string;
   FACEBOOK_CLIENT_SECRET?: string;
+  // --- U8: Sign in with Apple (feature-detected; button hidden until set) ----
+  // APPLE_CLIENT_ID is the Services ID (e.g. app.prends.web), the OAuth client
+  // for the web/redirect flow. APPLE_CLIENT_SECRET is a pre-generated ES256 JWT
+  // (expires <= 6 months; rotation reminder in AUTH-SETUP.md).
+  // APPLE_APP_BUNDLE_IDENTIFIER is the native app bundle id (app.prends); it is
+  // load-bearing for the native idToken flow -- without it better-auth rejects
+  // native tokens with "Invalid id token".
+  APPLE_CLIENT_ID?: string;
+  APPLE_CLIENT_SECRET?: string;
+  APPLE_APP_BUNDLE_IDENTIFIER?: string;
   // --- U5: Stripe (web checkout for the $9.99/year no-ads offer) -------------
   // All secret; set with `wrangler secret put`. Until they exist the money
   // endpoints report "not configured" and the paywall stays in test/coming-soon
@@ -61,12 +71,17 @@ const APP_SCHEME = 'prends://';
 // without a TRUSTED_ORIGINS secret; production adds its origin via env.
 const DEV_ORIGINS = ['http://localhost:8081', 'http://localhost:8095', 'http://localhost:19006'];
 
+// Apple POSTs the web sign-in callback cross-origin as a form_post from
+// appleid.apple.com, so that origin must be trusted unconditionally (it is not
+// a secret and costs nothing when Apple sign-in is not configured).
+const APPLE_ORIGIN = 'https://appleid.apple.com';
+
 export function trustedOriginsFor(env: Env): string[] {
   const extra = (env.TRUSTED_ORIGINS ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  return [APP_SCHEME, ...DEV_ORIGINS, ...extra];
+  return [APP_SCHEME, APPLE_ORIGIN, ...DEV_ORIGINS, ...extra];
 }
 
 // Captcha is only wired when a Turnstile secret is present. Without it the

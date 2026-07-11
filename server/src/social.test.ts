@@ -36,6 +36,11 @@ function fakeEnv(overrides: Partial<Env> = {}): Env {
 
 const GOOGLE = { GOOGLE_CLIENT_ID: 'gid', GOOGLE_CLIENT_SECRET: 'gsec' };
 const FACEBOOK = { FACEBOOK_CLIENT_ID: 'fid', FACEBOOK_CLIENT_SECRET: 'fsec' };
+const APPLE = {
+  APPLE_CLIENT_ID: 'app.prends.web',
+  APPLE_CLIENT_SECRET: 'es256.jwt',
+  APPLE_APP_BUNDLE_IDENTIFIER: 'app.prends',
+};
 
 function main() {
   // --- Google avatar sizing -------------------------------------------------
@@ -77,6 +82,24 @@ function main() {
   // A half-configured provider (id but no secret) must not register.
   const half = fakeEnv({ GOOGLE_CLIENT_ID: 'gid' });
   ok('an id without a secret does not configure the provider', configuredProviderIds(half).length === 0);
+
+  // --- Apple feature detection ----------------------------------------------
+  ok('no Apple secrets means apple is not listed', !configuredProviderIds(fakeEnv()).includes('apple'));
+  ok('no Apple secrets means no apple provider', !socialProvidersFor(fakeEnv())?.apple);
+
+  const appleAll = fakeEnv(APPLE);
+  ok('all three Apple secrets list apple', configuredProviderIds(appleAll).includes('apple'));
+  ok('all three Apple secrets register the apple provider', Boolean(socialProvidersFor(appleAll)?.apple));
+  ok(
+    'the apple provider passes appBundleIdentifier through (native idToken flow)',
+    (socialProvidersFor(appleAll)?.apple as { appBundleIdentifier?: string })?.appBundleIdentifier === 'app.prends',
+  );
+
+  // Apple needs the bundle id too: id + secret alone must not register it, or
+  // native idToken verification would fail at runtime with "Invalid id token".
+  const appleNoBundle = fakeEnv({ APPLE_CLIENT_ID: 'app.prends.web', APPLE_CLIENT_SECRET: 'es256.jwt' });
+  ok('Apple without the bundle id is not listed', !configuredProviderIds(appleNoBundle).includes('apple'));
+  ok('Apple without the bundle id does not register', !socialProvidersFor(appleNoBundle)?.apple);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);

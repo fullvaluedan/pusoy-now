@@ -9,9 +9,9 @@
 //
 // Signing in is only ever about a display name, a picture, and holding an
 // account. Guests keep full access to bot games, so nothing here is a gate.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { Button, Checkbox, Field, ScreenContainer } from '../components/ui';
 import { colors, providerBrand, radii, spacing, typography } from '../lib/theme';
 import { useAuth, type SocialProvider } from '../lib/auth';
@@ -21,17 +21,30 @@ import { authClient } from '../lib/authClient';
 // Flip to true once the TikTok bridge is ported to the auth Worker.
 const TIKTOK_ENABLED = false;
 
-interface ProviderEntry {
-  id: SocialProvider | 'tiktok';
-  name: string;
-  color: string;
-}
+// Display metadata for each social provider the client knows how to render. A
+// button only appears when the server reports the provider as configured (via
+// GET /api/providers), so brand + label live here, availability comes from the
+// Worker's feature detection.
+const PROVIDER_META: Record<SocialProvider, { name: string; color: string }> = {
+  google: { name: 'Google', color: providerBrand.google },
+  facebook: { name: 'Facebook', color: providerBrand.facebook },
+  apple: { name: 'Apple', color: providerBrand.apple },
+};
 
-const PROVIDERS: ProviderEntry[] = [
-  { id: 'google', name: 'Google', color: providerBrand.google },
-  { id: 'facebook', name: 'Facebook', color: providerBrand.facebook },
-  { id: 'tiktok', name: 'TikTok', color: providerBrand.tiktok },
-];
+// Order the buttons appear in when configured.
+const PROVIDER_ORDER: SocialProvider[] = ['apple', 'google', 'facebook'];
+
+// Offline/dev fallback if GET /api/providers can't be reached: assume the
+// pre-Apple pair so the screen is never empty. Apple is intentionally absent
+// here -- it must be confirmed configured before its button shows.
+const STATIC_FALLBACK: SocialProvider[] = ['google', 'facebook'];
+
+// Apple's button is iOS-native or web-redirect only; guideline 4.8 is
+// Apple-only so it must never render on Android even if the server lists it.
+function providerVisibleHere(id: SocialProvider): boolean {
+  if (id === 'apple') return Platform.OS === 'ios' || Platform.OS === 'web';
+  return true;
+}
 
 type Mode = 'sign-in' | 'sign-up' | 'reset';
 
@@ -72,18 +85,44 @@ export default function SignIn() {
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
+  // Which social providers the Worker has secrets for. Fetched once from the
+  // public GET /api/providers (no auth needed); falls back to the static pair
+  // if the request fails (offline dev), so the buttons are never empty.
+  const [configured, setConfigured] = useState<SocialProvider[]>(STATIC_FALLBACK);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = (await authClient.$fetch('/api/providers')) as
+          | { data?: { providers?: string[] }; providers?: string[] }
+          | undefined;
+        const ids = res?.data?.providers ?? res?.providers;
+        if (!cancelled && Array.isArray(ids)) {
+          setConfigured(ids.filter((id): id is SocialProvider => id in PROVIDER_META));
+        }
+      } catch {
+        // Keep the static fallback already in state.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Configured, visible-on-this-platform, in display order.
+  const socialProviders = PROVIDER_ORDER.filter((id) => configured.includes(id) && providerVisibleHere(id));
+
   function resetFeedback() {
     setError(null);
     setNotice(null);
     setFieldErrors({});
   }
 
-  async function onSocial(entry: ProviderEntry) {
-    if (entry.id === 'tiktok') return;
+  async function onSocial(id: SocialProvider) {
     resetFeedback();
-    setBusy(entry.id);
+    setBusy(id);
     try {
-      const result = await signIn(entry.id);
+      const result = await signIn(id);
       if (result.status === 'signed-in') router.replace('/');
       // 'cancelled' and 'redirecting' say nothing: the player closed the
       // browser, or the web page is navigating away.
@@ -303,24 +342,33 @@ export default function SignIn() {
         />
       )}
 
-      {/* Social providers only on the sign-in/up forms, not the reset form. */}
+      {/* Social providers only on the sign-in/up forms, not the reset form.
+          Buttons come from GET /api/providers (feature-detected server-side),
+          filtered to what can render on this platform. TikTok stays a static
+          coming-soon affordance until its Worker bridge is ported. */}
       {mode !== 'reset' ? (
         <View style={styles.providers}>
           <Text style={styles.orLabel}>or continue with</Text>
-          {PROVIDERS.map((p) => {
-            const disabled = p.id === 'tiktok' ? !TIKTOK_ENABLED : busy !== null && busy !== p.id;
+          {socialProviders.map((id) => {
+            const meta = PROVIDER_META[id];
             return (
               <Button
-                key={p.id}
-                title={`Continue with ${p.name}`}
-                subtitle={p.id === 'tiktok' ? 'Coming soon' : ''}
-                color={p.color}
-                disabled={disabled}
-                loading={busy === p.id}
-                onPress={() => void onSocial(p)}
+                key={id}
+                title={`Continue with ${meta.name}`}
+                color={meta.color}
+                disabled={busy !== null && busy !== id}
+                loading={busy === id}
+                onPress={() => void onSocial(id)}
               />
             );
           })}
+          <Button
+            title="Continue with TikTok"
+            subtitle="Coming soon"
+            color={providerBrand.tiktok}
+            disabled={!TIKTOK_ENABLED}
+            onPress={() => {}}
+          />
         </View>
       ) : null}
 

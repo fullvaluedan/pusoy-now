@@ -56,6 +56,9 @@ export function configuredProviderIds(env: Env): string[] {
   const ids: string[] = [];
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) ids.push('google');
   if (env.FACEBOOK_CLIENT_ID && env.FACEBOOK_CLIENT_SECRET) ids.push('facebook');
+  // Apple needs all three: the Services ID (clientId), the ES256 JWT
+  // (clientSecret), and the native bundle id (verifies native idTokens).
+  if (env.APPLE_CLIENT_ID && env.APPLE_CLIENT_SECRET && env.APPLE_APP_BUNDLE_IDENTIFIER) ids.push('apple');
   return ids;
 }
 
@@ -80,6 +83,19 @@ export function socialProvidersFor(env: Env): NonNullable<BetterAuthOptions['soc
       // the size we want (no second Graph call with the provider token).
       fields: ['id', 'name', 'email', `picture.width(${AVATAR_SIZE}).height(${AVATAR_SIZE})`],
       mapProfileToUser: (profile) => mapFacebookProfile(profile as FacebookProfileLike),
+    };
+  }
+
+  // Apple: the Services ID is the OAuth client for the web/redirect flow, and
+  // `appBundleIdentifier` is what lets better-auth verify the native idToken
+  // (whose audience is the app bundle id) -- without it native sign-in fails
+  // with "Invalid id token". All three fields are required, matching
+  // configuredProviderIds so the client button and the provider agree.
+  if (env.APPLE_CLIENT_ID && env.APPLE_CLIENT_SECRET && env.APPLE_APP_BUNDLE_IDENTIFIER) {
+    providers.apple = {
+      clientId: env.APPLE_CLIENT_ID,
+      clientSecret: env.APPLE_CLIENT_SECRET,
+      appBundleIdentifier: env.APPLE_APP_BUNDLE_IDENTIFIER,
     };
   }
 

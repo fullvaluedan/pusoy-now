@@ -133,6 +133,7 @@ export const typography = {
 export const providerBrand = {
   google: '#4285F4',
   facebook: '#1877F2',
+  apple: '#000000',
   tiktok: '#010101',
 } as const;
 
