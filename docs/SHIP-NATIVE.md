@@ -38,18 +38,55 @@ Legend: 🔴 blocker (store will reject without it) · 🟡 needed for launch ·
 
 ## Phase 2 — Expo / EAS setup
 
-- [ ] 🟡 Install and log in: `npm i -g eas-cli`, `eas login`.
-- [ ] 🟡 `eas build:configure` → creates `eas.json` (dev / preview / production
-      profiles).
-- [ ] 🟡 Fill `app.json` / `app.config`:
-      - `ios.bundleIdentifier`, `android.package`
-      - `version` (marketing, e.g. 1.0.0) + `ios.buildNumber` / `android.versionCode`
-      - `icon` (1024×1024, no alpha for iOS), adaptive icon (Android fg/bg),
-        `splash`
-      - `scheme` for deep links
-- [ ] 🟡 **Credentials**: let EAS manage signing (iOS distribution cert +
-      provisioning profile; Android keystore). Back up the Android keystore —
-      losing it means you can never update the app.
+`eas.json` already exists at the repo root (development / preview / production
+build profiles + a production submit profile, `appVersionSource: "remote"`).
+`app.json` already carries `slug: "prends"`, `ios.bundleIdentifier: "app.prends"`,
+and `android.package: "app.prends"` — these are permanent once the first build
+links a project, so they must not change after this point. These are operator
+steps (interactive login / device auth); run them at the keyboard, not from CI.
+
+- [ ] 🟡 **Install the CLI and log in:**
+      ```
+      npm i -g eas-cli
+      eas login
+      ```
+      Use (or create) the Expo account that will own the `prends` project.
+- [ ] 🟡 **Link the project:**
+      ```
+      eas init
+      ```
+      This creates the EAS project for slug `prends` and writes
+      `extra.eas.projectId` into `app.json` — do not hand-write that field,
+      let `eas init` do it, and commit the resulting `app.json` change.
+- [ ] 🟡 **Validate the build config:**
+      ```
+      eas build:configure
+      ```
+      Confirms `eas.json` matches the linked project (it already exists in
+      this repo, so this step mainly sanity-checks it rather than creating it).
+- [ ] 🟡 **Credentials — let EAS manage signing:**
+      - iOS: EAS generates/holds the distribution certificate and provisioning
+        profile against the Apple Developer account (`eas credentials` to
+        inspect/rotate). Requires the Apple Developer Program enrollment from
+        Phase 1.
+      - Android: EAS generates and stores the upload keystore on first build
+        unless one is supplied. **🔴 BACK UP THE KEYSTORE** (`eas credentials`
+        → Android → download). Losing it before enrolling in Play App Signing
+        means the app can never be updated again — download and store it
+        somewhere durable (password manager / offline backup) the moment it's
+        generated, before the first Play upload.
+- [ ] 🟡 **Run builds per profile** (from the repo root, after the above):
+      ```
+      eas build -p ios --profile development     # dev client, internal
+      eas build -p android --profile development
+      eas build -p ios --profile preview          # internal distribution, no store
+      eas build -p android --profile preview
+      eas build -p ios --profile production       # store-ready, autoIncrement
+      eas build -p android --profile production
+      ```
+      `production` uses `autoIncrement: true` (from `eas.json`), so
+      `ios.buildNumber` / `android.versionCode` are never hand-edited or
+      committed — EAS bumps them remotely per build.
 
 ## Phase 3 — Native features & config plugins
 
@@ -187,11 +224,53 @@ present in `app.json`.
 
 ## Phase 8 — Build, test, submit
 
-- [ ] 🟡 `eas build -p ios --profile production` and `-p android`.
-- [ ] 🟡 iOS: `eas submit -p ios` → TestFlight → internal test → submit for review
-      (typically 1–3 days).
-- [ ] 🟡 Android: `eas submit -p android` → internal testing → closed test (the
-      new 12-tester/14-day requirement) → production.
+- [ ] 🟡 Run the production builds (see Phase 2's build commands):
+      `eas build -p ios --profile production` and `-p android --profile production`.
+
+**iOS submission (`eas submit -p ios`)**
+
+- [ ] 🔴 **Prerequisite: an App Store Connect app record.** Create the app in
+      App Store Connect (bundle ID `app.prends`, matching name/SKU) *before*
+      the first `eas submit` — submit pushes a build to an existing app
+      record, it does not create one.
+- [ ] 🟡 **Prerequisite: an App Store Connect API key** (or interactive
+      Apple ID sign-in). Recommended: generate an API key in App Store
+      Connect (Users and Access → Integrations → App Store Connect API) and
+      point `eas.json`'s `submit.production.ios` at it (`ascApiKeyPath` /
+      `ascApiKeyId` / `ascApiKeyIssuerId`), or let `eas submit` prompt
+      interactively the first time and cache the choice.
+      `eas.json`'s `submit.production` block is intentionally minimal today —
+      fill in `appleId` / `ascAppId` / API key fields once the ASC record and
+      key exist.
+- [ ] 🟡 `eas submit -p ios` → uploads the build to App Store Connect →
+      TestFlight → internal test → submit for review (typically 1–3 days).
+
+**Android submission (`eas submit -p android`)**
+
+- [ ] 🔴 **Prerequisite: the first Play Console upload must be manual.**
+      `eas submit` needs an existing app entry in Play Console with at least
+      one release track populated; create the app and do the very first APK/AAB
+      upload by hand in the Play Console UI, then `eas submit` can handle every
+      release after that.
+- [ ] 🔴 **Prerequisite: a Google Play service-account JSON key.** Create a
+      service account in Google Cloud (linked to the Play Console via
+      Setup → API access), grant it release-manager permissions, download the
+      JSON key as `play-service-account.json`, keep it **out of git** (already
+      covered by `.gitignore`), and point `eas.json`'s
+      `submit.production.android.serviceAccountKeyPath` at its local path.
+- [ ] 🔴 **The Google Play 12-tester/14-day closed-test clock.** New
+      developer accounts must run a closed test with 12+ testers for 14
+      continuous days before production access unlocks. Start recruiting
+      testers and running the closed test the moment the first build exists —
+      this is the schedule-critical path for Android, not the build itself.
+- [ ] 🔴 **Target API level.** Google currently requires **target API 35**
+      for new submissions/updates. **Target API 36 becomes required for
+      submissions after August 31, 2026** — if this ships near or after that
+      date, bump `targetSdkVersion` (via the Expo SDK's bundled Android build
+      tools / an `expo-build-properties` override) before submitting.
+- [ ] 🟡 `eas submit -p android` → internal testing → closed test (12
+      testers / 14 days) → production.
+
 - [ ] 🟢 Wire **EAS Update** (OTA) so JS-only fixes ship without a store review.
 - [ ] 🟢 Crash/analytics (Sentry via `sentry-expo`, or similar).
 
