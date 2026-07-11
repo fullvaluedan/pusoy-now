@@ -13,6 +13,17 @@ import { d1Store, isPremium, processStripeEvent, requireUserId } from './entitle
 import { constructEvent, createCheckout, stripeConfigured } from './stripe';
 import { configuredProviderIds } from './social';
 import { checkUsername, claimUsername, d1ProfileStore, usernameErrorMessage } from './profile';
+import {
+  acceptRequest,
+  d1FriendStore,
+  declineRequest,
+  fetchDisplayInfo,
+  listFriends,
+  rankUsers,
+  removeFriend,
+  sendRequest,
+} from './friends';
+import { d1StatsStore, fetchStatsMany, sanitizeTotals, syncStats } from './stats';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -142,6 +153,127 @@ app.post('/api/username/claim', async (c) => {
     return c.json({ error: 'already-claimed', username: res.username, message: 'You already have a username.' }, 409);
   }
   return c.json({ username: res.username });
+});
+
+// --- Friends + ranking (U4) ------------------------------------------------
+
+// Decorate a set of user ids with their display fields (username, name,
+// avatar), preserving order. Used by the list and ranking routes.
+async function withDisplay(env: Env, ids: string[]) {
+  const info = await fetchDisplayInfo(env.DB, ids);
+  return ids.map((userId) => {
+    const d = info.get(userId);
+    return { userId, username: d?.username ?? null, name: d?.name ?? null, image: d?.image ?? null };
+  });
+}
+
+// The caller's friends, split into accepted / incoming / outgoing, each row
+// carrying the other player's display fields. Session-gated.
+app.get('/api/friends', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const lists = await listFriends(d1FriendStore(c.env.DB), userId);
+  return c.json({
+    accepted: await withDisplay(c.env, lists.accepted),
+    incoming: await withDisplay(c.env, lists.incoming),
+    outgoing: await withDisplay(c.env, lists.outgoing),
+  });
+});
+
+// Send a friend request by username. Resolves the handle to a user id first;
+// an unknown handle is a 404 so the UI can say "No player with that username".
+app.post('/api/friends/request', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { username?: unknown };
+  const username = typeof body.username === 'string' ? body.username.trim().toLowerCase() : '';
+  if (!username) return c.json({ error: 'missing-username' }, 400);
+  const target = await d1ProfileStore(c.env.DB).getByUsername(username);
+  if (!target) return c.json({ error: 'not-found', message: 'No player with that username.' }, 404);
+  const outcome = await sendRequest(d1FriendStore(c.env.DB), userId, target.userId, Date.now());
+  if (outcome === 'self') return c.json({ error: 'self', message: 'You cannot add yourself.' }, 400);
+  return c.json({ outcome });
+});
+
+// Accept / decline / remove act on the other player's user id (the client has
+// it from the friends lists). Each maps the domain outcome to an HTTP status.
+app.post('/api/friends/accept', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { userId?: unknown };
+  const other = typeof body.userId === 'string' ? body.userId : '';
+  const outcome = await acceptRequest(d1FriendStore(c.env.DB), userId, other, Date.now());
+  if (outcome === 'not-found') return c.json({ error: 'not-found' }, 404);
+  if (outcome === 'forbidden') return c.json({ error: 'forbidden' }, 403);
+  return c.json({ outcome });
+});
+
+app.post('/api/friends/decline', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { userId?: unknown };
+  const other = typeof body.userId === 'string' ? body.userId : '';
+  const outcome = await declineRequest(d1FriendStore(c.env.DB), userId, other);
+  if (outcome === 'not-found') return c.json({ error: 'not-found' }, 404);
+  if (outcome === 'forbidden') return c.json({ error: 'forbidden' }, 403);
+  return c.json({ outcome });
+});
+
+app.post('/api/friends/remove', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { userId?: unknown };
+  const other = typeof body.userId === 'string' ? body.userId : '';
+  const outcome = await removeFriend(d1FriendStore(c.env.DB), userId, other);
+  if (outcome === 'not-found') return c.json({ error: 'not-found' }, 404);
+  return c.json({ outcome });
+});
+
+// You plus your accepted friends, ranked by total 1st-place finishes (win-rate
+// tiebreak). Your own row is flagged so the UI can highlight it. Session-gated.
+app.get('/api/friends/ranking', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const lists = await listFriends(d1FriendStore(c.env.DB), userId);
+  const ids = [userId, ...lists.accepted];
+  const stats = await fetchStatsMany(c.env.DB, ids);
+  const display = await fetchDisplayInfo(c.env.DB, ids);
+  const ranked = rankUsers(ids, stats).map((e) => {
+    const d = display.get(e.userId);
+    return {
+      userId: e.userId,
+      username: d?.username ?? null,
+      name: d?.name ?? null,
+      image: d?.image ?? null,
+      firsts: e.firsts,
+      games: e.games,
+      winRate: e.winRate,
+      isSelf: e.userId === userId,
+    };
+  });
+  return c.json({ ranking: ranked });
+});
+
+// --- Stats sync (U6 data / R6, R14) ----------------------------------------
+
+// Read the caller's cumulative totals. Session-gated.
+app.get('/api/stats', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const totals = await d1StatsStore(c.env.DB).get(userId);
+  return c.json({ totals: totals ?? { games: 0, firsts: 0, seconds: 0, thirds: 0, fourths: 0 } });
+});
+
+// Push updated cumulative totals for a signed-in user. Monotonic: a stale or
+// forged lower total is accepted with `applied: false` and ignored. Guests
+// (no session) are rejected, so guest stats stay local-only.
+app.post('/api/stats/sync', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = await c.req.json().catch(() => ({}));
+  const next = sanitizeTotals(body);
+  const res = await syncStats(d1StatsStore(c.env.DB), userId, next, Date.now());
+  return c.json(res);
 });
 
 export default app;
