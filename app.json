@@ -16,7 +16,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.prends",
-      "associatedDomains": ["applinks:prends.app"]
+      "associatedDomains": ["applinks:prends.app"],
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -47,7 +48,8 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-apple-authentication"
     ]
   }
 }

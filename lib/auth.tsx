@@ -28,7 +28,7 @@ import {
   type EmailAuthResult,
 } from './authForms';
 
-export type SocialProvider = 'google' | 'facebook';
+export type SocialProvider = 'google' | 'facebook' | 'apple';
 
 export interface AuthProfile {
   displayName: string;
@@ -75,6 +75,35 @@ function redirectTarget(path: string): string {
   return `prends://${path}`;
 }
 
+// Native Sign in with Apple (iOS only). expo-apple-authentication has no web
+// implementation, so it is loaded with a Platform-guarded require() rather than
+// a static import that would break the web/Android bundle. The identity token
+// is handed to better-auth's idToken flow, which verifies it against the
+// configured appBundleIdentifier server-side.
+async function signInAppleNative(): Promise<SignInResult> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const AppleAuthentication = require('expo-apple-authentication') as typeof import('expo-apple-authentication');
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+    if (!credential.identityToken) return { status: 'error', message: 'Apple did not return an identity token.' };
+    const res = (await authClient.signIn.social({
+      provider: 'apple',
+      idToken: { token: credential.identityToken },
+    })) as ClientResponse;
+    if (res?.error) return { status: 'error', message: res.error.message ?? 'Sign-in failed.' };
+    return { status: 'signed-in' };
+  } catch (err) {
+    // ERR_REQUEST_CANCELED is the user backing out of the sheet: stay a guest.
+    if ((err as { code?: string })?.code === 'ERR_REQUEST_CANCELED') return { status: 'cancelled' };
+    return { status: 'cancelled' };
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { data, isPending } = authClient.useSession();
   const user = (data?.user ?? null) as AuthUser | null;
@@ -89,6 +118,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   const signIn = useCallback(async (provider: SocialProvider): Promise<SignInResult> => {
+    // Apple on iOS uses the native sheet: it returns an identity token (audience
+    // = the app bundle id) which better-auth verifies directly, avoiding the
+    // release-build hang the browser-redirect flow has on iOS. Web and Android
+    // fall through to the standard redirect path below (Android never shows the
+    // Apple button, but the guard keeps this correct if it ever does).
+    if (provider === 'apple' && Platform.OS === 'ios') {
+      return signInAppleNative();
+    }
     try {
       const res = (await authClient.signIn.social({
         provider,
