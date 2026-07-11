@@ -32,6 +32,11 @@ export default function RootLayout() {
             {/* The game draws its own slim in-table top bar; the default header
                 would stack a second bar above the felt and clash with it. */}
             <Stack.Screen name="game-local" options={{ headerShown: false }} />
+            <Stack.Screen name="play-online" options={{ title: 'Play online' }} />
+            {/* The room screen draws its own in-line header (see app/room/[code].tsx)
+                since it becomes the live felt-less table once play starts. */}
+            <Stack.Screen name="room/[code]" options={{ headerShown: false }} />
+            <Stack.Screen name="join/[code]" options={{ title: 'Join game' }} />
             <Stack.Screen name="leaderboard" options={{ title: 'Leaderboard' }} />
             <Stack.Screen name="stats" options={{ title: 'Scoreboard' }} />
             <Stack.Screen name="settings" options={{ title: 'Settings' }} />
