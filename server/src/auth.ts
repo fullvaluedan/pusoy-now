@@ -12,9 +12,11 @@
 
 import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
-import { captcha } from 'better-auth/plugins';
+import { anonymous, captcha } from 'better-auth/plugins';
 import { D1Dialect } from 'kysely-d1';
 import { sendAuthEmail } from './email';
+import { generateGuestName } from './guest';
+import { d1LinkMergeStore, mergeOnLinkSafe } from './linkMerge';
 import { socialProvidersFor } from './social';
 
 export interface Env {
@@ -113,7 +115,21 @@ export function authOptions(env: Env): BetterAuthOptions {
     baseURL: env.BETTER_AUTH_URL,
     basePath: '/api/auth',
     trustedOrigins: trustedOriginsFor(env),
-    plugins: captchaPlugins(env),
+    // Guest play is core (not feature-detected): the anonymous plugin is ALWAYS
+    // on so a first-time visitor can sign in anonymously with a generated
+    // Reddit-style name. Captcha (if its secret exists) is composed alongside it.
+    // onLinkAccount copies the guest's stats/friends/consent to the real account
+    // before better-auth deletes the anonymous row; mergeOnLinkSafe never throws
+    // so a copy failure cannot break account creation.
+    plugins: [
+      ...(captchaPlugins(env) ?? []),
+      anonymous({
+        generateName: async () => generateGuestName(),
+        onLinkAccount: async ({ anonymousUser, newUser }) => {
+          await mergeOnLinkSafe(d1LinkMergeStore(env.DB), anonymousUser.user.id, newUser.user.id);
+        },
+      }),
+    ],
     // Google + Facebook, each included only when its id/secret pair exists.
     // Avatars and names are mapped onto the user row on first sign-in.
     socialProviders: socialProvidersFor(env),
