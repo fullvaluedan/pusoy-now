@@ -13,6 +13,7 @@ import {
   ONLINE_TURN_MS,
   advanceBots,
   applySeatAction,
+  canAutoStart,
   canStart,
   createRoomState,
   generateRoomCode,
@@ -200,6 +201,62 @@ function main() {
     ok('the room reaches a finish without deadlock', r.phase === 'finished');
     ok('the finish order names all 4 seats', r.finishOrder.length === 4 && new Set(r.finishOrder).size === 4);
     ok('each human seat has a place in 1..4', [0, 1].every((s) => placeOfSeat(r, s) >= 1 && placeOfSeat(r, s) <= 4));
+  }
+
+  // --- matchmade auto-start (U3): all expected connected -> starts now -------
+  {
+    // A matchmade room (as room.ts create() sets it up): expert bots, a lobby
+    // deadline in the future, and the two matched humans as the expected set.
+    const r = createRoomState('MM0234', 4, 'guest-a', 'expert', NOW);
+    r.lobbyDeadline = NOW + 8_000;
+    r.expectedUserIds = ['guest-a', 'guest-b'];
+    joinRoom(r, 'guest-a', 'A');
+    ok('one of two expected humans present does not auto-start yet', canAutoStart(r, NOW + 1) === false);
+    joinRoom(r, 'guest-b', 'B');
+    ok('all expected humans present auto-starts before the deadline', canAutoStart(r, NOW + 1) === true);
+    // The DO would now run startGame; bots fill the remaining seats at expert.
+    startGame(r, makeRng(21));
+    ok('auto-start fills to 4 seats', r.players.length === 4);
+    ok('the empty seats are bots', r.players.filter((p) => p.kind === 'bot').length === 2);
+    ok('matchmade bots play at expert', r.botLevel === 'expert');
+    ok('the game is now playing', r.phase === 'playing');
+    ok('a started room no longer auto-starts', canAutoStart(r, NOW + 1) === false);
+  }
+
+  // --- matchmade auto-start (U3): deadline + 1 human -> starts, bots fill -----
+  {
+    const r = createRoomState('MM1234', 4, 'guest-a', 'expert', NOW);
+    r.lobbyDeadline = NOW + 8_000;
+    r.expectedUserIds = ['guest-a', 'guest-b', 'guest-c', 'guest-d'];
+    joinRoom(r, 'guest-a', 'A'); // only one of four expected showed up
+    ok('one human before the deadline does not auto-start early', canAutoStart(r, NOW + 1) === false);
+    ok('one connected human at the deadline auto-starts', canAutoStart(r, NOW + 8_000) === true);
+    startGame(r, makeRng(22));
+    ok('a lone matchmade human is filled to 4 by bots', r.players.length === 4);
+    ok('three seats become expert bots', r.players.filter((p) => p.kind === 'bot').length === 3);
+  }
+
+  // --- matchmade auto-start (U3): deadline + zero humans -> no start ----------
+  {
+    const r = createRoomState('MM2234', 4, 'guest-a', 'expert', NOW);
+    r.lobbyDeadline = NOW + 8_000;
+    r.expectedUserIds = ['guest-a'];
+    joinRoom(r, 'guest-a', 'A');
+    setConnected(r, 'guest-a', false); // they never actually connected / dropped
+    ok('a lobby with zero connected humans never auto-starts', canAutoStart(r, NOW + 8_000) === false);
+    // The DO's alarm branch uses this same predicate to discard the dead room.
+    const anyHuman = r.players.some((p) => p.kind === 'human' && p.connected);
+    ok('zero connected humans is detectable for cleanup', anyHuman === false);
+  }
+
+  // --- invite room (no deadline) still requires host start (regression) -------
+  {
+    const r = createRoomState('INV234', 4, 'host-1', 'normal', NOW);
+    joinRoom(r, 'host-1', 'host');
+    joinRoom(r, 'friend-1', 'friend');
+    ok('an invite room has no lobby deadline', r.lobbyDeadline === null);
+    ok('an invite room never auto-starts even far in the future', canAutoStart(r, NOW + 10 * 60 * 1000) === false);
+    ok('an invite room still starts via the host path', canStart(r, 'host-1') === 'ok');
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

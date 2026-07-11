@@ -63,6 +63,11 @@ export interface RoomState {
   finishOrder: number[];
   statsRecorded: boolean;
   createdAt: number;
+  // Matchmade rooms only (U3). lobbyDeadline is the wall-clock time the room
+  // auto-starts by; expectedUserIds is the set of matched humans whose arrival
+  // starts the game early. Both null for invite rooms, which start host-only.
+  lobbyDeadline: number | null;
+  expectedUserIds: string[] | null;
 }
 
 export function createRoomState(
@@ -86,6 +91,8 @@ export function createRoomState(
     finishOrder: [],
     statsRecorded: false,
     createdAt: now,
+    lobbyDeadline: null,
+    expectedUserIds: null,
   };
 }
 
@@ -146,6 +153,27 @@ export function canStart(state: RoomState, byUserId: string): StartCheck {
   if (state.phase !== 'lobby') return 'not-lobby';
   if (state.players.filter((p) => p.kind === 'human').length < 2) return 'need-2';
   return 'ok';
+}
+
+// Whether a matchmade room should auto-start now (U3, R7). Distinct from the
+// host-only canStart: no host is involved. True only in a lobby that carries a
+// lobbyDeadline, once at least one human is connected AND either the deadline
+// has passed or every expected matched human is seated + connected. A lobby with
+// zero connected humans never auto-starts (the alarm discards it instead).
+export function canAutoStart(state: RoomState, now: number): boolean {
+  if (state.phase !== 'lobby') return false;
+  if (state.lobbyDeadline == null) return false;
+  const connectedHumans = state.players.filter((p) => p.kind === 'human' && p.connected).length;
+  if (connectedHumans < 1) return false;
+  if (now >= state.lobbyDeadline) return true;
+  const expected = state.expectedUserIds;
+  if (expected && expected.length > 0) {
+    const allArrived = expected.every((uid) =>
+      state.players.some((p) => p.kind === 'human' && p.userId === uid && p.connected),
+    );
+    if (allArrived) return true;
+  }
+  return false;
 }
 
 // Deal and begin. Unfilled seats become bots at the host's difficulty (R10).
