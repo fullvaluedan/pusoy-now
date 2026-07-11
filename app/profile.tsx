@@ -3,8 +3,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../components/Avatar';
-import { Button, Card, ScreenContainer } from '../components/ui';
-import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
+import { BigStat, Button, Card, ScreenContainer } from '../components/ui';
+import { colors, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { emptyStats, loadStats, LEVEL_ORDER, LEVEL_TITLE, type BotStats } from '../lib/stats';
 
@@ -40,16 +40,15 @@ export default function Profile() {
     // Signed in
     return (
       <ScreenContainer scroll>
-        <View style={styles.avatarContainer}>
+        <Card style={styles.identityCard}>
           <Avatar
             url={profile.avatarUrl ?? undefined}
             name={profile.displayName}
             size={72}
           />
-        </View>
-
-        <Text style={styles.displayName}>{profile.displayName}</Text>
-        <Text style={styles.linkedLabel}>Linked account</Text>
+          <Text style={styles.displayName}>{profile.displayName}</Text>
+          <Text style={styles.linkedLabel}>Linked account</Text>
+        </Card>
 
         {/* Stats row */}
         <Text style={styles.statsTitle}>Your stats vs bots</Text>
@@ -78,12 +77,11 @@ export default function Profile() {
   // Guest mode
   return (
     <ScreenContainer scroll>
-      <View style={styles.avatarContainer}>
+      <Card style={styles.identityCard}>
         <Avatar name="Guest" size={72} />
-      </View>
-
-      <Text style={styles.displayName}>Guest</Text>
-      <Text style={styles.guestExplain}>Your stats are saved locally on this device.</Text>
+        <Text style={styles.displayName}>Guest</Text>
+        <Text style={styles.guestExplain}>Your stats are saved locally on this device.</Text>
+      </Card>
 
       {/* Stats row */}
       <Text style={styles.statsTitle}>Your stats vs bots</Text>
@@ -126,8 +124,7 @@ function renderStatsCards(stats: BotStats) {
             <View style={styles.placeRow}>
               {PLACE_LABEL.map((label, i) => (
                 <View key={label} style={styles.place}>
-                  <Text style={[styles.placeValue, i === 0 && styles.placeWin]}>{s.ranks[i]}</Text>
-                  <Text style={styles.placeLabel}>{label}</Text>
+                  <BigStat value={s.ranks[i]} label={label} />
                 </View>
               ))}
             </View>
@@ -139,7 +136,7 @@ function renderStatsCards(stats: BotStats) {
 }
 
 const styles = StyleSheet.create({
-  avatarContainer: {
+  identityCard: {
     alignItems: 'center',
     marginBottom: spacing.lg,
   },
@@ -147,19 +144,18 @@ const styles = StyleSheet.create({
     ...typography.subheading,
     color: colors.felt,
     textAlign: 'center',
+    marginTop: spacing.md,
     marginBottom: spacing.xs,
   },
   linkedLabel: {
     ...typography.label,
     color: colors.textMuted,
     textAlign: 'center',
-    marginBottom: spacing.lg,
   },
   guestExplain: {
     ...typography.label,
     color: colors.textMuted,
     textAlign: 'center',
-    marginBottom: spacing.lg,
   },
   statsTitle: {
     ...typography.label,
@@ -184,16 +180,6 @@ const styles = StyleSheet.create({
   level: { ...typography.subheading, color: colors.felt },
   games: { ...typography.label, color: colors.textMuted },
   placeRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  place: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    marginHorizontal: 2,
-    borderRadius: radii.sm,
-    backgroundColor: withAlpha(colors.felt, 0.06),
-  },
-  placeValue: { fontSize: 22, fontWeight: '800', color: colors.textPrimary },
-  placeWin: { color: colors.felt },
-  placeLabel: { ...typography.tiny, color: colors.textMuted, marginTop: 2 },
+  place: { flex: 1 },
   button: { marginTop: spacing.md },
 });

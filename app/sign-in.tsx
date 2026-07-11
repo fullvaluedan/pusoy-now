@@ -11,8 +11,8 @@
 // account. Guests keep full access to bot games, so nothing here is a gate.
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Button, ScreenContainer } from '../components/ui';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Button, Field, ScreenContainer } from '../components/ui';
 import { colors, providerBrand, radii, spacing, typography } from '../lib/theme';
 import { useAuth, type SocialProvider } from '../lib/auth';
 import { validateResetEmail, validateSignIn, validateSignUp } from '../lib/authForms';
@@ -34,6 +34,27 @@ const PROVIDERS: ProviderEntry[] = [
 
 type Mode = 'sign-in' | 'sign-up' | 'reset';
 
+// Which Field a validateSignIn/validateSignUp/validateResetEmail message
+// belongs to, so it renders inline under the right input instead of only as
+// a form-level banner. authForms.ts returns a single message for the first
+// problem found; this just routes that message by the field it names. Order
+// matters: check 'match' (password mismatch) before the generic 'password'
+// check, since that message also contains the word "Password".
+interface FieldErrors {
+  name?: string;
+  email?: string;
+  password?: string;
+  confirm?: string;
+}
+
+function fieldErrorsFor(message: string): FieldErrors {
+  if (message.includes('name')) return { name: message };
+  if (message.includes('email')) return { email: message };
+  if (message.includes('match')) return { confirm: message };
+  if (message.includes('assword')) return { password: message };
+  return {};
+}
+
 export default function SignIn() {
   const router = useRouter();
   const { session, profile, loading, phase, pendingEmail, signIn, signUpEmail, signInEmail, resetPassword, clearPending, signOut } =
@@ -47,10 +68,12 @@ export default function SignIn() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   function resetFeedback() {
     setError(null);
     setNotice(null);
+    setFieldErrors({});
   }
 
   async function onSocial(entry: ProviderEntry) {
@@ -73,7 +96,7 @@ export default function SignIn() {
 
     if (mode === 'reset') {
       const invalid = validateResetEmail(email);
-      if (invalid) return setError(invalid);
+      if (invalid) return setFieldErrors(fieldErrorsFor(invalid));
       setBusy('email');
       try {
         const res = await resetPassword(email);
@@ -87,7 +110,7 @@ export default function SignIn() {
 
     if (mode === 'sign-up') {
       const invalid = validateSignUp({ name, email, password, confirm });
-      if (invalid) return setError(invalid);
+      if (invalid) return setFieldErrors(fieldErrorsFor(invalid));
       setBusy('email');
       try {
         const res = await signUpEmail({ name, email, password });
@@ -102,7 +125,7 @@ export default function SignIn() {
 
     // sign-in
     const invalid = validateSignIn({ email, password });
-    if (invalid) return setError(invalid);
+    if (invalid) return setFieldErrors(fieldErrorsFor(invalid));
     setBusy('email');
     try {
       const res = await signInEmail({ email, password });
@@ -166,8 +189,7 @@ export default function SignIn() {
 
   // Forms -------------------------------------------------------------------
   const title = mode === 'sign-up' ? 'Create account' : mode === 'reset' ? 'Reset password' : 'Sign in';
-  const submitLabel =
-    busy === 'email' ? 'Please wait...' : mode === 'sign-up' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in';
+  const submitLabel = mode === 'sign-up' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in';
 
   return (
     <ScreenContainer scroll>
@@ -179,22 +201,14 @@ export default function SignIn() {
       </Text>
 
       {mode === 'sign-up' ? (
-        <TextInput
-          style={styles.input}
-          placeholder="Name"
-          placeholderTextColor={colors.textFaint}
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
-        />
+        <Field label="Name" value={name} onChangeText={setName} error={fieldErrors.name} autoCapitalize="words" />
       ) : null}
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor={colors.textFaint}
+      <Field
+        label="Email"
         value={email}
         onChangeText={setEmail}
+        error={fieldErrors.email}
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
@@ -202,34 +216,32 @@ export default function SignIn() {
       />
 
       {mode !== 'reset' ? (
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor={colors.textFaint}
+        <Field
+          label="Password"
           value={password}
           onChangeText={setPassword}
+          error={fieldErrors.password}
           secureTextEntry
           autoCapitalize="none"
         />
       ) : null}
 
       {mode === 'sign-up' ? (
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm password"
-          placeholderTextColor={colors.textFaint}
+        <Field
+          label="Confirm password"
           value={confirm}
           onChangeText={setConfirm}
+          error={fieldErrors.confirm}
           secureTextEntry
           autoCapitalize="none"
         />
       ) : null}
 
-      <Button title={submitLabel} onPress={() => void onSubmitEmail()} disabled={busy !== null} />
+      <Button title={submitLabel} onPress={() => void onSubmitEmail()} loading={busy === 'email'} disabled={busy !== null && busy !== 'email'} />
 
       {error ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>{error}</Text>
         </View>
       ) : null}
       {notice ? (
@@ -274,14 +286,15 @@ export default function SignIn() {
         <View style={styles.providers}>
           <Text style={styles.orLabel}>or continue with</Text>
           {PROVIDERS.map((p) => {
-            const disabled = p.id === 'tiktok' ? !TIKTOK_ENABLED : busy !== null;
+            const disabled = p.id === 'tiktok' ? !TIKTOK_ENABLED : busy !== null && busy !== p.id;
             return (
               <Button
                 key={p.id}
-                title={busy === p.id ? 'Opening browser...' : `Continue with ${p.name}`}
+                title={`Continue with ${p.name}`}
                 subtitle={p.id === 'tiktok' ? 'Coming soon' : ''}
                 color={p.color}
                 disabled={disabled}
+                loading={busy === p.id}
                 onPress={() => void onSocial(p)}
               />
             );
@@ -297,30 +310,25 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   title: { ...typography.heading, color: colors.felt, marginTop: spacing.sm },
   subtitle: { ...typography.label, color: colors.textMuted, marginBottom: spacing.md },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.overlay,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: typography.body.fontSize,
-    color: colors.textPrimary,
-    minHeight: 52,
-  },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   providers: { marginTop: spacing.md, gap: spacing.sm + 4 },
   orLabel: { ...typography.caption, color: colors.textFaint, textAlign: 'center' },
-  errorBox: {
-    backgroundColor: colors.dangerLight,
-    borderRadius: 10,
-    padding: spacing.md,
+  // Form-level (server) errors: same soft-red validation look as Field's
+  // inline banner, since these are not tied to one specific input.
+  errorBanner: {
+    backgroundColor: colors.dangerSoftBg,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.dangerSoftBorder,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-  errorText: { color: colors.danger, fontSize: 13 },
+  errorBannerText: { color: colors.dangerSoftText, fontSize: typography.caption.fontSize },
   noticeBox: {
     backgroundColor: colors.overlay,
-    borderRadius: 10,
-    padding: spacing.md,
+    borderRadius: radii.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-  noticeText: { color: colors.textBody, fontSize: 13 },
+  noticeText: { color: colors.textBody, fontSize: typography.caption.fontSize },
 });
