@@ -94,6 +94,19 @@ Load `https://pusoy-now.pages.dev` in a browser.
 - Open a `/join/CODE` link to confirm the SPA fallback (route handled by the client router, not a 404).
 - Verify the room join completes (WebSocket upgrade to the auth Worker).
 
+## Email list export
+
+Marketing-email consent is captured per user in the `marketing_consent` table
+(signup checkbox, or a one-time post-sign-in prompt for social-login users).
+To pull the current opt-in list for a mailing send:
+
+```bash
+npx wrangler d1 execute pusoy-now --remote --command "SELECT u.email FROM user u JOIN marketing_consent m ON m.userId = u.id WHERE m.optIn = 1"
+```
+
+Only rows with `optIn = 1` are lawful to email; `optIn = 0` rows exist so a
+declined prompt is remembered and never asked again.
+
 ## Rollback
 
 To revert to a previous build, re-deploy an older version of `dist/`:

@@ -50,3 +50,21 @@ export function resolveButtonTokens({ variant = 'primary', disabled, loading, co
 export function shouldShowFieldError(error?: string | null): boolean {
   return Boolean(error && error.trim().length > 0);
 }
+
+export interface CheckboxTokens {
+  backgroundColor: string;
+  borderColor: string;
+  showMark: boolean;
+}
+
+// Resolves the fill/border/mark state for a Checkbox given whether it is
+// checked. Unchecked is an empty surface box with the same faint border
+// Field uses for its input; checked fills solid felt with the mark drawn on
+// top. Every consent checkbox in this app starts unchecked (a pre-ticked box
+// is not lawful consent in several jurisdictions) - that default lives at the
+// call site, not here.
+export function resolveCheckboxTokens(checked: boolean): CheckboxTokens {
+  return checked
+    ? { backgroundColor: colors.felt, borderColor: colors.felt, showMark: true }
+    : { backgroundColor: colors.surface, borderColor: colors.overlay, showMark: false };
+}

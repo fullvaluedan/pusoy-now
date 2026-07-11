@@ -8,7 +8,7 @@
 // lib/profileTest.ts vs lib/auth.tsx. Same minimal ok() harness.
 // Run: tsx components/ui.test.ts (or via npm test)
 
-import { isButtonInert, resolveButtonTokens, shouldShowFieldError } from '../lib/uiState';
+import { isButtonInert, resolveButtonTokens, resolveCheckboxTokens, shouldShowFieldError } from '../lib/uiState';
 import { colors } from '../lib/theme';
 
 let pass = 0;
@@ -71,6 +71,19 @@ function main() {
   ok('a null error hides the banner', shouldShowFieldError(null) === false);
   ok('an empty string hides the banner', shouldShowFieldError('') === false);
   ok('a whitespace-only string hides the banner', shouldShowFieldError('   ') === false);
+
+  // --- resolveCheckboxTokens (Checkbox) -------------------------------------
+  const unchecked = resolveCheckboxTokens(false);
+  ok(
+    'an unchecked box is an empty surface with a faint border',
+    unchecked.backgroundColor === colors.surface && unchecked.borderColor === colors.overlay && unchecked.showMark === false,
+  );
+
+  const checked = resolveCheckboxTokens(true);
+  ok(
+    'a checked box fills felt and shows the mark',
+    checked.backgroundColor === colors.felt && checked.borderColor === colors.felt && checked.showMark === true,
+  );
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
