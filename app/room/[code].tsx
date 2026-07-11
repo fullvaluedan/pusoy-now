@@ -252,12 +252,23 @@ function LiveTable({
     <View style={styles.tableWrap}>
       <View style={styles.oppRow}>
         {opponents.map((p) => (
-          <View key={p.seat} style={[styles.oppBox, currentSeat === p.seat && styles.oppBoxActive]}>
+          <View
+            key={p.seat}
+            style={[
+              styles.oppBox,
+              currentSeat === p.seat && styles.oppBoxActive,
+              p.kind === 'human' && !p.connected && styles.oppBoxLeft,
+            ]}
+          >
             <Text style={styles.oppName} numberOfLines={1}>
               {p.username ?? (p.kind === 'bot' ? `Bot ${p.seat + 1}` : 'Player')}
             </Text>
             <OpponentCardStack count={p.handCount} small />
-            <Text style={styles.oppCount}>{p.handCount} cards</Text>
+            {p.kind === 'human' && !p.connected ? (
+              <Text style={styles.oppLeft}>LEFT TABLE</Text>
+            ) : (
+              <Text style={styles.oppCount}>{p.handCount} cards</Text>
+            )}
           </View>
         ))}
       </View>
@@ -367,8 +378,18 @@ const styles = StyleSheet.create({
     minWidth: 90,
   },
   oppBoxActive: { backgroundColor: withAlpha(colors.gold, 0.12), borderWidth: 1, borderColor: colors.gold },
+  // A seat whose human walked away: dimmed, with a red LEFT TABLE tag in place
+  // of the card count. They keep auto-passing until they reconnect.
+  oppBoxLeft: { opacity: 0.55 },
   oppName: { ...typography.caption, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs, maxWidth: 100 },
   oppCount: { ...typography.tiny, color: colors.textMuted, marginTop: spacing.xs },
+  oppLeft: {
+    ...typography.tiny,
+    color: colors.dangerSoftText,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginTop: spacing.xs,
+  },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   turnLabel: { ...typography.subheading, color: colors.felt, marginBottom: spacing.xs },

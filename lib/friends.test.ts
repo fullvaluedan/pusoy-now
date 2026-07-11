@@ -29,9 +29,9 @@ const stats = (
   normal: [number, number, number, number, number],
   expert: [number, number, number, number, number],
 ): BotStats => ({
-  easy: { games: easy[0], ranks: [easy[1], easy[2], easy[3], easy[4]] },
-  normal: { games: normal[0], ranks: [normal[1], normal[2], normal[3], normal[4]] },
-  expert: { games: expert[0], ranks: [expert[1], expert[2], expert[3], expert[4]] },
+  easy: { games: easy[0], ranks: [easy[1], easy[2], easy[3], easy[4]], bestWinMs: null },
+  normal: { games: normal[0], ranks: [normal[1], normal[2], normal[3], normal[4]], bestWinMs: null },
+  expert: { games: expert[0], ranks: [expert[1], expert[2], expert[3], expert[4]], bestWinMs: null },
 });
 
 function main() {

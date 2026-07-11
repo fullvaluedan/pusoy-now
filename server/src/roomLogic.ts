@@ -201,23 +201,35 @@ export function applySeatAction(state: RoomState, seat: number, action: RoundAct
   return maybeFinish(state);
 }
 
-// Advance every consecutive bot turn until it is a human's turn or the hand
-// ends. Bots act instantly server-side (R11); called after start and after each
-// human action.
+// Advance every consecutive auto-played turn until it is a connected human's
+// turn or the hand ends. Two seats play automatically: bots (they act instantly
+// server-side, R11) and disconnected humans (someone who left the table keeps
+// auto-passing so the game never stalls waiting on them; they resume the moment
+// they reconnect). Called after start, after each human action, and on a
+// disconnect. A connected human's turn breaks the loop.
 export function advanceBots(state: RoomState, rng: Rng = Math.random): ActionResult {
   let guard = 0;
   while (state.phase === 'playing' && state.handState && guard++ < 2000) {
     const seat = state.handState.currentPlayerIndex;
     const player = state.players[seat];
-    if (!player || player.kind !== 'bot') break;
-    const hand = state.hands![seat];
-    const choice = botChoose(hand, state.handState.leadCombo, {
-      level: state.botLevel,
-      rng,
-      context: { seat, playedCards: state.playedCards, handSizes: state.hands!.map((h) => h.length) },
-    });
-    const res = applySeatAction(state, seat, choice ? { kind: 'play', combo: choice } : { kind: 'pass' });
-    if (res.status !== 'ok') return res;
+    if (!player) break;
+    if (player.kind === 'bot') {
+      const hand = state.hands![seat];
+      const choice = botChoose(hand, state.handState.leadCombo, {
+        level: state.botLevel,
+        rng,
+        context: { seat, playedCards: state.playedCards, handSizes: state.hands!.map((h) => h.length) },
+      });
+      const res = applySeatAction(state, seat, choice ? { kind: 'play', combo: choice } : { kind: 'pass' });
+      if (res.status !== 'ok') return res;
+    } else if (!player.connected) {
+      // Disconnected human: force a pass (or the minimal forced move when they
+      // are stuck leading) via the shared timeout path, then move on.
+      const res = timeoutCurrent(state);
+      if (res.status !== 'ok') return res;
+    } else {
+      break; // a connected human's turn: wait for their action
+    }
   }
   return { status: 'ok' };
 }

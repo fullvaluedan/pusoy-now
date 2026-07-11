@@ -18,6 +18,10 @@ export interface LevelStats {
   games: number;
   // ranks[0] = times finished 1st, ranks[3] = times finished 4th (last).
   ranks: [number, number, number, number];
+  // Fastest winning game at this level, in milliseconds. null until the player
+  // wins one. Only wins (1st place) count -- a "fastest time" for a loss is
+  // meaningless.
+  bestWinMs: number | null;
 }
 export type BotStats = Record<BotLevel, LevelStats>;
 
@@ -31,7 +35,7 @@ export const LEVEL_TITLE: Record<BotLevel, string> = {
 };
 
 function emptyLevel(): LevelStats {
-  return { games: 0, ranks: [0, 0, 0, 0] };
+  return { games: 0, ranks: [0, 0, 0, 0], bestWinMs: null };
 }
 
 export function emptyStats(): BotStats {
@@ -83,6 +87,10 @@ export async function loadStats(): Promise<BotStats> {
       if (Array.isArray(r) && r.length === 4) {
         s[lvl].ranks = [Number(r[0]) || 0, Number(r[1]) || 0, Number(r[2]) || 0, Number(r[3]) || 0];
       }
+      // Back-compat: older payloads have no bestWinMs. A positive finite number
+      // is a real best time; anything else stays null.
+      const b = Number(p.bestWinMs);
+      s[lvl].bestWinMs = Number.isFinite(b) && b > 0 ? b : null;
     }
     return s;
   } catch {
@@ -98,6 +106,27 @@ export async function recordGame(level: BotLevel, rank: number): Promise<void> {
   s[level].games += 1;
   s[level].ranks[rank - 1] += 1;
   await writeRaw(JSON.stringify(s));
+}
+
+// Record the time of a winning game (1st place). Keeps only the fastest, so a
+// call with a slower time is a no-op. Ignores non-positive durations.
+export async function recordWinTime(level: BotLevel, ms: number): Promise<void> {
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  const s = await loadStats();
+  const prev = s[level].bestWinMs;
+  if (prev == null || ms < prev) {
+    s[level].bestWinMs = ms;
+    await writeRaw(JSON.stringify(s));
+  }
+}
+
+// "M:SS" for a duration in milliseconds (e.g. 74000 -> "1:14"). Used on the
+// finish screen and the scoreboard.
+export function formatTime(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
 export async function clearStats(): Promise<void> {

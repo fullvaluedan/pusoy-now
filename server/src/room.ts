@@ -172,8 +172,11 @@ export class GameRoom extends DurableObject<Env> {
     const meta = ws.deserializeAttachment() as SocketMeta | null;
     if (meta) {
       setConnected(this.room, meta.userId, false);
-      await this.persist();
-      this.broadcast();
+      // If it is (or becomes) the departed player's turn, auto-pass through so
+      // the table does not stall on someone who left. afterProgress persists,
+      // broadcasts the "LEFT TABLE" state, and re-arms the alarm.
+      advanceBots(this.room);
+      await this.afterProgress();
     }
   }
 

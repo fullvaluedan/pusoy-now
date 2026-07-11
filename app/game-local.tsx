@@ -15,8 +15,9 @@
 //     the turn passes automatically.
 //   - Live combo feedback: the toolbar names the selected combo and whether
 //     it beats the lead; Play is only enabled for a legal play.
-//   - Play / Pass actions centered as a single row directly below the hand
-//   - Bot mode: no turn timer
+//   - Play / Pass actions on one row: Play left, Pass hard right
+//   - Bot mode: elapsed game clock in the top bar; records the player's
+//     fastest winning time per level (shown on the finish screen)
 //   - Round-complete screen with finish order
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -50,7 +51,7 @@ import { canPlay, detectCombo } from '../lib/pusoy/combo';
 import { SUIT_VALUE } from '../lib/pusoy/deck';
 import { findLegalPlays } from '../lib/pusoy/bot';
 import { parseLevel } from '../lib/pusoy/level';
-import { pushStatsSync, recordGame } from '../lib/stats';
+import { formatTime, loadStats, pushStatsSync, recordGame, recordWinTime } from '../lib/stats';
 import { incrementGameCounter } from '../lib/gameCounter';
 import { colors, layout, radii, spacing, typography, withAlpha } from '../lib/theme';
 import { useAuth } from '../lib/auth';
@@ -288,6 +289,7 @@ function SeatPlate({
 function TopBar({
   title,
   turnLabel,
+  timer,
   onBack,
   onSkip,
 }: {
@@ -295,6 +297,8 @@ function TopBar({
   // Compact, persistent turn/round status chip under the title. Optional so
   // the finished/loading screens (which reuse TopBar without it) stay as-is.
   turnLabel?: string;
+  // Elapsed game clock ("M:SS"), shown during play only.
+  timer?: string;
   onBack: () => void;
   onSkip?: () => void;
 }) {
@@ -312,6 +316,7 @@ function TopBar({
         ) : null}
       </View>
       <View style={[styles.topBarSide, styles.topBarRight]}>
+        {timer ? <Text style={styles.timerText}>{timer}</Text> : null}
         {onSkip ? (
           <Pressable style={styles.btnSmall} onPress={onSkip}>
             <Text style={styles.btnSmallText} numberOfLines={1}>Skip to end</Text>
@@ -338,6 +343,21 @@ export default function LocalGameScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode | null>(null);
   const [autoPassing, setAutoPassing] = useState(false);
+  // Game clock: startedAtRef is stamped the moment the deal finishes and play
+  // begins; nowTs ticks once a second so the live timer re-renders. The best
+  // winning time for this level is loaded once the game finishes.
+  const startedAtRef = useRef<number | null>(null);
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  const [bestWinMs, setBestWinMs] = useState<number | null>(null);
+  // Tick the clock once a second, but only while actually playing -- no need to
+  // re-render during the dealing animation or the finished screen (where the
+  // time is frozen at game.finishedAt anyway).
+  const phase = game?.phase;
+  useEffect(() => {
+    if (phase !== 'playing') return;
+    const id = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [phase]);
 
   // Create a new game when this screen mounts. The screen is re-mounted by
   // router.replace on "Play again", so this fires fresh each time and we
@@ -419,6 +439,14 @@ export default function LocalGameScreen() {
       });
       void incrementGameCounter(game.level);
     }
+    // A win (1st place) logs its time toward the level's best. Either way, load
+    // the current best for this level so the finish screen can show it.
+    const elapsed = startedAtRef.current != null && game.finishedAt
+      ? game.finishedAt - startedAtRef.current
+      : null;
+    const level = game.level;
+    const after = rank === 1 && elapsed != null ? recordWinTime(level, elapsed) : Promise.resolve();
+    void after.then(() => loadStats()).then((s) => setBestWinMs(s[level].bestWinMs));
   }, [game, tick]);
 
   // Auto-skip: once the human has emptied their hand, don't make them watch the
@@ -460,7 +488,10 @@ export default function LocalGameScreen() {
           deck={game.deck}
           playerKinds={game.playerKinds}
           playerNames={playerNames}
-          onDone={() => startGame(game)}
+          onDone={() => {
+            startedAtRef.current = Date.now();
+            startGame(game);
+          }}
         />
       </TablePanel>
     );
@@ -481,6 +512,12 @@ export default function LocalGameScreen() {
           <Text style={styles.finishHeadline}>
             {youWon ? 'You won!' : youLast ? 'You lost' : 'Hand over'}
           </Text>
+          {startedAtRef.current != null && game.finishedAt ? (
+            <Text style={styles.finishTime}>
+              Time {formatTime(game.finishedAt - startedAtRef.current)}
+              {bestWinMs != null ? `  ·  Best ${formatTime(bestWinMs)}` : ''}
+            </Text>
+          ) : null}
           <Text style={styles.finishSub}>Finish order</Text>
           {game.finishOrder.map((s, i) => {
             const isHuman = s === humanSeat;
@@ -606,12 +643,14 @@ export default function LocalGameScreen() {
     }
   };
 
-  // Cycle sort mode: rank → suit → hands. Selection persists (card ids
-  // don't change, only positions).
+  // Cycle sort mode: rank → suit → hands. Sorting clears the current selection
+  // -- after a re-sort the picked cards are scattered and rarely still the play
+  // the user wanted, so a clean slate is less error-prone than a stale one.
   const onOrganize = () => {
     const next = sortMode === null ? 'rank' : NEXT_SORT[sortMode];
     setSortMode(next);
     sortHumanHand(game, next);
+    setSelected([]);
   };
 
   // Tapping a card selects it, with behavior that depends on the established
@@ -659,16 +698,25 @@ export default function LocalGameScreen() {
     });
   };
 
-  // Dragging a card into the center plays a hand automatically, but only when a
-  // hand type is already established (there is a lead). A single-lead drag plays
-  // that single; a pair-lead drag plays the matching pair (lowest suits); a
-  // 5-card-lead drag plays the current five-card selection if it is legal. When
-  // leading (no lead yet) a drag never auto-plays — the player builds the combo
-  // and presses Play. A drag that would not be a legal play is ignored.
+  // Dragging a card into the center plays a hand automatically. When leading
+  // (no lead yet): if a legal combo is already selected the drag plays it, an
+  // illegal in-progress selection is left alone, and otherwise the dragged card
+  // leads as a single — so after a five-card hand where everyone passes you can
+  // just fling one card out to lead it. With a lead established: a single-lead
+  // drag plays that single; a pair-lead drag plays the matching pair (lowest
+  // suits); a 5-card-lead drag plays the current five-card selection if legal.
+  // A drag that would not be a legal play is ignored.
   const playByDrag = (c: Card) => {
-    if (!isMyTurn || !lead) return;
+    if (!isMyTurn) return;
     let cards: Card[] | null = null;
-    if (lead.length === 1) {
+    if (!lead) {
+      if (selected.length > 0) {
+        if (!selLegal) return; // building an illegal combo; don't fire a play
+        cards = selected;
+      } else {
+        cards = [c];
+      }
+    } else if (lead.length === 1) {
       const single = detectCombo([c]);
       if (single && canPlay(single, lead)) cards = [c];
     } else if (lead.length === 2) {
@@ -714,6 +762,11 @@ export default function LocalGameScreen() {
   const turnLabel = isMyTurn
     ? 'Your turn'
     : `${seatName(game, currentSeat, humanDisplayName)}'s turn`;
+  // Live game clock: time since the deal finished. Freezes at the final time
+  // once the hand ends (game.finishedAt), otherwise tracks the 1s ticker.
+  const elapsedMs = startedAtRef.current == null
+    ? 0
+    : (game.finishedAt ?? nowTs) - startedAtRef.current;
 
   return (
     <TablePanel>
@@ -721,6 +774,7 @@ export default function LocalGameScreen() {
         <TopBar
           title={`${LEVEL_LABEL[game.level]} table`}
           turnLabel={turnLabel}
+          timer={formatTime(elapsedMs)}
           onBack={() => router.replace('/')}
           onSkip={onSkip}
         />
@@ -832,7 +886,7 @@ export default function LocalGameScreen() {
           onTap={toggleCard}
           onReorder={handleReorder}
           onDropToCenter={playByDrag}
-          dropEnabled={isMyTurn && lead !== null}
+          dropEnabled={isMyTurn}
         />
 
         {(autoPassing || error) && (
@@ -899,7 +953,8 @@ function HandRow({
   onReorder: (from: number, to: number) => void;
   // Called when a card is flicked up into the center to auto-play it.
   onDropToCenter: (c: Card) => void;
-  // Whether an upward flick should attempt a play (true only with a lead).
+  // Whether an upward flick should attempt a play (true on the human's turn,
+  // whether leading or following).
   dropEnabled: boolean;
 }) {
   // Reactive: reflows the fan when the browser window resizes / device rotates.
@@ -1387,6 +1442,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnSmallText: { color: colors.textOnFelt, fontWeight: '600', fontSize: typography.caption.fontSize },
+  // Elapsed game clock in the top bar, sitting above the Skip button. Tabular
+  // width would be ideal but RN has no cross-platform monospace; the fixed
+  // right-align keeps it from jittering as the seconds tick.
+  timerText: {
+    color: colors.textOnFelt,
+    fontSize: typography.caption.fontSize,
+    fontWeight: '800',
+    marginBottom: spacing.xs,
+    letterSpacing: 0.5,
+  },
   // The only ghost button sits on the cream finish card, not on the felt, so it
   // takes the dark ink. White-on-cream was effectively invisible.
   btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.felt },
@@ -1403,6 +1468,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   finishHeadline: { fontSize: 32, fontWeight: '800', color: colors.felt, marginBottom: spacing.sm },
+  finishTime: { fontSize: typography.label.fontSize, color: colors.felt, fontWeight: '700', marginBottom: spacing.sm },
   finishSub: { fontSize: typography.label.fontSize, color: colors.textMuted, marginBottom: spacing.lg - 4 },
   finishRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
   finishPlace: { color: colors.felt, fontSize: 22, fontWeight: '700', width: 40 },

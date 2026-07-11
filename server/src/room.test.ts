@@ -21,6 +21,7 @@ import {
   joinRoom,
   placeOfSeat,
   redactStateFor,
+  setConnected,
   startGame,
   timeoutCurrent,
   type RoomState,
@@ -149,6 +150,25 @@ function main() {
     timeoutCurrent(r);
     const after = r.handState!.currentPlayerIndex;
     ok('a timeout advances off the timed-out player', after !== before || r.phase === 'finished');
+  }
+
+  // --- a disconnected human is auto-passed, never blocks the table ----------
+  {
+    const r = twoSeatRoom();
+    joinRoom(r, 'host-1', 'host');
+    joinRoom(r, 'friend-1', 'friend');
+    startGame(r, makeRng(5));
+    const gone = r.handState!.currentPlayerIndex; // the seat about to act
+    setConnected(r, r.players[gone].userId!, false);
+    // advanceBots now stands in for the DO's disconnect handler: it must move
+    // the turn off the departed seat (auto-pass/forced) rather than stall.
+    advanceBots(r);
+    const stalled = r.phase === 'playing' && r.handState!.currentPlayerIndex === gone;
+    ok('a disconnected player does not hold up the turn', !stalled);
+    // Reconnecting restores their seat and they can act again.
+    const back = joinRoom(r, r.players[gone].userId!, 'host');
+    ok('the departed player rejoins their seat', back.status === 'joined' && back.seat === gone);
+    ok('the rejoined player is marked connected', r.players[gone].connected === true);
   }
 
   // --- full simulation drives to a finish (bots act, finish records) --------
