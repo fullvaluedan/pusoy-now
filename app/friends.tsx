@@ -358,6 +358,7 @@ const styles = StyleSheet.create({
   username: { ...typography.bodyBold, color: colors.textPrimary },
   name: { ...typography.caption, color: colors.textMuted },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  actionBtn: { minHeight: 40, paddingVertical: spacing.xs },
+  // 44 is the floor for a tap target; the previous 40 undercut it.
+  actionBtn: { minHeight: 44, paddingVertical: spacing.xs },
   pendingLabel: { ...typography.caption, color: colors.textFaint, marginRight: spacing.xs },
 });

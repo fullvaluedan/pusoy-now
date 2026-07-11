@@ -370,18 +370,23 @@ const styles = StyleSheet.create({
 
   // Live table
   tableWrap: { flex: 1, width: '100%' },
-  oppRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: spacing.sm },
+  // Flex-based instead of a fixed minWidth x up to 3 boxes: at 375px with the
+  // old minWidth 90 + oppName's own maxWidth 100, a box could grow past 90
+  // for a long username and 3 of them could exceed the row's ~335px content
+  // width. flex:1 + gap always splits the row evenly, so it never overflows
+  // regardless of name length.
+  oppRow: { flexDirection: 'row', paddingVertical: spacing.sm, gap: spacing.sm },
   oppBox: {
+    flex: 1,
     alignItems: 'center',
     padding: spacing.sm,
     borderRadius: radii.md,
-    minWidth: 90,
   },
   oppBoxActive: { backgroundColor: withAlpha(colors.gold, 0.12), borderWidth: 1, borderColor: colors.gold },
   // A seat whose human walked away: dimmed, with a red LEFT TABLE tag in place
   // of the card count. They keep auto-passing until they reconnect.
   oppBoxLeft: { opacity: 0.55 },
-  oppName: { ...typography.caption, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs, maxWidth: 100 },
+  oppName: { ...typography.caption, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs, maxWidth: '100%' },
   oppCount: { ...typography.tiny, color: colors.textMuted, marginTop: spacing.xs },
   oppLeft: {
     ...typography.tiny,

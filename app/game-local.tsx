@@ -296,7 +296,7 @@ function TopBar({
 }) {
   return (
     <View style={styles.topBar}>
-      <Pressable onPress={onBack} hitSlop={12} style={styles.topBarSide}>
+      <Pressable onPress={onBack} hitSlop={12} style={[styles.topBarSide, styles.topBarLeft]}>
         <Text style={styles.topBarBack}>{'←'}</Text>
       </Pressable>
       <View style={styles.topBarCenter}>
@@ -1182,10 +1182,14 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
   },
-  // Wide enough that "Skip to end" fits on one line without wrapping; kept
-  // equal on both sides so the centered title stays centered.
-  topBarSide: { width: 116, justifyContent: 'center' },
-  topBarRight: { alignItems: 'flex-end' },
+  topBarSide: { justifyContent: 'center' },
+  // Left side only ever holds the back arrow, so it gets a narrow fixed
+  // column; the right side needs room for the timer + "Skip to end" button
+  // on one line. Splitting them (instead of one width shared by both, as
+  // before) frees ~60px for the centered title at 375px, where the old
+  // symmetric 116/116 split otherwise squeezed it down to ~115px.
+  topBarLeft: { width: 56 },
+  topBarRight: { width: 116, alignItems: 'flex-end' },
   topBarBack: { color: colors.textOnFelt, fontSize: 22, fontWeight: '700' },
   topBarCenter: { flex: 1, alignItems: 'center', gap: 3 },
   topBarTitle: {
@@ -1226,7 +1230,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md - 2,
     borderRadius: radii.md,
     alignItems: 'center',
-    minWidth: 120,
+    // 3 boxes across oppRow's content width (347px at 375, after its own
+    // paddingHorizontal) leaves ~115px per box; 120 (the old value) made 3
+    // boxes add up to 360px and overflow the row at exactly 375px. 96 covers
+    // the 48px avatar + this box's own padding with a little to spare.
+    minWidth: 96,
     marginTop: spacing.lg,
   },
   // The middle seat sits higher, arcing the row around the table's far edge.

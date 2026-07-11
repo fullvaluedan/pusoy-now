@@ -348,7 +348,9 @@ export function Checkbox({ checked, onToggle, label, style }: CheckboxProps) {
 }
 
 const checkboxStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // minHeight brings the tappable row (a 22px box + hitSlop 6) up to the
+  // 44px tap-target floor without growing the visible checkbox.
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
   box: {
     width: 22,
     height: 22,
