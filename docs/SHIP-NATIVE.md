@@ -72,16 +72,75 @@ exist in the web bundle):
 
 ## Phase 4 — Deep links / invite links (prends.app)
 
-Invite links (`/join/CODE`) must open the installed app, not just the web:
+Invite links (`/join/CODE`) must open the installed app, not just the web.
 
-- [ ] 🟡 **iOS Universal Links**: host `apple-app-site-association` (JSON, no
-      extension) at `https://prends.app/.well-known/apple-app-site-association`;
-      add the Associated Domains entitlement (`applinks:prends.app`).
-- [ ] 🟡 **Android App Links**: host `assetlinks.json` at
-      `https://prends.app/.well-known/assetlinks.json` with the app's SHA-256
-      signing fingerprint; add the intent filter + `autoVerify`.
-- [ ] 🟢 Both files can be served by a Cloudflare Worker/Pages route. Verify with
-      Apple's AASA validator and `adb` App Links verification.
+**Current state (files already in the repo, shipped in U6):**
+
+- `public/.well-known/apple-app-site-association` — no file extension, ships
+  both the modern (`applinks.details[].appIDs`+`components`) and legacy
+  (`applinks.details[].appID`+`paths`) shapes for `/join/*`. Contains the
+  literal placeholder `TEAMID` in `TEAMID.app.prends` — **must be replaced
+  with the real 10-character Apple Team ID** (App Store Connect →
+  Membership) before this is useful; until then Universal Links will not
+  verify on iOS.
+- `public/.well-known/assetlinks.json` — standard
+  `delegate_permission/common.handle_all_urls` grant for `android_app`
+  package `app.prends`. Ships with the placeholder fingerprint
+  `PLACEHOLDER_UPLOAD_KEY_FINGERPRINT` — **must be replaced** with the real
+  SHA-256 signing fingerprint once EAS provisions Android credentials:
+  `eas credentials -p android` (or App Store Connect equivalent for the
+  keystore EAS generates) prints it under "Upload Keystore" /
+  "SHA256 Fingerprint".
+  - ⚠️ **Two-fingerprint requirement**: Google Play re-signs APKs/AABs with
+    its own key once "Play App Signing" is enabled (the default for new
+    apps). After the **first** upload to Play Console, fetch the *App
+    signing key certificate* SHA-256 fingerprint from Play Console → Setup →
+    App signing, and **append** it to the `sha256_cert_fingerprints` array
+    alongside the EAS upload-key fingerprint — do not replace the upload-key
+    entry, both must be present or links signed by either key will fail
+    verification.
+- `public/_headers` — Cloudflare Pages headers file forcing
+  `Content-Type: application/json` on the extensionless AASA file (Pages
+  would otherwise guess a generic type for a file with no extension).
+- `app.json` — `ios.associatedDomains: ["applinks:prends.app"]` and
+  `android.intentFilters` (`VIEW`, `autoVerify: true`, `https://prends.app/join/*`,
+  categories `BROWSABLE`+`DEFAULT`) are set. `expo-router` resolves the
+  incoming URL to `app/join/[code].tsx` automatically, no extra linking code
+  needed.
+
+**Remaining before this works end-to-end:**
+
+- [ ] 🟡 Replace `TEAMID` in `public/.well-known/apple-app-site-association`
+      with the real Apple Team ID.
+- [ ] 🟡 Replace `PLACEHOLDER_UPLOAD_KEY_FINGERPRINT` in
+      `public/.well-known/assetlinks.json` with the EAS upload-key SHA-256
+      fingerprint (`eas credentials -p android`).
+- [ ] 🟡 After the first Play Store upload, append the Play App Signing
+      fingerprint to the same array (see the two-fingerprint note above).
+- [ ] 🟢 Deploy (`npm run export:web` → `wrangler pages deploy`) and verify
+      live.
+
+**Verification commands (run after deploy, from any shell):**
+
+```bash
+# Both must return 200, Content-Type: application/json, and NO redirect
+# (a 3xx here breaks Universal Links entirely).
+curl -sI https://prends.app/.well-known/apple-app-site-association
+curl -sI https://prends.app/.well-known/assetlinks.json
+
+# Cross-check with Apple's AASA validator:
+#   https://search.developer.apple.com/appsearch-validation-tool/
+# Paste https://prends.app or run the CLI check via `swcutil` on macOS.
+
+# After a real device build is installed, confirm Android verified the
+# domain (package must match app.json android.package):
+adb shell pm get-app-links app.prends
+```
+
+`adb pm get-app-links` output should show `prends.app` under `Verified` for
+package `app.prends`; if it shows `legacy_failure` or `Verification pending`,
+re-check the fingerprint in `assetlinks.json` and that `autoVerify: true` is
+present in `app.json`.
 
 ## Phase 5 — Monetization compliance (🔴 the #1 rework)
 
