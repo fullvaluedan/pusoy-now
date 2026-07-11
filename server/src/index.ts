@@ -26,6 +26,7 @@ import {
   sendRequest,
 } from './friends';
 import { d1StatsStore, fetchStatsMany, sanitizeTotals, syncStats } from './stats';
+import { beat, d1PresenceStore } from './presence';
 import { generateRoomCode } from './roomLogic';
 import { GameRoom } from './room';
 
@@ -331,6 +332,20 @@ app.post('/api/stats/sync', async (c) => {
   const next = sanitizeTotals(body);
   const res = await syncStats(d1StatsStore(c.env.DB), userId, next, Date.now());
   return c.json(res);
+});
+
+// --- Presence (Round 7 U5) ---------------------------------------------------
+
+// Public heartbeat: guests must count before any session exists, so this
+// route never gates on requireUserId. One round trip both records this
+// device as active and returns the live 90s-window count. 400 on a
+// malformed device id.
+app.post('/api/presence/beat', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { deviceId?: unknown };
+  const deviceId = typeof body.deviceId === 'string' ? body.deviceId : '';
+  const res = await beat(d1PresenceStore(c.env.DB), deviceId, Date.now());
+  if (res.status === 'invalid') return c.json({ error: 'invalid-device-id' }, 400);
+  return c.json({ count: res.count });
 });
 
 // --- Online rooms (U7) -----------------------------------------------------

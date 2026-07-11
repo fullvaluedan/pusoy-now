@@ -8,10 +8,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Avatar } from '../components/Avatar';
+import { PresenceChip } from '../components/PresenceChip';
 import { Button, Card, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { authClient } from '../lib/authClient';
+import { usePresence } from '../lib/presence';
 
 const LOGO_IMG = require('../assets/art/logo.png');
 const HERO_IMG = require('../assets/art/hero.png');
@@ -26,6 +28,7 @@ export default function Home() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { session, profile } = useAuth();
+  const { count: onlineCount } = usePresence();
 
   const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
   const heroHeight = contentWidth / HERO_ASPECT_RATIO;
@@ -61,6 +64,10 @@ export default function Home() {
   return (
     <ScreenContainer scroll>
       <View style={[styles.content, { width: contentWidth }]}>
+        <View style={styles.presenceRow}>
+          <PresenceChip count={onlineCount} />
+        </View>
+
         <Image
           source={LOGO_IMG}
           style={styles.logo}
@@ -213,6 +220,7 @@ function SignInEntry({
 
 const styles = StyleSheet.create({
   content: { alignSelf: 'center', flex: 1 },
+  presenceRow: { flexDirection: 'row', justifyContent: 'flex-end' },
   logo: { width: 96, height: 96, alignSelf: 'center', marginTop: spacing.lg },
   subtitle: { ...typography.body, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.lg },
   hero: {
