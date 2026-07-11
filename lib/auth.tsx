@@ -14,11 +14,14 @@
 // All session/cookie handling lives in the better-auth client (lib/authClient):
 // SecureStore cookie-jar on native, browser cookies on web.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { authClient } from './authClient';
+import { getLocalGuestName } from './guest';
 import { pickAvatarUrl, pickDisplayName, type AuthUser } from './profile';
+import { pushStatsSync } from './stats';
+import { singleFlight } from './singleFlight';
 import {
   deriveAuthPhase,
   interpretSignIn,
@@ -43,6 +46,8 @@ export type SignInResult =
 
 export type ResetResult = { status: 'sent' } | { status: 'error'; message: string };
 
+export type EnsureSessionResult = 'ok' | 'failed';
+
 interface AuthValue {
   // Null when signed out. Consumers only check truthiness; the shape is the
   // better-auth session record.
@@ -53,8 +58,18 @@ interface AuthValue {
   loading: boolean;
   // guest | pending-verification | signed-in | loading.
   phase: AuthPhase;
+  // True once a session exists and the plugin has marked the user anonymous
+  // (i.e. signed in via signIn.anonymous(), never a real account). False for
+  // both a signed-out guest and a real account.
+  isAnonymous: boolean;
   // The email awaiting verification, if the last email action left one pending.
   pendingEmail: string | null;
+  // Guarantees a server session exists before an online action (matchmaking,
+  // rooms, friends, ranking) runs: a no-op when one already exists, otherwise
+  // a single-flight signIn.anonymous() (never re-fired while one is already
+  // resolving -- see the plugin retry issue in the plan's Risks). Never call
+  // signIn.anonymous when a session already exists.
+  ensureSession(): Promise<EnsureSessionResult>;
   signIn(provider: SocialProvider): Promise<SignInResult>;
   signUpEmail(input: { name: string; email: string; password: string }): Promise<EmailAuthResult>;
   signInEmail(input: { email: string; password: string }): Promise<EmailAuthResult>;
@@ -116,6 +131,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (session) setPendingEmail(null);
   }, [session]);
+
+  // The anonymous plugin adds `isAnonymous` to the user row; AuthUser (shared
+  // with profile.ts, which has no dependency on the anonymous plugin's types)
+  // does not declare it, so it is read defensively.
+  const isAnonymous = Boolean(session) && (user as { isAnonymous?: boolean } | null)?.isAnonymous === true;
+
+  // ensureSession() reads the *latest* session/anonymous state at call time
+  // (not whatever was captured when the singleFlight wrapper was created), so
+  // the "never call signIn.anonymous when a session already exists" guard is
+  // always checked fresh.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+
+  const ensureSessionOnceRef = useRef<(() => Promise<EnsureSessionResult>) | null>(null);
+  if (!ensureSessionOnceRef.current) {
+    ensureSessionOnceRef.current = singleFlight(async (): Promise<EnsureSessionResult> => {
+      if (sessionRef.current) return 'ok';
+      try {
+        const res = (await authClient.signIn.anonymous()) as ClientResponse;
+        if (res?.error) return 'failed';
+      } catch {
+        return 'failed';
+      }
+      // Fire-and-forget, failure-tolerant: sync the locally-generated guest
+      // name onto the new anonymous user, then push any local stats so they
+      // count toward the leaderboard immediately.
+      void (async () => {
+        try {
+          const name = await getLocalGuestName();
+          await authClient.updateUser({ name });
+        } catch {
+          // best-effort; the server-generated name still works
+        }
+      })();
+      void pushStatsSync();
+      return 'ok';
+    });
+  }
+  const ensureSession = useCallback((): Promise<EnsureSessionResult> => ensureSessionOnceRef.current!(), []);
+
+  // Safety net for the server-side onLinkAccount merge (U1): the moment a
+  // previously-anonymous session becomes a real account (sign-up/sign-in while
+  // playing as a guest), push local stats once more so a merge race can never
+  // leave the new account under-counted.
+  const wasAnonymousRef = useRef(false);
+  useEffect(() => {
+    if (!session) {
+      wasAnonymousRef.current = false;
+      return;
+    }
+    if (wasAnonymousRef.current && !isAnonymous) {
+      void pushStatsSync();
+    }
+    wasAnonymousRef.current = isAnonymous;
+  }, [session, isAnonymous]);
 
   const signIn = useCallback(async (provider: SocialProvider): Promise<SignInResult> => {
     // Apple on iOS uses the native sheet: it returns an identity token (audience
@@ -196,7 +266,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       loading: isPending,
       phase,
+      isAnonymous,
       pendingEmail,
+      ensureSession,
       signIn,
       signUpEmail,
       signInEmail,
@@ -210,7 +282,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       isPending,
       phase,
+      isAnonymous,
       pendingEmail,
+      ensureSession,
       signIn,
       signUpEmail,
       signInEmail,

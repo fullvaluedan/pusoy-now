@@ -1,8 +1,10 @@
 // Friends ranking: you plus your accepted friends, ranked by first-place
 // finishes (win-rate tiebreak), sorted server-side. Your own row is
-// highlighted so it is easy to find in a longer list.
+// highlighted so it is easy to find in a longer list. Anonymous guests can
+// view this too (R2) -- a lazy session is created on mount instead of a
+// sign-in wall; they may appear on the ranking under their random name.
 import { useRouter, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../components/Avatar';
 import { BigStat, Button, Card, Header, ScreenContainer } from '../components/ui';
@@ -12,24 +14,35 @@ import { fetchRanking, type RankRow } from '../lib/friends';
 
 export default function FriendsRank() {
   const router = useRouter();
-  const { session, loading } = useAuth();
+  const { session, loading, ensureSession } = useAuth();
+  const [failed, setFailed] = useState(false);
 
-  if (loading) {
-    return (
-      <ScreenContainer>
-        <ActivityIndicator size="large" color={colors.felt} />
-      </ScreenContainer>
-    );
-  }
+  const tryEnsureSession = useCallback(async () => {
+    setFailed(false);
+    const result = await ensureSession();
+    if (result === 'failed') setFailed(true);
+  }, [ensureSession]);
 
-  if (!session) {
+  useEffect(() => {
+    if (!loading && !session) void tryEnsureSession();
+  }, [loading, session, tryEnsureSession]);
+
+  if (failed) {
     return (
       <ScreenContainer>
         <Header title="Ranking" onBack={() => router.back()} />
         <Card style={styles.signInCard}>
-          <Text style={styles.signInText}>Sign in to see how you rank against friends.</Text>
-          <Button title="Sign in" onPress={() => router.push('/sign-in')} style={styles.signInBtn} />
+          <Text style={styles.signInText}>Could not start a session. Check your connection and try again.</Text>
+          <Button title="Try again" onPress={() => void tryEnsureSession()} style={styles.signInBtn} />
         </Card>
+      </ScreenContainer>
+    );
+  }
+
+  if (loading || !session) {
+    return (
+      <ScreenContainer>
+        <ActivityIndicator size="large" color={colors.felt} />
       </ScreenContainer>
     );
   }

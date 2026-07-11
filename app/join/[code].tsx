@@ -1,8 +1,9 @@
 // Join-link landing page. A shared room link (web or the prends://join deep
-// link) lands here first. Signed-out visitors are asked to sign in (so they
-// come back with a session); once signed in the actual join happens over the
-// room WebSocket, so this just hands off to the room screen.
-import { useEffect } from 'react';
+// link) lands here first. A signed-out visitor gets a lazy anonymous session
+// (R2) instead of a sign-in wall, then proceeds straight to the room -- the
+// actual join happens over the room WebSocket, so this just hands off once a
+// session (any session) exists.
+import { useCallback, useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { Button, Card, ScreenContainer } from '../../components/ui';
@@ -13,31 +14,41 @@ export default function JoinScreen() {
   const params = useLocalSearchParams<{ code: string }>();
   const code = params.code ?? '';
   const router = useRouter();
-  const { session, loading } = useAuth();
+  const { session, loading, ensureSession } = useAuth();
+  const [failed, setFailed] = useState(false);
+
+  const tryEnsureSession = useCallback(async () => {
+    setFailed(false);
+    const result = await ensureSession();
+    if (result === 'failed') setFailed(true);
+  }, [ensureSession]);
 
   useEffect(() => {
-    if (!loading && session && code) {
-      router.replace({ pathname: '/room/[code]', params: { code } });
+    if (loading) return;
+    if (session) {
+      if (code) router.replace({ pathname: '/room/[code]', params: { code } });
+      return;
     }
-  }, [loading, session, code, router]);
+    void tryEnsureSession();
+  }, [loading, session, code, router, tryEnsureSession]);
 
-  if (loading || session) {
+  if (failed) {
     return (
       <ScreenContainer>
-        <ActivityIndicator size="large" color={colors.felt} />
+        <Card style={styles.card}>
+          <Text style={styles.title}>Could not join</Text>
+          <Text style={styles.body}>
+            We could not start a session to join room {code || 'this room'}. Check your connection and try again.
+          </Text>
+          <Button title="Try again" onPress={() => void tryEnsureSession()} style={styles.btn} />
+        </Card>
       </ScreenContainer>
     );
   }
 
   return (
     <ScreenContainer>
-      <Card style={styles.card}>
-        <Text style={styles.title}>You're invited to a game</Text>
-        <Text style={styles.body}>
-          Sign in to join room {code || 'this room'}. You'll come right back here once you're signed in.
-        </Text>
-        <Button title="Sign in to join" onPress={() => router.push('/sign-in')} style={styles.btn} />
-      </Card>
+      <ActivityIndicator size="large" color={colors.felt} />
     </ScreenContainer>
   );
 }
