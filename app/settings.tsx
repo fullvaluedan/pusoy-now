@@ -81,6 +81,11 @@ export default function Settings() {
           type="nav"
           onPress={() => router.push('/profile')}
         />
+        <Row
+          label="Delete account"
+          type="nav"
+          onPress={() => router.push('/delete-account')}
+        />
       </Card>
 
       {/* Legal group */}
