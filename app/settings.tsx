@@ -89,16 +89,12 @@ export default function Settings() {
         <Row
           label="Privacy Policy"
           type="nav"
-          onPress={() => {
-            // TODO: open privacy policy link
-          }}
+          onPress={() => router.push('/privacy')}
         />
         <Row
           label="Terms of Service"
           type="nav"
-          onPress={() => {
-            // TODO: open terms of service link
-          }}
+          onPress={() => router.push('/terms')}
         />
       </Card>
 
