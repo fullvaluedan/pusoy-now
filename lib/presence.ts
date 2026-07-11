@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
-import { authClient } from './authClient';
+import { apiUrl, authClient } from './authClient';
 import { generateDeviceId, isForegroundState, resolveDeviceId, type DeviceIdStorage } from './presencePure';
 
 export { generateDeviceId, isForegroundState, resolveDeviceId, type DeviceIdStorage };
@@ -75,7 +75,7 @@ export function usePresence(): { count: number | null } {
     async function sendBeat() {
       try {
         const deviceId = await getDeviceId();
-        const { data } = await authClient.$fetch<{ count: number }>('/api/presence/beat', {
+        const { data } = await authClient.$fetch<{ count: number }>(apiUrl('/api/presence/beat'), {
           method: 'POST',
           body: { deviceId },
         });

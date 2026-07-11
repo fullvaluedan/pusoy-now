@@ -23,6 +23,16 @@ export const AUTH_BASE_URL = process.env.EXPO_PUBLIC_AUTH_URL ?? 'https://api.pr
 
 const isWeb = Platform.OS === 'web';
 
+// Absolute URL for a custom (non-auth) Worker route. authClient.$fetch joins
+// RELATIVE paths onto its basePath (/api/auth), so $fetch('/api/consent')
+// silently becomes /api/auth/api/consent and 404s -- a bug that only shows in
+// real browsers (curl checks hit the Worker directly and never caught it).
+// Absolute URLs skip the join while keeping $fetch's cookie handling, so every
+// custom-route call site must wrap its path with apiUrl().
+export function apiUrl(path: string): string {
+  return `${AUTH_BASE_URL}${path}`;
+}
+
 export const authClient = createAuthClient({
   baseURL: AUTH_BASE_URL,
   // Cross-site session cookies must ride along on every request.

@@ -13,7 +13,7 @@ import { PresenceChip } from '../components/PresenceChip';
 import { Button, Card, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
-import { authClient } from '../lib/authClient';
+import { apiUrl, authClient } from '../lib/authClient';
 import { usePresence } from '../lib/presence';
 import { getLocalGuestName } from '../lib/guest';
 
@@ -63,14 +63,14 @@ export default function Home() {
     if (checkedConsentRef.current) return;
     checkedConsentRef.current = true;
     (async () => {
-      const { data } = await authClient.$fetch<{ consent: unknown | null }>('/api/consent');
+      const { data } = await authClient.$fetch<{ consent: unknown | null }>(apiUrl('/api/consent'));
       if (data && data.consent === null) setShowConsentPrompt(true);
     })();
   }, [session, isAnonymous]);
 
   async function answerConsentPrompt(optIn: boolean) {
     setShowConsentPrompt(false);
-    void authClient.$fetch('/api/consent', { method: 'POST', body: { optIn, source: 'prompt' } });
+    void authClient.$fetch(apiUrl('/api/consent'), { method: 'POST', body: { optIn, source: 'prompt' } });
   }
 
   const signedIn = Boolean(session) && !isAnonymous;

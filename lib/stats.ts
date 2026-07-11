@@ -9,7 +9,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { BotLevel } from './pusoy/types';
-import { authClient } from './authClient';
+import { apiUrl, authClient } from './authClient';
 import { aggregateTotals } from './statsAgg';
 
 const KEY = 'pusoy_bot_stats_v1';
@@ -141,7 +141,7 @@ export async function clearStats(): Promise<void> {
 export async function pushStatsSync(): Promise<{ applied: boolean } | null> {
   try {
     const totals = aggregateTotals(await loadStats());
-    const { data, error } = await authClient.$fetch<{ applied: boolean }>('/api/stats/sync', {
+    const { data, error } = await authClient.$fetch<{ applied: boolean }>(apiUrl('/api/stats/sync'), {
       method: 'POST',
       body: totals,
     });

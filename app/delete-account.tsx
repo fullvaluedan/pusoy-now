@@ -13,7 +13,7 @@ import { StyleSheet, Text } from 'react-native';
 import { Button, Card, Field, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
-import { authClient } from '../lib/authClient';
+import { apiUrl, authClient } from '../lib/authClient';
 
 // The literal word the user must type to arm the delete button. A deliberate
 // friction step so deletion is never a single mis-tap.
@@ -58,7 +58,7 @@ export default function DeleteAccount() {
     setError(null);
     setBusy(true);
     try {
-      const { error: fetchError } = await authClient.$fetch('/api/account', { method: 'DELETE' });
+      const { error: fetchError } = await authClient.$fetch(apiUrl('/api/account'), { method: 'DELETE' });
       if (fetchError) {
         setError('We could not delete your account. Please try again in a moment.');
         return;

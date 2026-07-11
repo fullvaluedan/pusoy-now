@@ -2,11 +2,11 @@
 // the pure lib/profile.ts (which stays node-testable) because this imports
 // authClient / react-native. The session rides along via authClient.$fetch.
 
-import { authClient } from './authClient';
+import { apiUrl, authClient } from './authClient';
 
 // The caller's claimed username, or null if they have not claimed one yet.
 export async function fetchMyUsername(): Promise<string | null> {
-  const { data, error } = await authClient.$fetch<{ username: string | null }>('/api/profile');
+  const { data, error } = await authClient.$fetch<{ username: string | null }>(apiUrl('/api/profile'));
   if (error || !data) return null;
   return data.username;
 }
@@ -16,7 +16,7 @@ export type Availability = 'available' | 'taken' | 'invalid' | 'error';
 // Inline availability check for the claim field.
 export async function checkUsernameAvailable(username: string): Promise<Availability> {
   const { data, error } = await authClient.$fetch<{ available: boolean; reason?: string }>(
-    `/api/username/check?u=${encodeURIComponent(username)}`,
+    apiUrl(`/api/username/check?u=${encodeURIComponent(username)}`),
   );
   if (error || !data) return 'error';
   if (data.available) return 'available';
@@ -31,7 +31,7 @@ export type ClaimResult =
 // UI renders as inline feedback.
 export async function claimUsername(username: string): Promise<ClaimResult> {
   const { data, error } = await authClient.$fetch<{ username?: string; error?: string; message?: string }>(
-    '/api/username/claim',
+    apiUrl('/api/username/claim'),
     { method: 'POST', body: { username } },
   );
   if (error) {

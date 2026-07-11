@@ -11,7 +11,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { authClient } from './authClient';
+import { apiUrl, authClient } from './authClient';
 import { useAuth } from './auth';
 import {
   canStartGame,
@@ -56,7 +56,7 @@ export function EntitlementProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true);
     try {
-      const { data, error } = await authClient.$fetch<EntitlementResponse>('/api/entitlement');
+      const { data, error } = await authClient.$fetch<EntitlementResponse>(apiUrl('/api/entitlement'));
       // 401 (not signed in) and any other error both mean "treat as free".
       if (error || !data) {
         setPremium(false);

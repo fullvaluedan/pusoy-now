@@ -16,7 +16,7 @@ import { Button, Checkbox, Field, ScreenContainer } from '../components/ui';
 import { colors, providerBrand, radii, spacing, typography } from '../lib/theme';
 import { useAuth, type SocialProvider } from '../lib/auth';
 import { validateResetEmail, validateSignIn, validateSignUp } from '../lib/authForms';
-import { authClient } from '../lib/authClient';
+import { apiUrl, authClient } from '../lib/authClient';
 
 // Flip to true once the TikTok bridge is ported to the auth Worker.
 const TIKTOK_ENABLED = false;
@@ -93,7 +93,7 @@ export default function SignIn() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = (await authClient.$fetch('/api/providers')) as
+        const res = (await authClient.$fetch(apiUrl('/api/providers'))) as
           | { data?: { providers?: string[] }; providers?: string[] }
           | undefined;
         const ids = res?.data?.providers ?? res?.providers;
@@ -164,7 +164,7 @@ export default function SignIn() {
           // session yet (verification still pending) - the post-sign-in prompt
           // on home is the safety net for that case, so signup never blocks on
           // this call either way.
-          void authClient.$fetch('/api/consent', {
+          void authClient.$fetch(apiUrl('/api/consent'), {
             method: 'POST',
             body: { optIn: marketingConsent, source: 'signup' },
           });

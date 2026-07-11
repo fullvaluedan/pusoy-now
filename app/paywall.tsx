@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
-import { authClient } from '../lib/authClient';
+import { apiUrl, authClient } from '../lib/authClient';
 
 const HERO_IMG = require('../assets/art/paywall-hero.png');
 const BADGE_IMG = require('../assets/art/premium-badge.png');
@@ -28,7 +28,7 @@ export default function Paywall() {
     setBusy(true);
     try {
       const { data, error: fetchError } = await authClient.$fetch<{ url: string | null }>(
-        '/api/stripe/checkout',
+        apiUrl('/api/stripe/checkout'),
         { method: 'POST' },
       );
       if (fetchError) {

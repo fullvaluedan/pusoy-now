@@ -3,7 +3,7 @@
 // browser cookies on web, the SecureStore cookie-jar on native. The UI (U5)
 // consumes these; the pure request-outcome mapping is exported for testing.
 
-import { authClient } from './authClient';
+import { apiUrl, authClient } from './authClient';
 import { mapAddStatus, type AddOutcome } from './friendsMap';
 
 export { addOutcomeMessage, mapAddStatus, type AddOutcome } from './friendsMap';
@@ -38,7 +38,7 @@ function statusOf(error: unknown): number | undefined {
 }
 
 export async function fetchFriends(): Promise<FriendsData | null> {
-  const { data, error } = await authClient.$fetch<FriendsData>('/api/friends');
+  const { data, error } = await authClient.$fetch<FriendsData>(apiUrl('/api/friends'));
   if (error || !data) return null;
   return data;
 }
@@ -46,7 +46,7 @@ export async function fetchFriends(): Promise<FriendsData | null> {
 // Send a request by username. Returns a stable outcome the add-field renders as
 // inline feedback ("No player with that username", etc.).
 export async function addFriendByUsername(username: string): Promise<AddOutcome> {
-  const { error } = await authClient.$fetch('/api/friends/request', {
+  const { error } = await authClient.$fetch(apiUrl('/api/friends/request'), {
     method: 'POST',
     body: { username },
   });
@@ -54,7 +54,7 @@ export async function addFriendByUsername(username: string): Promise<AddOutcome>
 }
 
 async function friendAction(path: string, userId: string): Promise<boolean> {
-  const { error } = await authClient.$fetch(path, { method: 'POST', body: { userId } });
+  const { error } = await authClient.$fetch(apiUrl(path), { method: 'POST', body: { userId } });
   return !error;
 }
 
@@ -63,7 +63,7 @@ export const declineFriend = (userId: string) => friendAction('/api/friends/decl
 export const removeFriend = (userId: string) => friendAction('/api/friends/remove', userId);
 
 export async function fetchRanking(): Promise<RankRow[] | null> {
-  const { data, error } = await authClient.$fetch<{ ranking: RankRow[] }>('/api/friends/ranking');
+  const { data, error } = await authClient.$fetch<{ ranking: RankRow[] }>(apiUrl('/api/friends/ranking'));
   if (error || !data) return null;
   return data.ranking;
 }
