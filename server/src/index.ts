@@ -12,6 +12,7 @@ import { makeAuth, trustedOriginsFor, type Env } from './auth';
 import { d1Store, isPremium, processStripeEvent, requireUserId } from './entitlements';
 import { constructEvent, createCheckout, stripeConfigured } from './stripe';
 import { configuredProviderIds } from './social';
+import { checkUsername, claimUsername, d1ProfileStore, usernameErrorMessage } from './profile';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -98,6 +99,49 @@ app.post('/api/stripe/webhook', async (c) => {
 
   const { applied } = await processStripeEvent(d1Store(c.env.DB), event, Date.now());
   return c.json({ received: true, applied });
+});
+
+// --- Usernames (U3) --------------------------------------------------------
+
+// The caller's own profile: their claimed username, or null if unclaimed (the
+// app then prompts them to claim one on the Profile screen). Session-gated.
+app.get('/api/profile', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const row = await d1ProfileStore(c.env.DB).getByUserId(userId);
+  return c.json({ username: row?.username ?? null });
+});
+
+// Inline availability check for the claim field. Session-gated so username
+// existence is not enumerable by anonymous callers.
+app.get('/api/username/check', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const raw = c.req.query('u') ?? '';
+  const res = await checkUsername(d1ProfileStore(c.env.DB), raw);
+  if (res.status === 'invalid') {
+    return c.json({ available: false, reason: res.reason, message: usernameErrorMessage(res.reason) });
+  }
+  return c.json({ available: res.status === 'available' });
+});
+
+// Claim a username (once; rename is deferred). Session-gated.
+app.post('/api/username/claim', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { username?: unknown };
+  const raw = typeof body.username === 'string' ? body.username : '';
+  const res = await claimUsername(d1ProfileStore(c.env.DB), userId, raw, Date.now());
+  if (res.status === 'invalid') {
+    return c.json({ error: 'invalid', reason: res.reason, message: usernameErrorMessage(res.reason) }, 400);
+  }
+  if (res.status === 'taken') {
+    return c.json({ error: 'taken', message: 'That username is taken.' }, 409);
+  }
+  if (res.status === 'already-claimed') {
+    return c.json({ error: 'already-claimed', username: res.username, message: 'You already have a username.' }, 409);
+  }
+  return c.json({ username: res.username });
 });
 
 export default app;
