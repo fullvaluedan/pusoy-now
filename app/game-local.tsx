@@ -15,7 +15,7 @@
 //     the turn passes automatically.
 //   - Live combo feedback: the toolbar names the selected combo and whether
 //     it beats the lead; Play is only enabled for a legal play.
-//   - Play / Pass actions on one row: Play left, Pass hard right
+//   - Play / Pass centered around the played pool: Pass above, Play below
 //   - Bot mode: elapsed game clock in the top bar; records the player's
 //     fastest winning time per level (shown on the finish screen)
 //   - Round-complete screen with finish order
@@ -788,9 +788,18 @@ export default function LocalGameScreen() {
           ))}
         </View>
 
-        {/* Center: the pool is the hero — the current play sits big and bare
-            on the felt, the previous play ghosted beneath it. */}
+        {/* Center: the played pool is the hero, with the two actions centered
+            around it -- Pass above, Play below -- so both sit in the middle of
+            the table, equally reachable and never mis-tapped for each other. */}
         <View style={styles.center}>
+          <Pressable
+            style={[styles.btn, styles.btnPass, styles.centerActionBtn, (!isMyTurn || lead === null) && styles.btnDisabled]}
+            disabled={!isMyTurn || lead === null}
+            onPress={onPass}
+          >
+            <Text style={styles.btnText}>Pass</Text>
+          </Pressable>
+
           {lastPlay ? (
             <View style={styles.trickArea}>
               {prevPlay && (
@@ -823,6 +832,14 @@ export default function LocalGameScreen() {
               </Text>
             </View>
           )}
+
+          <Pressable
+            style={[styles.btn, styles.btnPrimary, styles.centerActionBtn, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+            disabled={!isMyTurn || !selLegal}
+            onPress={onPlay}
+          >
+            <Text style={[styles.btnText, styles.btnPrimaryText]}>Play</Text>
+          </Pressable>
         </View>
 
       {/* Bottom: the human's seat + hand. */}
@@ -890,34 +907,6 @@ export default function LocalGameScreen() {
           </View>
         )}
 
-        {/* Primary action anchored in the bottom-right thumb zone -- the
-            natural spot for a right-handed one-thumb grip. Pass sits beside
-            it (to its left) and keeps the loud danger red; Play is gold and
-            primary. Sort and Skip stay put, above, in the hand toolbar / top
-            bar respectively. */}
-        {/* Play and Pass share one row (so they line up vertically) but are
-            pushed to opposite ends: Play on the left, Pass hard against the
-            right edge, so the two are well separated and never mis-tapped. */}
-        <View style={styles.bottomActionsRow}>
-          <Pressable
-            style={[styles.btn, styles.btnPrimary, (!isMyTurn || !selLegal) && styles.btnDisabled]}
-            disabled={!isMyTurn || !selLegal}
-            onPress={onPlay}
-          >
-            <Text style={[styles.btnText, styles.btnPrimaryText]}>Play</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.btn,
-              styles.btnPass,
-              (!isMyTurn || lead === null) && styles.btnDisabled,
-            ]}
-            disabled={!isMyTurn || lead === null}
-            onPress={onPass}
-          >
-            <Text style={styles.btnText}>Pass</Text>
-          </Pressable>
-        </View>
       </View>
       </View>
     </TablePanel>
@@ -1380,15 +1369,12 @@ const styles = StyleSheet.create({
     borderTopColor: withAlpha(colors.white, 0.1),
   },
   actionsInner: { flexDirection: 'row', gap: spacing.md - 2 },
-  // Play / Pass anchored bottom-right, under the hand -- the thumb zone for a
-  // one-handed portrait grip. Play (primary, gold) sits in the outer corner;
-  // Pass (danger red) sits beside it.
-  bottomActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg - 4,
-    marginTop: spacing.sm,
+  // Play / Pass centered in the middle of the table, sandwiching the played
+  // pool (Pass above, Play below). Fixed width so the two read as a matched
+  // pair, and vertical margin so neither crowds the cards between them.
+  centerActionBtn: {
+    minWidth: 150,
+    marginVertical: spacing.md + 2,
   },
   feedbackRow: {
     alignItems: 'center',
