@@ -5,32 +5,38 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../lib/auth';
+import { EntitlementProvider } from '../lib/entitlements';
 import { colors } from '../lib/theme';
 
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <SafeAreaProvider>
-        <StatusBar style="auto" />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: colors.felt },
-            headerTintColor: colors.textOnFelt,
-            headerTitleStyle: { fontWeight: '700' },
-          }}
-        >
-          <Stack.Screen name="index" options={{ title: 'Pusoy Now' }} />
-          <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
-          <Stack.Screen name="lobby" options={{ title: 'Lobby' }} />
-          <Stack.Screen name="bot-select" options={{ title: 'Pick opponents' }} />
-          {/* The game draws its own slim in-table top bar; the default header
-              would stack a second bar above the felt and clash with it. */}
-          <Stack.Screen name="game-local" options={{ headerShown: false }} />
-          <Stack.Screen name="leaderboard" options={{ title: 'Leaderboard' }} />
-          <Stack.Screen name="stats" options={{ title: 'Scoreboard' }} />
-          <Stack.Screen name="settings" options={{ title: 'Settings' }} />
-        </Stack>
-      </SafeAreaProvider>
+      {/* Entitlements depend on auth (the premium flag lives on the account),
+          so this nests inside AuthProvider. */}
+      <EntitlementProvider>
+        <SafeAreaProvider>
+          <StatusBar style="auto" />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: colors.felt },
+              headerTintColor: colors.textOnFelt,
+              headerTitleStyle: { fontWeight: '700' },
+            }}
+          >
+            <Stack.Screen name="index" options={{ title: 'Pusoy Now' }} />
+            <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
+            <Stack.Screen name="lobby" options={{ title: 'Lobby' }} />
+            <Stack.Screen name="bot-select" options={{ title: 'Pick opponents' }} />
+            {/* The game draws its own slim in-table top bar; the default header
+                would stack a second bar above the felt and clash with it. */}
+            <Stack.Screen name="game-local" options={{ headerShown: false }} />
+            <Stack.Screen name="leaderboard" options={{ title: 'Leaderboard' }} />
+            <Stack.Screen name="stats" options={{ title: 'Scoreboard' }} />
+            <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+            <Stack.Screen name="paywall" options={{ title: 'Remove ads', presentation: 'modal' }} />
+          </Stack>
+        </SafeAreaProvider>
+      </EntitlementProvider>
     </AuthProvider>
   );
 }

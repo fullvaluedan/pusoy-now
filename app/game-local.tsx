@@ -35,6 +35,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../components/Avatar';
+import { AdBanner, AD_BANNER_HEIGHT } from '../components/AdBanner';
 import { DealingAnimation } from '../components/DealingAnimation';
 import { OpponentCardStack, PlayingCard, CARD_WIDTH, CARD_HEIGHT } from '../components/PlayingCard';
 import { canPlay, detectCombo } from '../lib/pusoy/combo';
@@ -42,6 +43,7 @@ import { SUIT_VALUE } from '../lib/pusoy/deck';
 import { findLegalPlays } from '../lib/pusoy/bot';
 import { parseLevel } from '../lib/pusoy/level';
 import { recordGame } from '../lib/stats';
+import { incrementGameCounter } from '../lib/gameCounter';
 import { colors, layout, radii, spacing, typography, withAlpha } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import {
@@ -87,6 +89,14 @@ function comboName(c: PlayedCombo): string {
   if (c.type === 'single') return 'Single';
   if (c.type === 'pair') return 'Pair';
   return 'Three of a kind';
+}
+
+// Interstitial hook stub: called once a hand finishes. Deliberately a no-op
+// today -- the real interstitial (and its frequency-capping/premium-skip
+// rules) lands with the ad SDK milestone. Wiring the call site in now means
+// that milestone is a drop-in, not another pass over this screen.
+function maybeShowInterstitial(): void {
+  // no-op (dark-launched)
 }
 
 const PLACE_LABEL = ['1st', '2nd', '3rd', '4th'];
@@ -159,8 +169,10 @@ function TablePanel({ children }: { children: ReactNode }) {
   // Cap the panel height so it does not stretch to fill a tall window; the
   // backdrop centers it vertically, giving equal breathing room above and
   // below. On short/narrow windows this resolves to the full available height
-  // (effectively full-screen).
-  const panelHeight = Math.min(height - vMargin * 2, layout.maxTableHeight);
+  // (effectively full-screen). The ad banner's row is reserved out of this
+  // budget up front (rather than stacked on top of it) so the felt panel --
+  // and the card fan inside it -- never gets pushed off-screen or overlapped.
+  const panelHeight = Math.min(height - vMargin * 2 - AD_BANNER_HEIGHT - spacing.sm, layout.maxTableHeight);
   return (
     <View style={styles.backdrop}>
       <View
@@ -190,6 +202,11 @@ function TablePanel({ children }: { children: ReactNode }) {
             <SafeAreaView style={styles.container}>{children}</SafeAreaView>
           </ImageBackground>
         </View>
+      </View>
+      {/* House-ad placeholder, bottom-anchored and entirely outside the felt
+          panel above (the play area), per the reserved row in panelHeight. */}
+      <View style={[styles.adBannerSlot, { maxWidth: layout.maxTableWidth }]}>
+        <AdBanner />
       </View>
     </View>
   );
@@ -356,15 +373,21 @@ export default function LocalGameScreen() {
 
   // Record the finished game on the scoreboard exactly once, unless the player
   // bailed out with the manual Skip to end button. A legitimate finish (played
-  // through, or auto-skipped after emptying the hand) counts.
+  // through, or auto-skipped after emptying the hand) counts. The local
+  // free-game counter increments under the exact same condition, so a bailed-
+  // out game is not counted there either.
   const recordedRef = useRef(false);
   useEffect(() => {
     if (!game || game.phase !== 'finished' || recordedRef.current) return;
     recordedRef.current = true;
+    maybeShowInterstitial();
     if (game.abandonedByUser) return;
     const seat = findHumanSeat(game);
     const rank = game.finishOrder.indexOf(seat) + 1;
-    if (rank >= 1 && rank <= 4) void recordGame(game.level, rank);
+    if (rank >= 1 && rank <= 4) {
+      void recordGame(game.level, rank);
+      void incrementGameCounter(game.level);
+    }
   }, [game, tick]);
 
   // Auto-skip: once the human has emptied their hand, don't make them watch the
@@ -982,6 +1005,13 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
     elevation: 16,
+  },
+  // Row below the felt panel that hosts the (house-ad-placeholder) AdBanner.
+  // Width-matched to the panel above so the banner reads as part of the same
+  // column instead of stretching edge to edge on wide viewports.
+  adBannerSlot: {
+    width: '100%',
+    marginTop: spacing.sm,
   },
   // The visible table: felt-filled, gold-framed, rounded, clipping its
   // children so the felt and content share one box. Solid felt color base
