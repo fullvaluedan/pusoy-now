@@ -40,3 +40,22 @@ Worker: pusoy-now-auth (D1 + GameRoom Durable Object). Web: https://pusoy-now.pa
 | 18 | WS/friends IDOR + redaction | PENDING | needs the two-account live game (Browser 2 join) |
 
 Two deploy bugs caught only by live cross-origin testing: CORS route scope, and unapplied remote migrations.
+
+## Round 6 (Prends rebrand + store track, live on api.prends.app) — 2026-07-11
+
+Worker: pusoy-now-auth at https://api.prends.app (workers.dev kept alive for transition). Web: pusoy-now.pages.dev (prends.app custom domain pending dashboard step).
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| 19 | 0005 marketing_consent applied to remote D1 before Worker deploy | PASS | migrations apply -> 0005 OK; no live 500s |
+| 20 | api.prends.app custom domain serves the API | PASS | GET /api/providers 200 with ACAO for the pages.dev origin |
+| 21 | Consent endpoints session-gated | PASS | anon POST /api/consent 401; signed-in write then read returns {optIn:true, source:"signup"} live |
+| 22 | Account deletion end to end | PASS | throwaway account: sign-up -> verify -> sign-in -> DELETE /api/account {deleted:true}; sign-in after delete 401; old session 401 (cascade killed it) |
+| 23 | Forged Origin still rejected on the new domain | PASS | evil.example.com origin -> 403 |
+| 24 | Web deletion page for Google Data Safety | PASS | prends.app-served /delete-account renders signed-out explanation + sign-in path (checked on pages.dev origin) |
+| 25 | AASA + assetlinks served correctly | PASS | /.well-known/apple-app-site-association 200 Content-Type application/json (via _headers); assetlinks.json 200; no redirects |
+| 26 | Privacy/terms live | PASS | /privacy and /terms 200 via SPA fallback |
+| 27 | QA accounts purged pre-launch | PASS | round4 account admin-deleted in D1; round6 throwaway deleted via the endpoint; user table has no QA rows |
+| 28 | Apple sign-in feature detection | PASS (config-off) | /api/providers returns [] until APPLE_* secrets are set; button hidden accordingly |
+
+Still pending: #18 (two-account live game: WS redaction + LEFT TABLE drop-out label), Apple web round-trip + iOS TestFlight flow (needs portal secrets + first build), OAuth redirect re-registration once Google/Facebook credentials are actually provisioned.

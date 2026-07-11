@@ -9,6 +9,10 @@ compatibility_flags = ["nodejs_compat"]
 # subdomain. No pre-existing DNS record may sit on api.prends.app or custom
 # domain creation fails; see docs/DEPLOY.md.
 routes = [{ pattern = "api.prends.app", custom_domain = true }]
+# Keep the legacy workers.dev URL answering during the domain transition (the
+# previously exported web bundle still points at it). Flip to false once the
+# pages.dev origin is retired.
+workers_dev = true
 
 # Auth database. Binding is `env.DB` in the Worker; the physical database is the
 # one created with `wrangler d1 create pusoy-now`.
