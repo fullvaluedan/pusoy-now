@@ -294,7 +294,7 @@ app.post('/api/rooms', async (c) => {
   const seats = Math.max(2, Math.min(4, Math.floor(Number(body.seats) || 4)));
   const botLevel = body.botLevel === 'easy' || body.botLevel === 'expert' ? body.botLevel : 'normal';
   const code = generateRoomCode();
-  await c.env.GAME_ROOM.getByName(code).create(seats, userId, botLevel);
+  await c.env.GAME_ROOM.getByName(code).create(code, seats, userId, botLevel);
   const origin = webOrigin(c.env, c.req.header('origin'));
   return c.json({
     code,

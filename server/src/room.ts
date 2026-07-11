@@ -63,12 +63,13 @@ export class GameRoom extends DurableObject<Env> {
 
   // --- RPC (called by the Worker) -----------------------------------------
 
-  // Initialize the room if it does not exist yet. Idempotent: a second create
+  // Initialize the room if it does not exist yet. The DO does not know its own
+  // name, so the Worker passes the room code in. Idempotent: a second create
   // returns the existing room's info.
-  async create(seats: number, hostUserId: string, botLevel: BotLevel): Promise<RoomInfo> {
+  async create(code: string, seats: number, hostUserId: string, botLevel: BotLevel): Promise<RoomInfo> {
     const n = Math.max(2, Math.min(4, Math.floor(seats)));
     if (!this.room) {
-      this.room = createRoomState(this.roomCodeFromId(), n, hostUserId, botLevel, Date.now());
+      this.room = createRoomState(code, n, hostUserId, botLevel, Date.now());
       await this.persist();
       await this.ctx.storage.setAlarm(Date.now() + ROOM_TTL_MS);
     }
@@ -87,12 +88,6 @@ export class GameRoom extends DurableObject<Env> {
       hostUserId: r.hostUserId,
       players: r.players.map((p) => ({ seat: p.seat, username: p.username, kind: p.kind, connected: p.connected })),
     };
-  }
-
-  // The DO does not know its own name; the code is stored in room state at
-  // create time. Before that we fall back to a placeholder (never surfaced).
-  private roomCodeFromId(): string {
-    return this.room?.code ?? '';
   }
 
   // --- WebSocket upgrade + lifecycle --------------------------------------
