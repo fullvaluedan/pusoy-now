@@ -59,6 +59,14 @@ export default function Profile() {
         {renderStatsCards(stats)}
 
         <Button
+          title="Friends"
+          subtitle="Add friends and see the ranking"
+          variant="secondary"
+          style={styles.button}
+          onPress={() => router.push('/friends')}
+        />
+
+        <Button
           title="Sign out"
           variant="secondary"
           style={styles.button}
