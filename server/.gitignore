@@ -1,0 +1,5 @@
+# Wrangler local state (local D1, dev caches). Secrets live in Cloudflare, not
+# on disk, but this dir also holds the local SQLite mirror used by wrangler dev.
+.wrangler/
+node_modules/
+*.log
