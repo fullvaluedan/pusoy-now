@@ -36,7 +36,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../components/Avatar';
-import { AdBanner, AD_BANNER_HEIGHT } from '../components/AdBanner';
 import { DealingAnimation } from '../components/DealingAnimation';
 import {
   OpponentCardStack,
@@ -178,10 +177,8 @@ function TablePanel({ children }: { children: ReactNode }) {
   // Cap the panel height so it does not stretch to fill a tall window; the
   // backdrop centers it vertically, giving equal breathing room above and
   // below. On short/narrow windows this resolves to the full available height
-  // (effectively full-screen). The ad banner's row is reserved out of this
-  // budget up front (rather than stacked on top of it) so the felt panel --
-  // and the card fan inside it -- never gets pushed off-screen or overlapped.
-  const panelHeight = Math.min(height - vMargin * 2 - AD_BANNER_HEIGHT - spacing.sm, layout.maxTableHeight);
+  // (effectively full-screen).
+  const panelHeight = Math.min(height - vMargin * 2, layout.maxTableHeight);
   return (
     <View style={styles.backdrop}>
       <View
@@ -211,11 +208,6 @@ function TablePanel({ children }: { children: ReactNode }) {
             <SafeAreaView style={styles.container}>{children}</SafeAreaView>
           </ImageBackground>
         </View>
-      </View>
-      {/* House-ad placeholder, bottom-anchored and entirely outside the felt
-          panel above (the play area), per the reserved row in panelHeight. */}
-      <View style={[styles.adBannerSlot, { maxWidth: layout.maxTableWidth }]}>
-        <AdBanner />
       </View>
     </View>
   );
@@ -1121,13 +1113,6 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
     elevation: 16,
-  },
-  // Row below the felt panel that hosts the (house-ad-placeholder) AdBanner.
-  // Width-matched to the panel above so the banner reads as part of the same
-  // column instead of stretching edge to edge on wide viewports.
-  adBannerSlot: {
-    width: '100%',
-    marginTop: spacing.sm,
   },
   // The visible table: felt-filled, gold-framed, rounded, clipping its
   // children so the felt and content share one box. Solid felt color base
