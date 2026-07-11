@@ -33,6 +33,7 @@ export default function RootLayout() {
             <Stack.Screen name="leaderboard" options={{ title: 'Leaderboard' }} />
             <Stack.Screen name="stats" options={{ title: 'Scoreboard' }} />
             <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+            <Stack.Screen name="profile" options={{ title: 'Profile' }} />
             <Stack.Screen name="paywall" options={{ title: 'Remove ads', presentation: 'modal' }} />
           </Stack>
         </SafeAreaProvider>

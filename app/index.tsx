@@ -55,20 +55,33 @@ export default function Home() {
           style={styles.menuItem}
         />
 
+        {/* Compact nav row */}
+        <View style={styles.navRow}>
+          <Pressable
+            style={styles.navBtn}
+            onPress={() => router.push('/bot-select')}
+          >
+            <Text style={styles.navBtnText}>Play</Text>
+          </Pressable>
+          <Pressable
+            style={styles.navBtn}
+            onPress={() => router.push('/stats')}
+          >
+            <Text style={styles.navBtnText}>Scoreboard</Text>
+          </Pressable>
+          <Pressable
+            style={styles.navBtn}
+            onPress={() => router.push('/settings')}
+          >
+            <Text style={styles.navBtnText}>Settings</Text>
+          </Pressable>
+        </View>
+
         <SignInEntry
           signedIn={Boolean(session)}
           displayName={profile?.displayName}
           avatarUrl={profile?.avatarUrl}
           onPress={() => router.push('/sign-in')}
-        />
-
-        <Button
-          title="Scoreboard"
-          subtitle="Your record vs bots"
-          variant="ghost"
-          align="left"
-          onPress={() => router.push('/stats')}
-          style={styles.menuItem}
         />
 
         <Button
@@ -145,6 +158,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.felt,
   },
   menuItem: { marginBottom: spacing.md },
+  navRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  navBtn: {
+    flex: 1,
+    backgroundColor: colors.felt,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navBtnText: {
+    ...typography.label,
+    color: colors.textOnFelt,
+    fontWeight: '700',
+  },
   footer: { textAlign: 'center', color: colors.textFaint, marginTop: spacing.lg },
   chip: {
     flexDirection: 'row',
