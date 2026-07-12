@@ -17,11 +17,17 @@ export function BannerStrip({
   error,
   isMyTurn,
   compact,
+  turnText,
 }: {
   autoPassing: boolean;
   error: string | null;
   isMyTurn: boolean;
   compact?: boolean;
+  // Optional override for the gold "Your turn" pill's text. The online table
+  // passes "Your turn - 12s" so the live countdown ticks INSIDE this fixed-
+  // height strip (never shifting the toolbar/hand below). Omitted by the bot
+  // table, which keeps the plain "Your turn".
+  turnText?: string;
 }) {
   return (
     <View style={[styles.bannerStrip, compact && styles.bannerStripCompact]} pointerEvents="none">
@@ -35,7 +41,7 @@ export function BannerStrip({
         </View>
       ) : isMyTurn ? (
         <View style={styles.turnBanner}>
-          <Text style={styles.turnBannerText}>Your turn</Text>
+          <Text style={styles.turnBannerText} numberOfLines={1}>{turnText ?? 'Your turn'}</Text>
         </View>
       ) : null}
     </View>
