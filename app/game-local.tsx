@@ -957,15 +957,24 @@ export default function LocalGameScreen() {
           />
         )}
         {/* Reserved headroom strip above the toolbar. The gold "Your turn"
-            banner renders inside it (centered) instead of absolutely
-            overlapping the toolbar/Sort row, so the Sort button never shifts
-            between turns -- the strip is always present during play. */}
+            banner, the auto-pass notice, and play errors all render inside it
+            (centered, one at a time) instead of mounting their own row, so
+            nothing below ever shifts -- the strip is always present during
+            play. */}
         <View style={[styles.bannerStrip, compact && styles.bannerStripCompact]} pointerEvents="none">
-          {isMyTurn && (
+          {autoPassing ? (
+            <View style={styles.turnBanner}>
+              <Text style={styles.turnBannerText}>No playable hand, passing…</Text>
+            </View>
+          ) : error ? (
+            <View style={[styles.turnBanner, styles.errorBanner]}>
+              <Text style={[styles.turnBannerText, styles.errorBannerText]} numberOfLines={1}>{error}</Text>
+            </View>
+          ) : isMyTurn ? (
             <View style={styles.turnBanner}>
               <Text style={styles.turnBannerText}>Your turn</Text>
             </View>
-          )}
+          ) : null}
         </View>
         <View style={[styles.handToolbar, compact && styles.handToolbarCompact]}>
           <View style={styles.handToolbarLeft}>
@@ -1003,15 +1012,6 @@ export default function LocalGameScreen() {
           onDropToCenter={playByDrag}
           dropEnabled={isMyTurn}
         />
-
-        {(autoPassing || error) && (
-          <View style={styles.feedbackRow}>
-            {autoPassing && (
-              <Text style={styles.autoPass}>No playable hand, passing…</Text>
-            )}
-            {error && <Text style={styles.error}>{error}</Text>}
-          </View>
-        )}
 
       </View>
       </View>
@@ -1471,8 +1471,6 @@ const styles = StyleSheet.create({
   trickCardsCompact: { marginBottom: 2 },
   trickName: { color: colors.gold, fontSize: typography.label.fontSize, fontWeight: '700' },
   trickEmpty: { color: withAlpha(colors.white, 0.8), fontSize: typography.body.fontSize, paddingVertical: 30 },
-  error: { color: colors.danger, marginTop: spacing.sm + 2, fontWeight: '600' },
-  autoPass: { color: colors.gold, marginTop: spacing.sm + 2, fontWeight: '600' },
 
   // Bottom — hand in the lower-center, actions centered directly below
   bottom: {
@@ -1533,6 +1531,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
+  errorBanner: { backgroundColor: colors.danger },
+  errorBannerText: { color: colors.white },
   handToolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1581,10 +1581,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     minWidth: 96,
     marginVertical: 3,
-  },
-  feedbackRow: {
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg - 4,
   },
   // Play / Pass / Sort share one height family so they read as one button
   // set; Sort stays visually secondary via smaller padding/font.
