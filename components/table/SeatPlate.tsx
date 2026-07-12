@@ -66,6 +66,7 @@ export function SeatPlate({
   disconnected?: boolean;
 }) {
   const finished = place !== null;
+  const avatarActive = isCurrent && !finished;
   return (
     <View
       style={[
@@ -76,15 +77,20 @@ export function SeatPlate({
         (finished || disconnected) && styles.oppBoxDone,
       ]}
     >
-      <Avatar
-        name={name}
-        url={avatarUrl}
-        localSource={avatarSource}
-        size={compact ? 28 : 48}
-        framed
-        active={isCurrent && !finished}
-        style={compact ? styles.oppAvatarMarginCompact : styles.oppAvatarMargin}
-      />
+      {/* Micro seat (compact): the stack art is dropped entirely, so the
+          avatar has nothing to badge onto -- it stays a small avatar above the
+          single text line, same as before. */}
+      {compact && (
+        <Avatar
+          name={name}
+          url={avatarUrl}
+          localSource={avatarSource}
+          size={28}
+          framed
+          active={avatarActive}
+          style={styles.oppAvatarMarginCompact}
+        />
+      )}
       <View style={[styles.oppNameRow, compact && styles.oppNameRowCompact]}>
         <Text style={[styles.oppName, compact && styles.oppNameCompact]} numberOfLines={1} ellipsizeMode="tail">{name}</Text>
         {/* Micro seat (compact): one text line only -- name, the PASS/place
@@ -108,9 +114,23 @@ export function SeatPlate({
         <View style={styles.oppStackRow}>
           <View style={styles.oppStackWrap}>
             <OpponentCardStack count={count} small />
-            {/* Compact card-count chip, overlapping the stack's bottom-right
-                corner -- the at-a-glance "how many cards do they hold" cue
-                mobile card games use instead of a bare number. */}
+            {/* Avatar badge, overlapping the stack's top-left corner -- this is
+                the space-saving move: the avatar no longer occupies its own
+                row, it rides on the card art instead, so the seat's total
+                height shrinks by roughly what that row used to cost. */}
+            <Avatar
+              name={name}
+              url={avatarUrl}
+              localSource={avatarSource}
+              size={40}
+              framed
+              active={avatarActive}
+              style={styles.oppAvatarBadge}
+            />
+            {/* Card-count chip, overlapping the stack's bottom-right corner --
+                the opposite corner from the avatar badge so both stay visible
+                -- the at-a-glance "how many cards do they hold" cue mobile
+                card games use instead of a bare number. */}
             <View style={styles.cardCountBadge}>
               <Text style={styles.cardCountBadgeText}>{count}</Text>
             </View>
@@ -166,8 +186,18 @@ const styles = StyleSheet.create({
     borderColor: withAlpha(colors.gold, 0.6),
   },
   oppBoxDone: { opacity: 0.55 },
-  oppAvatarMargin: { marginBottom: spacing.sm },
   oppAvatarMarginCompact: { marginBottom: 2 },
+  // Overlapping badge: pulled up and left off the stack's top-left corner, on
+  // top of the card art (zIndex) instead of in its own row above it. The
+  // negative offset is deliberately slight -- enough to read as "badge on
+  // cards", not so much it wanders into the name row above or the seat's own
+  // edge.
+  oppAvatarBadge: {
+    position: 'absolute',
+    top: -10,
+    left: -10,
+    zIndex: 2,
+  },
   oppNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
   // Micro seat: no bottom margin (single line, nothing below it) and a tighter
   // gap so name + status + count sit compactly on one row.
