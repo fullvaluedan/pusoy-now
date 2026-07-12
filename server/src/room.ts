@@ -13,6 +13,9 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Env } from './auth';
 import type { BotLevel, RoundAction } from '../../lib/pusoy/types';
 import {
+  GAME_ABANDON_MS,
+  abandonGame,
+  allHumansDisconnected,
   applySeatAction,
   canAutoStart,
   canStart,
@@ -127,6 +130,9 @@ export class GameRoom extends DurableObject<Env> {
 
     // Auto-friend: pair the joiner with every other seated human (idempotent).
     if (!join.rejoined) await this.autoFriend(userId);
+    // A rejoin into a paused (deserted) game clears the abandon watchdog and
+    // re-arms normal pacing immediately, instead of waiting for the next alarm.
+    this.scheduleAuto();
     await this.persist();
     await this.ctx.storage.setAlarm(this.nextAlarm());
 
@@ -215,6 +221,32 @@ export class GameRoom extends DurableObject<Env> {
     if (!this.room) return;
     const now = Date.now();
 
+    // Abandon watchdog: a playing room whose humans ALL disconnected has been
+    // paused (scheduleAuto arms no auto turns). If the grace window expires
+    // with the table still empty, finish the game as abandoned - never played
+    // out, never recorded - so the DO stops burning alarms on nobody.
+    if (
+      this.room.phase === 'playing' &&
+      this.room.abandonAt != null &&
+      now >= this.room.abandonAt
+    ) {
+      if (allHumansDisconnected(this.room)) {
+        abandonGame(this.room);
+        await this.afterProgress();
+        return;
+      }
+      this.room.abandonAt = null; // someone came back; fall through and resume
+    }
+
+    // While the table is deserted (watchdog armed, not yet due) nothing below
+    // should run: no auto turns, no 30s timeout churn. Just re-arm and wait.
+    if (this.room.phase === 'playing' && allHumansDisconnected(this.room)) {
+      this.scheduleAuto();
+      await this.persist();
+      await this.ctx.storage.setAlarm(this.nextAlarm());
+      return;
+    }
+
     // Paced auto-turn: a bot (or a disconnected human) acts ONE step at a time,
     // each with its own human-like delay, so clients see every bot play land as
     // its own broadcast (matching bot mode). This branch runs before the 30s
@@ -301,6 +333,15 @@ export class GameRoom extends DurableObject<Env> {
   // slot is empty, so it never shortens an in-flight delay.
   private scheduleAuto(): void {
     if (!this.room) return;
+    // Deserted table: PAUSE instead of playing bots to an empty room. Arm the
+    // abandon watchdog once; a human rejoining reaches this again with a
+    // connected seat and clears it, resuming normal pacing below.
+    if (allHumansDisconnected(this.room)) {
+      this.room.autoActAt = null;
+      if (this.room.abandonAt == null) this.room.abandonAt = Date.now() + GAME_ABANDON_MS;
+      return;
+    }
+    this.room.abandonAt = null;
     const kind = currentAutoKind(this.room);
     if (kind === null) {
       this.room.autoActAt = null;
@@ -327,10 +368,16 @@ export class GameRoom extends DurableObject<Env> {
       // Whichever is sooner: the next paced auto turn or the current seat's 30s
       // deadline. For a bot seat autoActAt (<=2.5s) naturally precedes the
       // deadline, so the bot plays before it can be timed out.
-      const times: number[] = [];
-      if (r.autoActAt != null) times.push(r.autoActAt);
-      if (r.handState?.turnDeadline != null) times.push(r.handState.turnDeadline);
-      if (times.length > 0) return Math.min(...times);
+      // A deserted (paused) room ignores the turn deadline: only the abandon
+      // watchdog matters until someone returns.
+      if (allHumansDisconnected(r)) {
+        if (r.abandonAt != null) return r.abandonAt;
+      } else {
+        const times: number[] = [];
+        if (r.autoActAt != null) times.push(r.autoActAt);
+        if (r.handState?.turnDeadline != null) times.push(r.handState.turnDeadline);
+        if (times.length > 0) return Math.min(...times);
+      }
     }
     // Matchmade lobby: fire at the connect-grace deadline to auto-start/clean up.
     if (r?.phase === 'lobby' && r.lobbyDeadline != null) return r.lobbyDeadline;
@@ -354,7 +401,8 @@ export class GameRoom extends DurableObject<Env> {
   // Record each seated human's finishing place into D1, once (idempotent on a
   // duplicate finish). Server-computed from the authoritative finish order.
   private async recordStats(): Promise<void> {
-    if (!this.room || this.room.statsRecorded) return;
+    // An abandoned game was never played out: nothing to score, for anyone.
+    if (!this.room || this.room.statsRecorded || this.room.abandoned) return;
     this.room.statsRecorded = true;
     await this.persist();
     const store = d1StatsStore(this.env.DB);

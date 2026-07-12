@@ -10,7 +10,10 @@
 // Run: tsx src/room.test.ts (or via npm test)
 
 import {
+  GAME_ABANDON_MS,
   ONLINE_TURN_MS,
+  abandonGame,
+  allHumansDisconnected,
   applySeatAction,
   canAutoStart,
   canStart,
@@ -383,6 +386,47 @@ function main() {
     // clears (lead resets) and the turn moves off the forced human.
     ok('the turn moved off the forced human', r.handState!.currentPlayerIndex !== cur);
     ok('a plain pass carries no drop-out penalty', r.players[cur].connected === true);
+  }
+
+  // --- deserted-room livelock: pause condition + abandon ---------------------
+  // The livelock this guards against: with every human disconnected, the
+  // disconnected leader can only ever auto-pass (applyTimeout never sheds a
+  // card), so passes cycle forever. The DO pauses such a room (no auto turns)
+  // and finishes it as abandoned after GAME_ABANDON_MS.
+  {
+    const r = twoSeatRoom();
+    joinRoom(r, 'host-1', 'host');
+    joinRoom(r, 'friend-1', 'friend');
+    startGame(r, makeRng(5));
+    ok('a live table is not deserted', allHumansDisconnected(r) === false);
+    setConnected(r, 'host-1', false);
+    ok('one human still connected is not deserted', allHumansDisconnected(r) === false);
+    setConnected(r, 'friend-1', false);
+    ok('all humans gone is deserted', allHumansDisconnected(r) === true);
+
+    // Livelock witness: with both humans disconnected the auto path only ever
+    // passes; the leader never sheds a card no matter how many steps run.
+    const cardsBefore = r.hands![0].length + r.hands![1].length;
+    for (let i = 0; i < 50; i++) stepAutoSeat(r, makeRng(i + 1));
+    const cardsAfter = r.hands![0].length + r.hands![1].length;
+    ok('a deserted hand never sheds cards (the livelock)', cardsBefore === cardsAfter && r.phase === 'playing');
+
+    // Rejoin flips the pause condition off.
+    setConnected(r, 'host-1', true);
+    ok('a rejoin makes the table live again', allHumansDisconnected(r) === false);
+    setConnected(r, 'host-1', false);
+
+    // The watchdog resolution: abandon finishes the game with no stats path.
+    // Expected order mirrors the comparator: fewest cards first, seat breaks ties.
+    const expected = [0, 1].sort((a, b) => r.hands![a].length - r.hands![b].length || a - b);
+    abandonGame(r);
+    ok('abandon finishes the game', r.phase === 'finished');
+    ok('abandon is flagged so stats are never recorded', r.abandoned === true);
+    ok('abandon ranks remaining seats by fewest cards, seat on ties', r.finishOrder.join(',') === expected.join(','));
+    ok('abandon covers every seat exactly once', [...r.finishOrder].sort().join(',') === '0,1');
+    ok('abandon clears the pacing and watchdog deadlines', r.autoActAt === null && r.abandonAt === null);
+    ok('the abandon grace window is 90s', GAME_ABANDON_MS === 90_000);
+    ok('no auto action is pending on a finished room', stepAutoSeat(r, makeRng(3)).acted === false);
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

@@ -76,6 +76,46 @@ export interface RoomState {
   // one snapshot. null when it is a connected human's turn, or not playing.
   // Persisted with the room, so a paced turn survives hibernation.
   autoActAt: number | null;
+  // Abandon watchdog: set when EVERY human in a playing room is disconnected.
+  // While it is armed the game is PAUSED (no auto turns play to an empty
+  // table); a human rejoining clears it and play resumes. If it expires with
+  // the table still empty, the game is finished as abandoned - otherwise a
+  // hand whose disconnected leader can only auto-pass would cycle passes
+  // forever (applyTimeout never sheds cards). Optional so rooms persisted
+  // before this field load as undefined (treated as null).
+  abandonAt?: number | null;
+  // A game ended by the watchdog: finished, but stats are never recorded.
+  abandoned?: boolean;
+}
+
+// How long a playing room with zero connected humans waits for someone to
+// come back before the game is finished as abandoned. Long enough to survive
+// a phone locking or a tunnel; short enough not to burn the DO on nothing.
+export const GAME_ABANDON_MS = 90_000;
+
+// True while the room is mid-hand with not a single human connected (bots do
+// not count). This is the pause + abandon-watchdog condition.
+export function allHumansDisconnected(state: RoomState): boolean {
+  if (state.phase !== 'playing') return false;
+  const humans = state.players.filter((p) => p.kind === 'human');
+  return humans.length > 0 && humans.every((p) => !p.connected);
+}
+
+// Finish a deserted game without playing it out: seats already out keep their
+// places, everyone still holding cards is ranked by fewest cards left (seat
+// index breaks ties). Stats are never recorded for an abandoned game.
+export function abandonGame(state: RoomState): void {
+  if (state.phase !== 'playing' || !state.handState) return;
+  const done = state.handState.finishedOrder.slice();
+  const remaining = state.players
+    .map((p) => p.seat)
+    .filter((s) => !done.includes(s))
+    .sort((a, b) => state.hands![a].length - state.hands![b].length || a - b);
+  state.finishOrder = [...done, ...remaining];
+  state.phase = 'finished';
+  state.abandoned = true;
+  state.abandonAt = null;
+  state.autoActAt = null;
 }
 
 export function createRoomState(
@@ -102,6 +142,8 @@ export function createRoomState(
     lobbyDeadline: null,
     expectedUserIds: null,
     autoActAt: null,
+    abandonAt: null,
+    abandoned: false,
   };
 }
 
