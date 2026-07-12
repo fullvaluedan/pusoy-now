@@ -15,6 +15,14 @@ import {
 import { layout } from '../../lib/theme';
 import type { Card } from '../../lib/pusoy/types';
 
+// The fan container's height and each resting card's top inset -- the exact
+// geometry DraggableCard renders at (see its `top` below). Exported so
+// DealingAnimation can build its accumulating hand inside a container of the
+// same shape, anchored the same way (top, not bottom), so the deal-to-play
+// switch moves nothing: both phases stack cards at identical coordinates.
+export const HAND_FAN_CONTAINER_HEIGHT = CARD_HEIGHT + 24 + FAN_LIFT_MAX;
+export const HAND_FAN_CARD_TOP = 12 + FAN_LIFT_MAX;
+
 export function HandRow({
   hand,
   selected,
@@ -45,13 +53,13 @@ export function HandRow({
   // them -- see components/PlayingCard.tsx.
   const { stride, startX } = fanRowLayout(hand.length, width);
   // Fan container height must derive from card HEIGHT, not width: each card
-  // sits at `top: 12 + FAN_LIFT_MAX` (DraggableCard) so a resting card's
-  // bottom edge is at most `12 + FAN_LIFT_MAX + CARD_HEIGHT`; the +24 leaves
+  // sits at `top: HAND_FAN_CARD_TOP` (DraggableCard) so a resting card's
+  // bottom edge is at most `HAND_FAN_CARD_TOP + CARD_HEIGHT`; the +24 leaves
   // headroom below for the card's shadow and for a selected card's -16px
   // lift, and the extra FAN_LIFT_MAX accounts for the arc's own lift, so
   // nothing in the fan is ever clipped.
   return (
-    <View style={[styles.handFan, { height: CARD_HEIGHT + 24 + FAN_LIFT_MAX }]}>
+    <View style={[styles.handFan, { height: HAND_FAN_CONTAINER_HEIGHT }]}>
       {hand.map((c, i) => (
         <DraggableCard
           key={c.id}
@@ -157,7 +165,7 @@ function DraggableCard({
         // (translateY below, 0..-FAN_LIFT_MAX) never rises above where the
         // old flat fan used to sit -- same headroom, just distributed by
         // the arc instead of being uniform.
-        top: 12 + FAN_LIFT_MAX,
+        top: HAND_FAN_CARD_TOP,
         transform: [
           { translateY: arc.translateY },
           { rotate: `${arc.rotateDeg}deg` },

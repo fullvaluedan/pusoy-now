@@ -38,6 +38,21 @@ export const POOL_MIN_HEIGHT = CARD_HEIGHT_PX + 40;
 // looking controls stay just as easy to hit.
 export const CENTER_ACTION_HIT_SLOP = { top: 4, bottom: 4, left: 4, right: 4 } as const;
 
+// Distance from the panel's bottom edge to the bottom edge of the human hand
+// fan, in the roomy vs compact layouts. HandRow is the last element in
+// app/game-local.tsx's `bottom` flex column, so nothing below it adds
+// further offset -- this is exactly that column's paddingBottom. Keep in
+// sync with the source of truth:
+//   HAND_FAN_BOTTOM          === app/game-local.tsx `bottom.paddingBottom`
+//   HAND_FAN_BOTTOM_COMPACT  === app/game-local.tsx `bottomCompact.paddingBottom`
+// components/DealingAnimation.tsx uses these to anchor its accumulating hand
+// at the exact spot the live HandRow will occupy once dealing ends, so
+// nothing shifts at the deal/play boundary. If another screen (e.g. the
+// online table) ever hosts DealingAnimation with a differently-padded
+// `bottom` section, this constant needs a matching per-screen variant.
+export const HAND_FAN_BOTTOM = spacing.md - 2;
+export const HAND_FAN_BOTTOM_COMPACT = spacing.xs;
+
 // Usable panel height for a given window height, mirroring TablePanel's
 // reservation (narrow phones have no side margin, so vMargin drops out). Kept
 // as a pure helper so the in-progress screen derives the exact same budget the
