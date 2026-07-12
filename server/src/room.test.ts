@@ -30,8 +30,9 @@ import {
   type RoomState,
 } from './roomLogic';
 import { botChoose } from '../../lib/pusoy/bot';
+import { detectCombo } from '../../lib/pusoy/combo';
 import { makeRng } from '../../lib/pusoy/rng';
-import type { RoundAction } from '../../lib/pusoy/types';
+import type { Card, RoundAction } from '../../lib/pusoy/types';
 
 // Drain every consecutive automatic turn (bots + disconnected humans) to reach
 // a stable state: the online DO instead paces these one per alarm, but a test
@@ -338,11 +339,12 @@ function main() {
     let botInRange = true;
     for (let i = 0; i < 200; i++) {
       const d = nextAutoActDelay(rng, 'bot');
-      if (d < 900 || d >= 2400) botInRange = false;
+      if (d < 900 || d >= 2000) botInRange = false;
     }
-    ok('a bot delay stays within [900, 2400)', botInRange);
+    ok('a bot delay stays within [900, 2000)', botInRange);
     ok('a forced pass resolves in 250ms', nextAutoActDelay(rng, 'forced') === 250);
     ok('a disconnected auto-pass resolves in 250ms', nextAutoActDelay(rng, 'disconnected') === 250);
+    ok('a human forced pass backstop is 2500ms', nextAutoActDelay(rng, 'human-forced') === 2500);
     ok(
       'a seeded bot delay is deterministic',
       nextAutoActDelay(makeRng(7), 'bot') === nextAutoActDelay(makeRng(7), 'bot'),
@@ -359,6 +361,28 @@ function main() {
     const cur = r.handState!.currentPlayerIndex;
     setConnected(r, r.players[cur].userId!, false);
     ok('a disconnected human seat is classified auto', currentAutoKind(r) === 'disconnected');
+  }
+
+  // --- human-forced: a connected human with no legal play auto-passes -------
+  {
+    const r = twoSeatRoom();
+    joinRoom(r, 'host-1', 'host');
+    joinRoom(r, 'friend-1', 'friend');
+    startGame(r, makeRng(5));
+    const cur = r.handState!.currentPlayerIndex;
+    // Put the unbeatable 2 of diamonds on the table as the lead: whatever the
+    // current player holds, no single can beat it, so pass is their only move.
+    const bomb: Card = { id: 'D-2', suit: 'D', rank: '2' };
+    r.handState!.leadCombo = detectCombo([bomb])!;
+    // Make sure the current seat holds no 2D itself (it is on the table).
+    r.hands![cur] = r.hands![cur].filter((c) => c.id !== 'D-2');
+    ok('a connected human with no legal play is human-forced', currentAutoKind(r) === 'human-forced');
+    const step = stepAutoSeat(r, makeRng(9));
+    ok('stepAutoSeat passes for the forced human', step.acted && step.kind === 'human-forced');
+    // 2-player room: the pass hands the trick to the other seat, so the trick
+    // clears (lead resets) and the turn moves off the forced human.
+    ok('the turn moved off the forced human', r.handState!.currentPlayerIndex !== cur);
+    ok('a plain pass carries no drop-out penalty', r.players[cur].connected === true);
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

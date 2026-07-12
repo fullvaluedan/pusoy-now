@@ -179,8 +179,12 @@ export class GameRoom extends DurableObject<Env> {
         ws.send(JSON.stringify({ type: 'error', message: res.message }));
         return;
       }
+      // The turn just advanced, so any pending auto schedule belonged to the
+      // seat that acted (e.g. the human-forced backstop their own client beat).
+      // Clear it so the NEXT seat gets a fresh delay instead of the leftover.
+      this.room.autoActAt = null;
       // Broadcast the human's own play at once; afterProgress arms the paced
-      // auto-turn for the next seat (a bot, or a disconnected human) if any.
+      // auto-turn for the next seat (bot, disconnected, or forced human) if any.
       await this.afterProgress();
       return;
     }
@@ -214,7 +218,7 @@ export class GameRoom extends DurableObject<Env> {
     // Paced auto-turn: a bot (or a disconnected human) acts ONE step at a time,
     // each with its own human-like delay, so clients see every bot play land as
     // its own broadcast (matching bot mode). This branch runs before the 30s
-    // turn timeout because an auto delay (<=2.4s) is always sooner than the
+    // turn timeout because an auto delay (<=2.5s) is always sooner than the
     // deadline, so a bot seat plays here and never trips the timeout below.
     if (this.room.phase === 'playing' && this.room.autoActAt != null && now >= this.room.autoActAt) {
       this.room.autoActAt = null;
@@ -321,7 +325,7 @@ export class GameRoom extends DurableObject<Env> {
     const r = this.room;
     if (r?.phase === 'playing') {
       // Whichever is sooner: the next paced auto turn or the current seat's 30s
-      // deadline. For a bot seat autoActAt (<=2.4s) naturally precedes the
+      // deadline. For a bot seat autoActAt (<=2.5s) naturally precedes the
       // deadline, so the bot plays before it can be timed out.
       const times: number[] = [];
       if (r.autoActAt != null) times.push(r.autoActAt);

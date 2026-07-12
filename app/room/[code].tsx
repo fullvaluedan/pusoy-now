@@ -270,14 +270,15 @@ function LiveTable({
     setHandOrder((prev) => reconcileHand(prev, serverHand ?? []));
   }, [serverHand]);
 
-  // Turn countdown: only ticks while it is your turn, cleared on turn change /
+  // Turn countdown: ticks for EVERY seat's turn (yours in the banner pill,
+  // everyone else's in the top-bar turn label), cleared on turn change /
   // unmount so it never runs in the background.
   const turnDeadline = view.turnDeadline;
   useEffect(() => {
-    if (!isMyTurn || !turnDeadline) return;
+    if (!turnDeadline) return;
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
-  }, [isMyTurn, turnDeadline]);
+  }, [turnDeadline]);
 
   // Selection (and any stale error, local or server) reset once the turn moves
   // on -- either your play landed or the turn passed while you were deciding.
@@ -291,7 +292,7 @@ function LiveTable({
   }, [currentSeat]);
 
   const seconds =
-    isMyTurn && turnDeadline ? Math.max(0, Math.ceil((turnDeadline - now) / 1000)) : null;
+    turnDeadline ? Math.max(0, Math.ceil((turnDeadline - now) / 1000)) : null;
 
   // Elapsed game clock, shown in the TopBar like the bot table. Start counting
   // when this client first mounts into the playing phase (LiveTable is only
@@ -558,13 +559,15 @@ function LiveTable({
   const humanPassed = yourSeat != null ? passedOf(yourSeat) : false;
   const humanPlace = yourSeat != null ? placeOf(yourSeat) : null;
 
+  // Everyone's turn shows the shared 30s countdown: yours lives in the banner
+  // pill; another seat's ticks here in the top-bar label.
   const turnLabel =
     status === 'reconnecting'
       ? 'Reconnecting...'
       : isMyTurn
         ? 'Your turn'
         : currentSeat != null
-          ? `${playerLabel(view, currentSeat)}'s turn`
+          ? `${playerLabel(view, currentSeat)}'s turn${seconds !== null ? ` - ${seconds}s` : ''}`
           : '';
 
   const canPass = isMyTurn && lead !== null;

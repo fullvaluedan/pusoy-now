@@ -20,7 +20,7 @@ import {
 } from '../../lib/pusoy/engine';
 import { botChoose, findLegalPlays } from '../../lib/pusoy/bot';
 import { canPlay, detectCombo } from '../../lib/pusoy/combo';
-import { BOT_MIN_DELAY_MS, BOT_MAX_DELAY_MS, BOT_FORCED_PASS_MS } from '../../lib/pusoy/pacing';
+import { BOT_MIN_DELAY_MS, BOT_MAX_DELAY_MS, BOT_FORCED_PASS_MS, HUMAN_FORCED_PASS_MS } from '../../lib/pusoy/pacing';
 
 // Online turns are 30 seconds (R12). Bot mode is untimed; this is the online
 // value threaded into the shared engine's per-hand turnMs.
@@ -239,36 +239,40 @@ export function applySeatAction(state: RoomState, seat: number, action: RoundAct
 }
 
 // The kind of automatic action the current seat owes, or null when it is a
-// connected human's turn (or the room is not playing). Two seats play
-// automatically: bots (R11) and disconnected humans (someone who left the table
-// keeps auto-passing so the game never stalls; they resume on reconnect).
+// connected human's turn with a real choice (or the room is not playing).
 //   'bot'          a bot that has (or may have) a real move to choose
 //   'forced'       a bot whose only legal action is to pass - resolves fast
 //   'disconnected' a disconnected human, auto-passed via the timeout path
-export type AutoKind = 'bot' | 'forced' | 'disconnected';
+//   'human-forced' a connected human with no legal play: pass is their only
+//                  action, so the server passes for them after a short backstop
+//                  delay (their client usually beats it at 1400ms)
+export type AutoKind = 'bot' | 'forced' | 'disconnected' | 'human-forced';
 
 export function currentAutoKind(state: RoomState): AutoKind | null {
   if (state.phase !== 'playing' || !state.handState) return null;
   const seat = state.handState.currentPlayerIndex;
   const player = state.players[seat];
   if (!player) return null;
+  const mustPass =
+    state.handState.leadCombo !== null &&
+    findLegalPlays(state.hands![seat], state.handState.leadCombo).length === 0;
   if (player.kind === 'bot') {
     // Mirror localGame.ts scheduleBots: a bot with no legal play can only pass,
     // so it resolves near-instantly instead of faking deliberation.
-    const mustPass =
-      state.handState.leadCombo !== null &&
-      findLegalPlays(state.hands![seat], state.handState.leadCombo).length === 0;
     return mustPass ? 'forced' : 'bot';
   }
   if (!player.connected) return 'disconnected';
-  return null;
+  return mustPass ? 'human-forced' : null;
 }
 
 // How long the current auto seat should "think" before acting. A real bot move
-// takes a human-like 900-2400ms; a forced pass or a disconnected human resolves
-// in 250ms. Pure and deterministic given a seeded rng, so it is unit-testable.
+// takes a human-like 900-2000ms; a forced pass or a disconnected human resolves
+// in 250ms; a connected human with no legal play gets the 2.5s backstop (their
+// own client normally passes first at 1400ms). Pure and deterministic given a
+// seeded rng, so it is unit-testable.
 export function nextAutoActDelay(rng: Rng, kind: AutoKind): number {
   if (kind === 'bot') return BOT_MIN_DELAY_MS + rng() * (BOT_MAX_DELAY_MS - BOT_MIN_DELAY_MS);
+  if (kind === 'human-forced') return HUMAN_FORCED_PASS_MS;
   return BOT_FORCED_PASS_MS; // 'forced' | 'disconnected'
 }
 
@@ -307,6 +311,13 @@ export function stepAutoSeat(state: RoomState, rng: Rng = Math.random): AutoStep
     const res = timeoutCurrent(state);
     if (res.status === 'error') return { acted: false, finished: false, kind: null };
     return { acted: true, finished: res.status === 'finished', kind: 'disconnected' };
+  }
+  if (currentAutoKind(state) === 'human-forced') {
+    // Connected human with no legal play: pass is their only action. A plain
+    // pass, NOT the timeout path, so it carries no drop-out penalty.
+    const res = applySeatAction(state, seat, { kind: 'pass' });
+    if (res.status === 'error') return { acted: false, finished: false, kind: null };
+    return { acted: true, finished: res.status === 'finished', kind: 'human-forced' };
   }
   return { acted: false, finished: false, kind: null }; // connected human: wait
 }
