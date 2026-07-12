@@ -93,3 +93,7 @@ Worker: api.prends.app (migration 0008 game_result/game_result_player applied re
 | 40 | Deployed bundle = verified bundle | PASS | prends.app entry JS hash === local dist hash (bcdd02f9...); geometry verified against those bytes at 360x570/360x640/412x915 |
 
 Round 9 verification note: browser-pane external navigation was unavailable, so the deployed bundle was verified by hash-matching prends.app's entry JS to the local dist, then serving that identical dist locally for iframe DOM-geometry checks (pool full-size + compact 37px PASS/PLAY at 360x570, no overflow; one-line home row; first-play picker -> instant PLAY). Friends UI session flow needs the prends.app origin (CORS), verified via live API instead.
+
+## Round 10 (online-table parity + Duolingo polish + suit fix) — 2026-07-12
+
+Worker redeploy 5c476f4a (bundles the corrected suit engine; no endpoint/schema changes). Web entry-55b346a0. UI-only round otherwise; no new attack surface. Verification note: online table rebuilt on the shared components/table kit (view layer only, WS protocol and redaction untouched); deployed-bundle hash matched local dist; geometry verified at 360x570 and 412x915 (bot table compact numbers unchanged: PASS h37 y123, PLAY h37 y298, SORT y353, no overflow; deal-vs-play hand container identical y722/h126 = zero shift; avatar badges intersect stacks). Suit hierarchy corrected to standard Pusoy Dos (C<S<H<D) in the single shared engine; client and server deployed together so online comparisons stay consistent.
