@@ -1,13 +1,13 @@
-// Play online: two paths. "Quick match" drops the player into the 30-second
-// matchmaking waiting room (app/matchmaking.tsx); "Play with friends" is the
-// existing host setup -- pick a seat count and a bot difficulty (used to fill
-// any seats nobody joins by start), then create a room and land in its lobby.
-// A guest gets a lazy anonymous session on mount (R2) rather than a sign-in
-// wall -- neither path needs a real account, just *some* session behind a seat.
+// Play with friends (U4): host setup only -- pick a seat count and a bot
+// difficulty (used to fill any seats nobody joins by start), then create a
+// room and land in its lobby. Quick match moved to the Home hub (U4); this
+// screen no longer offers it. A guest gets a lazy anonymous session on mount
+// (R2) rather than a sign-in wall -- this path needs just *some* session
+// behind a seat, not a real account.
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, Header, ScreenContainer } from '../components/ui';
+import { Button, Card, CompactHeader, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { getLocalGuestName } from '../lib/guest';
@@ -58,19 +58,12 @@ export default function PlayOnline() {
   }
 
   return (
-    <ScreenContainer scroll>
-      <Header title="Play online" onBack={() => router.back()} />
+    <ScreenContainer>
+      <CompactHeader title="Play with friends" />
 
       {isAnonymous && guestName ? <Text style={styles.guestLine}>Playing as {guestName}</Text> : null}
 
       <Card style={styles.card}>
-        <Text style={styles.cardTitle}>Quick match</Text>
-        <Text style={styles.cardSubtitle}>Play against people online. 30 seconds max wait.</Text>
-        <Button title="Find a game" onPress={() => router.push('/matchmaking')} style={styles.cardBtn} />
-      </Card>
-
-      <Card style={styles.card}>
-        <Text style={styles.cardTitle}>Play with friends</Text>
         <Text style={styles.cardSubtitle}>Host a room and share the invite link.</Text>
 
         <Text style={styles.label}>Seats</Text>
@@ -128,12 +121,10 @@ function OptionChip({ label, selected, onPress }: { label: string; selected: boo
 
 const styles = StyleSheet.create({
   guestLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
-  card: { marginBottom: spacing.lg },
-  cardTitle: { ...typography.subheading, color: colors.felt },
-  cardSubtitle: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.md },
-  cardBtn: { marginTop: spacing.xs },
-  label: { ...typography.label, color: colors.felt, fontWeight: '700', marginTop: spacing.md, marginBottom: spacing.sm },
-  hint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  card: { marginBottom: spacing.md },
+  cardSubtitle: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  label: { ...typography.label, color: colors.felt, fontWeight: '700', marginTop: spacing.sm, marginBottom: spacing.xs },
+  hint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.xs },
   optionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   chip: {
     flex: 1,

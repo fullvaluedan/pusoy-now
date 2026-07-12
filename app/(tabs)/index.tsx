@@ -1,48 +1,64 @@
-// Home: single clear hierarchy (Round 7 U6).
-//   - Header row: small logo left, Players Online chip top-right.
-//   - Hero art, title + subtitle.
-//   - One primary CTA (Play vs bots), two secondary CTAs (Play online, How to
-//     play), then a quiet ghost-button list for the rest.
-//   - Identity line at the bottom: guest name + sign-in nudge, or the
-//     signed-in avatar chip.
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'expo-router';
-import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { Avatar } from '../../components/Avatar';
+// Home tab (U4): compact Duolingo-style hub that fits 360x640 alongside the
+// 60px tab bar (R7) -- top to bottom: a slim identity row (logo + wordmark,
+// Players Online chip), an optional hero strip on tall screens only, stat
+// tiles (hidden until the player has played a game), a giant PLAY button,
+// QUICK MATCH, and a compact PLAY WITH FRIENDS / HOW TO PLAY row.
+//
+// The guest "Playing as X" line + sign-in nudge that used to live here moved
+// to the Profile tab (U3) -- that is now the one place identity/settings
+// links live. The post-sign-in consent prompt (Round 6 U3) stays: it is rare
+// and dismissible, and is allowed to exceed the viewport on the odd render
+// where it shows.
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { PresenceChip } from '../../components/PresenceChip';
 import { Button, Card, ScreenContainer } from '../../components/ui';
 import { colors, radii, spacing, typography } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { apiUrl, authClient } from '../../lib/authClient';
 import { usePresence } from '../../lib/presence';
-import { getLocalGuestName } from '../../lib/guest';
+import { loadStats } from '../../lib/stats';
+import { resolveHomeStatTiles, type HomeStatTiles } from '../../lib/homeStats';
 
 const LOGO_IMG = require('../../assets/art/logo.png');
 const HERO_IMG = require('../../assets/art/hero.png');
 
-// Content is centered and capped at this width so the hero/logo don't
-// stretch to absurd sizes on a wide desktop browser.
+// Content is centered and capped at this width so the hub doesn't stretch to
+// absurd sizes on a wide desktop browser.
 const MAX_CONTENT_WIDTH = 480;
-// hero.png is 1536x1024 (3:2 landscape).
-const HERO_ASPECT_RATIO = 1536 / 1024;
-const LOGO_SIZE = 72;
+const LOGO_SIZE = 44;
+const HERO_HEIGHT = 120;
+// Below this window height there is no room for the hero strip alongside
+// the identity row, stat tiles, and all four action buttons without
+// scrolling (R7) -- the hero is the first thing to go on a short viewport.
+const HERO_MIN_WINDOW_HEIGHT = 700;
 
 export default function Home() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const { session, profile, isAnonymous } = useAuth();
+  const { width, height } = useWindowDimensions();
+  const { session, isAnonymous } = useAuth();
   const { count: onlineCount } = usePresence();
 
   const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
-  const heroHeight = contentWidth / HERO_ASPECT_RATIO;
+  const showHero = height >= HERO_MIN_WINDOW_HEIGHT;
 
-  // The locally-generated guest name (R1), shown immediately -- it exists
-  // before any server session does, so it renders for both a fresh guest and
-  // one who has already gone anonymous server-side.
-  const [guestName, setGuestName] = useState<string | null>(null);
-  useEffect(() => {
-    void getLocalGuestName().then(setGuestName);
-  }, []);
+  // Local bot-game stat tiles (R11), reloaded on every focus rather than
+  // only on mount: the bottom tab bar (U3) keeps this screen mounted when
+  // the player switches tabs, so a mount-only load would go stale the first
+  // time they finish a game and come back to Home.
+  const [tiles, setTiles] = useState<HomeStatTiles | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void loadStats().then((s) => {
+        if (!cancelled) setTiles(resolveHomeStatTiles(s));
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   // One-time post-sign-in consent prompt (Round 6 U3): social-login users
   // never see the signup checkbox, so on the first authenticated home render
@@ -73,30 +89,37 @@ export default function Home() {
     void authClient.$fetch(apiUrl('/api/consent'), { method: 'POST', body: { optIn, source: 'prompt' } });
   }
 
-  const signedIn = Boolean(session) && !isAnonymous;
-
   return (
-    <ScreenContainer scroll>
+    <ScreenContainer>
       <View style={[styles.content, { width: contentWidth }]}>
         <View style={styles.headerRow}>
-          <Image
-            source={LOGO_IMG}
-            style={styles.logo}
-            resizeMode="contain"
-            accessibilityLabel="Prends logo"
-          />
+          <View style={styles.brandGroup}>
+            <Image
+              source={LOGO_IMG}
+              style={styles.logo}
+              resizeMode="contain"
+              accessibilityLabel="Prends logo"
+            />
+            <Text style={styles.wordmark}>Prends</Text>
+          </View>
           <PresenceChip count={onlineCount} />
         </View>
 
-        <Image
-          source={HERO_IMG}
-          style={[styles.hero, { width: contentWidth, height: heroHeight }]}
-          resizeMode="cover"
-          accessibilityLabel="Prends table art"
-        />
+        {showHero ? (
+          <Image
+            source={HERO_IMG}
+            style={styles.hero}
+            resizeMode="cover"
+            accessibilityLabel="Prends table art"
+          />
+        ) : null}
 
-        <Text style={styles.title}>Prends</Text>
-        <Text style={styles.subtitle}>Pusoy Dos - the Filipino climbing card game</Text>
+        {tiles?.visible ? (
+          <View style={styles.statRow}>
+            <StatTile value={tiles.gamesLabel} label="Games played" />
+            <StatTile value={tiles.bestTimeLabel} label="Best win time" />
+          </View>
+        ) : null}
 
         <Button
           title="Play"
@@ -104,64 +127,32 @@ export default function Home() {
           variant="primary"
           align="left"
           onPress={() => router.push('/bot-select')}
-          style={styles.menuItem}
+          style={styles.playBtn}
         />
 
         <Button
-          title="Play online"
-          subtitle="Quick match or invite friends"
+          title="Quick match"
+          subtitle="Play against people online"
           variant="secondary"
           align="left"
-          onPress={() => router.push('/play-online')}
+          onPress={() => router.push('/matchmaking')}
           style={styles.menuItem}
         />
 
-        <Button
-          title="How to play"
-          variant="secondary"
-          align="left"
-          onPress={() => router.push('/how-to-play')}
-          style={styles.menuItem}
-        />
-
-        <View style={styles.quietSection}>
+        <View style={styles.compactRow}>
           <Button
-            title="Leaderboard"
-            variant="ghost"
-            align="left"
-            onPress={() => router.push('/leaderboard')}
-            style={styles.quietItem}
+            title="Play with friends"
+            variant="secondary"
+            onPress={() => router.push('/play-online')}
+            style={styles.compactBtn}
           />
           <Button
-            title="Friends"
-            variant="ghost"
-            align="left"
-            onPress={() => router.push('/friends')}
-            style={styles.quietItem}
-          />
-          <Button
-            title="Scoreboard"
-            variant="ghost"
-            align="left"
-            onPress={() => router.push('/stats')}
-            style={styles.quietItem}
-          />
-          <Button
-            title="Settings"
-            variant="ghost"
-            align="left"
-            onPress={() => router.push('/settings')}
-            style={styles.quietItem}
+            title="How to play"
+            variant="secondary"
+            onPress={() => router.push('/how-to-play')}
+            style={styles.compactBtn}
           />
         </View>
-
-        <IdentityLine
-          signedIn={signedIn}
-          guestName={guestName}
-          displayName={profile?.displayName}
-          avatarUrl={profile?.avatarUrl}
-          onPress={() => router.push('/sign-in')}
-        />
 
         {showConsentPrompt ? (
           <Card style={styles.consentCard}>
@@ -182,41 +173,14 @@ export default function Home() {
   );
 }
 
-// Bottom identity line. A guest (no session, or an anonymous one) sees their
-// local random name plus a button to save progress under a real account;
-// signed-in players get a Card row carrying their avatar and display name.
-function IdentityLine({
-  signedIn,
-  guestName,
-  displayName,
-  avatarUrl,
-  onPress,
-}: {
-  signedIn: boolean;
-  guestName?: string | null;
-  displayName?: string;
-  avatarUrl?: string | null;
-  onPress: () => void;
-}) {
-  if (!signedIn) {
-    return (
-      <View style={styles.identityWrap}>
-        {guestName ? <Text style={styles.guestLine}>Playing as {guestName}</Text> : null}
-        <Button title="Sign in to save your progress" variant="ghost" align="left" onPress={onPress} />
-      </View>
-    );
-  }
-
+// One Duolingo-style stat tile: a bold numeral over a small caption label,
+// in a Card so the two tiles read as a distinct row.
+function StatTile({ value, label }: { value: string; label: string }) {
   return (
-    <Pressable onPress={onPress} style={styles.identityWrap}>
-      <Card style={styles.identityCard}>
-        <Avatar name={displayName ?? 'Player'} url={avatarUrl} size={40} />
-        <View style={styles.identityTextGroup}>
-          <Text style={styles.identityTitle}>Signed in</Text>
-          <Text style={styles.identitySubtitle} numberOfLines={1}>{displayName}</Text>
-        </View>
-      </Card>
-    </Pressable>
+    <Card style={styles.statTile}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </Card>
   );
 }
 
@@ -226,31 +190,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
+  brandGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   logo: { width: LOGO_SIZE, height: LOGO_SIZE },
+  wordmark: { ...typography.subheading, color: colors.felt },
   hero: {
+    width: '100%',
+    height: HERO_HEIGHT,
     borderRadius: radii.lg,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
     backgroundColor: colors.felt,
   },
-  title: { ...typography.title, color: colors.textPrimary, textAlign: 'center' },
-  subtitle: { ...typography.body, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.lg },
-  menuItem: { marginBottom: spacing.md },
-  quietSection: { marginBottom: spacing.md },
-  quietItem: { marginBottom: spacing.xs },
-  identityWrap: { marginBottom: spacing.md },
-  guestLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
-  consentCard: { marginBottom: spacing.md, gap: spacing.sm },
+  statRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  statTile: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm },
+  statValue: { ...typography.heading, color: colors.felt },
+  statLabel: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  playBtn: { minHeight: 64, marginBottom: spacing.sm },
+  menuItem: { marginBottom: spacing.sm },
+  compactRow: { flexDirection: 'row', gap: spacing.sm },
+  compactBtn: { flex: 1 },
+  consentCard: { marginTop: spacing.md, gap: spacing.sm },
   consentText: { ...typography.bodyBold, color: colors.textPrimary },
   consentRow: { flexDirection: 'row', gap: spacing.sm },
   consentBtn: { flex: 1 },
-  identityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  identityTextGroup: { flex: 1 },
-  identityTitle: { ...typography.bodyBold, color: colors.textPrimary },
-  identitySubtitle: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
 });
