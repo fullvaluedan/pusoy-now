@@ -12,6 +12,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["expo", "start", "--web", "--port", "8131"],
       "port": 8131
+    },
+    {
+      "name": "prends-friends-tab",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["expo", "start", "--web", "--port", "8143"],
+      "port": 8143
     }
   ]
 }
