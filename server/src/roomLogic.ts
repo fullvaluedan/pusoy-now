@@ -20,7 +20,14 @@ import {
 } from '../../lib/pusoy/engine';
 import { botChoose, findLegalPlays } from '../../lib/pusoy/bot';
 import { canPlay, detectCombo } from '../../lib/pusoy/combo';
-import { BOT_MIN_DELAY_MS, BOT_MAX_DELAY_MS, BOT_FORCED_PASS_MS, HUMAN_FORCED_PASS_MS } from '../../lib/pusoy/pacing';
+import {
+  BOT_FORCED_PASS_MS,
+  HUMAN_FORCED_PASS_MS,
+  ONLINE_MULTI_BOT_MAX_MS,
+  ONLINE_MULTI_BOT_MIN_MS,
+  ONLINE_ONE_BOT_MAX_MS,
+  ONLINE_ONE_BOT_MIN_MS,
+} from '../../lib/pusoy/pacing';
 
 // Online turns are 30 seconds (R12). Bot mode is untimed; this is the online
 // value threaded into the shared engine's per-hand turnMs.
@@ -308,14 +315,26 @@ export function currentAutoKind(state: RoomState): AutoKind | null {
 }
 
 // How long the current auto seat should "think" before acting. A real bot move
-// takes a human-like 900-2000ms; a forced pass or a disconnected human resolves
-// in 250ms; a connected human with no legal play gets the 2.5s backstop (their
-// own client normally passes first at 1400ms). Pure and deterministic given a
-// seeded rng, so it is unit-testable.
-export function nextAutoActDelay(rng: Rng, kind: AutoKind): number {
-  if (kind === 'bot') return BOT_MIN_DELAY_MS + rng() * (BOT_MAX_DELAY_MS - BOT_MIN_DELAY_MS);
+// paces by how many bots share the table: a lone bot takes a deliberate
+// 0.9-3s, while 2+ bots play brisk 0.5-1s turns so a chain of bot turns never
+// drags. A forced pass or a disconnected human resolves in 250ms; a connected
+// human with no legal play gets the 2.5s backstop (their own client normally
+// passes first at 1400ms). Pure and deterministic given a seeded rng.
+export function nextAutoActDelay(rng: Rng, kind: AutoKind, botCount: number): number {
+  if (kind === 'bot') {
+    const [min, max] =
+      botCount >= 2
+        ? [ONLINE_MULTI_BOT_MIN_MS, ONLINE_MULTI_BOT_MAX_MS]
+        : [ONLINE_ONE_BOT_MIN_MS, ONLINE_ONE_BOT_MAX_MS];
+    return min + rng() * (max - min);
+  }
   if (kind === 'human-forced') return HUMAN_FORCED_PASS_MS;
   return BOT_FORCED_PASS_MS; // 'forced' | 'disconnected'
+}
+
+// Seated bots in the room (pacing input for nextAutoActDelay).
+export function botCount(state: RoomState): number {
+  return state.players.filter((p) => p.kind === 'bot').length;
 }
 
 export interface AutoStep {

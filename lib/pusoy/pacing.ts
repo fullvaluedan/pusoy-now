@@ -7,6 +7,13 @@
 export const BOT_MIN_DELAY_MS = 900;
 // Capped at 2s: a bot turn must never feel like waiting.
 export const BOT_MAX_DELAY_MS = 2_000;
+// Online rooms pace bots by how many there are. A single bot can take a
+// deliberate moment; a table of 2-3 bots plays brisk 1s turns so a chain of
+// bot turns between your plays never drags.
+export const ONLINE_ONE_BOT_MIN_MS = 900;
+export const ONLINE_ONE_BOT_MAX_MS = 3_000;
+export const ONLINE_MULTI_BOT_MIN_MS = 500;
+export const ONLINE_MULTI_BOT_MAX_MS = 1_000;
 // A forced pass (nothing in hand can beat the lead - e.g. the 2 of diamonds
 // bomb, or a 5-card lead against a hand of fewer than 5 cards) needs no
 // thinking, so it resolves almost instantly instead of faking deliberation.

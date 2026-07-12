@@ -18,6 +18,7 @@ import {
   abandonGame,
   allHumansDisconnected,
   applySeatAction,
+  botCount,
   canAutoStart,
   canStart,
   createRoomState,
@@ -355,7 +356,7 @@ export class GameRoom extends DurableObject<Env> {
     if (kind === null) {
       this.room.autoActAt = null;
     } else if (this.room.autoActAt == null) {
-      this.room.autoActAt = Date.now() + nextAutoActDelay(Math.random, kind);
+      this.room.autoActAt = Date.now() + nextAutoActDelay(Math.random, kind, botCount(this.room));
     }
   }
 

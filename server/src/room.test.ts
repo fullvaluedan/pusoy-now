@@ -339,18 +339,22 @@ function main() {
   // --- nextAutoActDelay bounds (seeded, deterministic) ----------------------
   {
     const rng = makeRng(123);
-    let botInRange = true;
+    let oneBotInRange = true;
+    let multiBotInRange = true;
     for (let i = 0; i < 200; i++) {
-      const d = nextAutoActDelay(rng, 'bot');
-      if (d < 900 || d >= 2000) botInRange = false;
+      const d1 = nextAutoActDelay(rng, 'bot', 1);
+      if (d1 < 900 || d1 >= 3000) oneBotInRange = false;
+      const d3 = nextAutoActDelay(rng, 'bot', 3);
+      if (d3 < 500 || d3 >= 1000) multiBotInRange = false;
     }
-    ok('a bot delay stays within [900, 2000)', botInRange);
-    ok('a forced pass resolves in 250ms', nextAutoActDelay(rng, 'forced') === 250);
-    ok('a disconnected auto-pass resolves in 250ms', nextAutoActDelay(rng, 'disconnected') === 250);
-    ok('a human forced pass backstop is 2500ms', nextAutoActDelay(rng, 'human-forced') === 2500);
+    ok('a lone bot delay stays within [900, 3000)', oneBotInRange);
+    ok('a multi-bot delay stays within [500, 1000)', multiBotInRange);
+    ok('a forced pass resolves in 250ms', nextAutoActDelay(rng, 'forced', 3) === 250);
+    ok('a disconnected auto-pass resolves in 250ms', nextAutoActDelay(rng, 'disconnected', 3) === 250);
+    ok('a human forced pass backstop is 2500ms', nextAutoActDelay(rng, 'human-forced', 3) === 2500);
     ok(
       'a seeded bot delay is deterministic',
-      nextAutoActDelay(makeRng(7), 'bot') === nextAutoActDelay(makeRng(7), 'bot'),
+      nextAutoActDelay(makeRng(7), 'bot', 2) === nextAutoActDelay(makeRng(7), 'bot', 2),
     );
   }
 
