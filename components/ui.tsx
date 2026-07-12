@@ -119,12 +119,18 @@ const cardStyles = StyleSheet.create({
 // existing layout.
 type ButtonAlign = 'left' | 'center';
 
+// 'default' is the standard 56px-tall chunky button used everywhere.
+// 'big' is the Duolingo-hard hero size (Round 10 U5): taller, bigger type,
+// for the one standout action on a screen (Home's PLAY).
+type ButtonSize = 'default' | 'big';
+
 interface ButtonProps {
   title: string;
   subtitle?: string;
   onPress: () => void;
   variant?: ButtonVariant;
   align?: ButtonAlign;
+  size?: ButtonSize;
   color?: string;
   disabled?: boolean;
   loading?: boolean;
@@ -135,7 +141,7 @@ interface ButtonProps {
   textStyle?: StyleProp<TextStyle>;
 }
 
-export function Button({ title, subtitle, onPress, variant = 'primary', align = 'center', color, disabled, loading, style, textStyle }: ButtonProps) {
+export function Button({ title, subtitle, onPress, variant = 'primary', align = 'center', size = 'default', color, disabled, loading, style, textStyle }: ButtonProps) {
   const inert = isButtonInert({ disabled, loading });
   const tokens = resolveButtonTokens({ variant, disabled, loading, color });
 
@@ -145,6 +151,7 @@ export function Button({ title, subtitle, onPress, variant = 'primary', align = 
         const pressedTokens = pressed && !inert ? resolvePressedTokens() : null;
         return [
           buttonStyles.btn,
+          size === 'big' ? buttonStyles.btnBig : null,
           align === 'left' ? buttonStyles.alignLeft : buttonStyles.alignCenter,
           { backgroundColor: tokens.fill },
           tokens.borderColor ? { borderWidth: 1, borderColor: tokens.borderColor } : null,
@@ -163,7 +170,15 @@ export function Button({ title, subtitle, onPress, variant = 'primary', align = 
         <LoadingDots color={tokens.text} />
       ) : (
         <>
-          <Text style={[buttonStyles.text, { color: tokens.text }, tokens.caps ? buttonStyles.textCaps : null, textStyle]}>
+          <Text
+            style={[
+              buttonStyles.text,
+              size === 'big' ? buttonStyles.textBig : null,
+              { color: tokens.text },
+              tokens.caps ? buttonStyles.textCaps : null,
+              textStyle,
+            ]}
+          >
             {title}
           </Text>
           {subtitle ? <Text style={[buttonStyles.subtext, { color: tokens.text }]}>{subtitle}</Text> : null}
@@ -212,9 +227,13 @@ const buttonStyles = StyleSheet.create({
     minHeight: 56,
     justifyContent: 'center',
   },
+  // Duolingo-hard hero size (Round 10 U5): taller than the 56px default and
+  // bigger type, for the one standout action on a screen (Home's PLAY).
+  btnBig: { minHeight: 76, padding: spacing.lg },
   alignLeft: { alignItems: 'stretch' },
   alignCenter: { alignItems: 'center' },
   text: { fontSize: typography.bodyBold.fontSize, fontWeight: typography.bodyBold.fontWeight },
+  textBig: { fontSize: typography.subheading.fontSize },
   textCaps: { textTransform: 'uppercase', letterSpacing: 0.5 },
   subtext: { fontSize: typography.caption.fontSize, marginTop: 2, opacity: 0.75 },
   dotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },

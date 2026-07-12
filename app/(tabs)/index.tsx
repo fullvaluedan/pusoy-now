@@ -1,15 +1,19 @@
-// Home tab (Round 9 U2): compact Duolingo-style hub that fits 360x640
-// alongside the 60px tab bar (R7) -- top to bottom: a slim identity row
-// (logo + wordmark, Players Online chip), an optional hero strip on tall
-// screens only, stat tiles (hidden until the player has played a game), the
-// one-line PLAY | QUICK MATCH | PRIVATE action row, and a slim HOW TO PLAY
-// chip.
+// Home tab (Round 10 U5): a VERTICAL, page-filling Duolingo-hard hub. Top to
+// bottom: a slim identity row (logo + wordmark, Players Online chip), a
+// flex-filled hero region (hero art, with the stat tiles docked to its
+// bottom edge once the player has a game on record) that soaks up whatever
+// vertical space is left over, a stacked column of full-width chunky
+// actions (PLAY biggest, then QUICK MATCH, then PRIVATE), and a chunky HOW
+// TO PLAY row. The hero region uses flex:1 (not a window-height gate) so the
+// page is exactly full at any portrait size, phone or tablet, with no
+// scroll and no dead space.
 //
 // PLAY reads the saved bot difficulty (lib/settingsRules.ts botLevel): the
-// first-ever tap swaps the action row inline to an EASY | NORMAL | EXPERT
+// first-ever tap swaps the PLAY slot inline to an EASY | NORMAL | EXPERT
 // picker (no navigation, no new route -- decideOnPlay in settingsRules.ts is
 // the pure decision behind this); picking saves it and starts the game.
-// Every later tap starts instantly with the saved level.
+// Every later tap starts instantly with the saved level. QUICK MATCH and
+// PRIVATE stay put below the PLAY slot the whole time.
 //
 // The guest "Playing as X" line + sign-in nudge that used to live here moved
 // to the Profile tab (U3) -- that is now the one place identity/settings
@@ -44,20 +48,14 @@ const HERO_IMG = require('../../assets/art/hero.png');
 // absurd sizes on a wide desktop browser.
 const MAX_CONTENT_WIDTH = 480;
 const LOGO_SIZE = 44;
-const HERO_HEIGHT = 120;
-// Below this window height there is no room for the hero strip alongside
-// the identity row, stat tiles, and all four action buttons without
-// scrolling (R7) -- the hero is the first thing to go on a short viewport.
-const HERO_MIN_WINDOW_HEIGHT = 700;
 
 export default function Home() {
   const router = useRouter();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const { session, isAnonymous } = useAuth();
   const { count: onlineCount } = usePresence();
 
   const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
-  const showHero = height >= HERO_MIN_WINDOW_HEIGHT;
 
   // Local bot-game stat tiles (R11), reloaded on every focus rather than
   // only on mount: the bottom tab bar (U3) keeps this screen mounted when
@@ -157,78 +155,74 @@ export default function Home() {
           <PresenceChip count={onlineCount} />
         </View>
 
-        {showHero ? (
+        <View style={styles.heroWrap}>
           <Image
             source={HERO_IMG}
             style={styles.hero}
             resizeMode="cover"
             accessibilityLabel="Prends table art"
           />
-        ) : null}
-
-        {tiles?.visible ? (
-          <View style={styles.statRow}>
-            <StatTile value={tiles.gamesLabel} label="Games played" />
-            <StatTile value={tiles.bestTimeLabel} label="Best win time" />
-          </View>
-        ) : null}
-
-        {pickerOpen ? (
-          <View style={styles.pickerBlock}>
-            <View style={styles.pickerHeaderRow}>
-              <Text style={styles.pickerCaption}>Pick your difficulty</Text>
-              <Pressable
-                onPress={() => setPickerOpen(false)}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel="Back"
-                style={styles.pickerBack}
-              >
-                <Text style={styles.pickerBackText}>x</Text>
-              </Pressable>
+          {tiles?.visible ? (
+            <View style={styles.statRow}>
+              <StatTile value={tiles.gamesLabel} label="Games played" />
+              <StatTile value={tiles.bestTimeLabel} label="Best win time" />
             </View>
-            <View style={styles.actionRow}>
-              {DIFFICULTY_OPTIONS.map((option) => (
-                <Button
-                  key={option.level}
-                  title={option.label}
-                  variant="primary"
-                  color={option.color}
-                  onPress={() => onPickDifficulty(option.level)}
-                  style={styles.actionBtn}
-                  textStyle={styles.actionBtnText}
-                />
-              ))}
-            </View>
-          </View>
-        ) : (
-          <View style={styles.actionRow}>
-            <Button title="Play" variant="primary" onPress={onPressPlay} style={styles.actionBtn} textStyle={styles.actionBtnText} />
-            <Button
-              title="Quick match"
-              variant="secondary"
-              color={colors.skyBlue}
-              onPress={() => router.push('/matchmaking')}
-              style={styles.actionBtn}
-              textStyle={styles.actionBtnText}
-            />
-            <Button
-              title="Private"
-              variant="secondary"
-              onPress={() => router.push('/play-online')}
-              style={styles.actionBtn}
-              textStyle={styles.actionBtnText}
-            />
-          </View>
-        )}
+          ) : null}
+        </View>
 
-        <Pressable
+        <View style={styles.actionsStack}>
+          {pickerOpen ? (
+            <View style={styles.pickerBlock}>
+              <View style={styles.pickerHeaderRow}>
+                <Text style={styles.pickerCaption}>Pick your difficulty</Text>
+                <Pressable
+                  onPress={() => setPickerOpen(false)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back"
+                  style={styles.pickerBack}
+                >
+                  <Text style={styles.pickerBackText}>x</Text>
+                </Pressable>
+              </View>
+              <View style={styles.pickerRow}>
+                {DIFFICULTY_OPTIONS.map((option) => (
+                  <Button
+                    key={option.level}
+                    title={option.label}
+                    variant="primary"
+                    color={option.color}
+                    onPress={() => onPickDifficulty(option.level)}
+                    style={styles.pickerBtn}
+                    textStyle={styles.pickerBtnText}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : (
+            <Button title="Play" variant="primary" size="big" onPress={onPressPlay} style={styles.fullWidthBtn} />
+          )}
+          <Button
+            title="Quick match"
+            variant="secondary"
+            color={colors.skyBlue}
+            onPress={() => router.push('/matchmaking')}
+            style={styles.fullWidthBtn}
+          />
+          <Button
+            title="Private"
+            variant="secondary"
+            onPress={() => router.push('/play-online')}
+            style={styles.fullWidthBtn}
+          />
+        </View>
+
+        <Button
+          title="How to play"
+          variant="secondary"
           onPress={() => router.push('/how-to-play')}
-          style={styles.howToPlayChip}
-          accessibilityRole="button"
-        >
-          <Text style={styles.howToPlayText}>How to play</Text>
-        </Pressable>
+          style={styles.howToPlayBtn}
+        />
 
         {showConsentPrompt ? (
           <Card style={styles.consentCard}>
@@ -271,44 +265,44 @@ const styles = StyleSheet.create({
   brandGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   logo: { width: LOGO_SIZE, height: LOGO_SIZE },
   wordmark: { ...typography.subheading, color: colors.felt },
+  // Round 10 U5: the hero region is flex:1 (not a window-height gate) so it
+  // soaks up exactly whatever vertical space the fixed rows above/below
+  // leave behind -- the page is always exactly full, at 360x570 through
+  // 412x915, with no scroll and no dead space. minHeight:0 lets it shrink
+  // all the way down on the shortest viewports instead of forcing overflow.
+  heroWrap: { flex: 1, minHeight: 0, marginBottom: spacing.sm },
   hero: {
+    flex: 1,
+    minHeight: 0,
     width: '100%',
-    height: HERO_HEIGHT,
-    borderRadius: radii.lg,
-    marginBottom: spacing.sm,
+    borderRadius: radii.xl,
     backgroundColor: colors.felt,
   },
-  statRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  statRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   statTile: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm },
   statValue: { ...typography.heading, color: colors.felt },
   statLabel: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
-  // One-line PLAY | QUICK MATCH | PRIVATE action row (Round 9 U2) -- three
-  // equal buttons, no subtitles, tight padding so all three labels fit on
-  // one line down to 360px. The EASY | NORMAL | EXPERT picker reuses this
-  // exact row geometry so swapping in/out never reflows anything below it.
-  actionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  actionBtn: { flex: 1, minHeight: 56, paddingHorizontal: spacing.xs, paddingVertical: spacing.sm },
-  // Down a notch from the shared Button 16px + letterSpacing 0.5 caps style
-  // so the longest label (QUICK MATCH) fits on one line in an equal-thirds
-  // slot at 360px width, per the R1 one-line guarantee.
-  actionBtnText: { fontSize: 13, letterSpacing: 0 },
-  pickerBlock: { marginBottom: spacing.sm },
+  // Vertical stack of full-width chunky actions (Round 10 U5): PLAY is the
+  // hero (size="big"), then QUICK MATCH, then PRIVATE, each its own
+  // full-width row rather than a cramped equal-thirds row.
+  actionsStack: { gap: spacing.sm, marginBottom: spacing.sm },
+  fullWidthBtn: { width: '100%' },
+  pickerBlock: { gap: spacing.xs },
   pickerHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.xs,
   },
   pickerCaption: { ...typography.caption, color: colors.textMuted },
   pickerBack: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   pickerBackText: { ...typography.bodyBold, color: colors.textMuted },
-  howToPlayChip: {
-    alignSelf: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  howToPlayText: { ...typography.label, color: colors.felt, fontWeight: '600', textDecorationLine: 'underline' },
+  // Three-segment EASY | NORMAL | EXPERT row inside the PLAY slot -- same
+  // slot, so picking a difficulty never reflows Quick match / Private below.
+  pickerRow: { flexDirection: 'row', gap: spacing.sm },
+  pickerBtn: { flex: 1, minHeight: 64, paddingHorizontal: spacing.xs, paddingVertical: spacing.sm },
+  pickerBtnText: { fontSize: 14, letterSpacing: 0 },
+  // Chunky secondary row, not a bare underlined link (Round 10 U5).
+  howToPlayBtn: { width: '100%' },
   consentCard: { marginTop: spacing.md, gap: spacing.sm },
   consentText: { ...typography.bodyBold, color: colors.textPrimary },
   consentRow: { flexDirection: 'row', gap: spacing.sm },
