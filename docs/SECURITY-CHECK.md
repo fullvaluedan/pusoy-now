@@ -75,3 +75,7 @@ Worker: api.prends.app (GameRoom + new Matchmaker DOs, migrations 0006/0007). We
 | 35 | ensureSession never double-mints guests | PASS (after fix) | pre-hydration race called signIn.anonymous over an existing anon session (400 dead-end); now getSession-first with race recovery |
 
 Round 7 lesson repeated from Rounds 5/6: endpoint checks MUST run in a real browser through the real bundle. curl passes are necessary, not sufficient.
+
+## Round 8 (Duolingo UI overhaul) — 2026-07-11
+
+UI-only round: no new endpoints, no schema changes, no worker deploy. Device verification (deployed bundle, true 360x640 iframe): game table controls all visible + centered + ad row (check via DOM geometry: PASS y199, PLAY y333, SORT y415, title cx=180/360); home hub zero-scroll with tab bar; how-to-play direct-load back chevron falls back to home; pushed screens hide the tab bar.
