@@ -16,8 +16,8 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
-import { BigStat, Button, Card, CompactHeader, ListRow, ScreenContainer } from '../../components/ui';
-import { colors, spacing, typography, withAlpha } from '../../lib/theme';
+import { Button, Card, CompactHeader, ListRow, ScreenContainer } from '../../components/ui';
+import { colors, radii, spacing, typography, withAlpha } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { fetchRanking, type RankRow } from '../../lib/friends';
 
@@ -89,32 +89,84 @@ function RankingContent() {
           </Text>
         </Card>
       ) : (
-        rows.map((row, i) => <RankRowItem key={row.userId} row={row} position={i + 1} />)
+        <>
+          <Podium rows={rows.slice(0, 3)} />
+          {rows.slice(3).map((row, i) => (
+            <RankRowItem key={row.userId} row={row} position={i + 4} />
+          ))}
+        </>
       )}
     </ScreenContainer>
   );
 }
 
+const MEDALS = ['🥇', '🥈', '🥉'] as const;
+
+// Top-3 podium: 2nd on the left, 1st raised in the center with a larger
+// gold-ringed avatar and a gold-tinted backdrop, 3rd on the right. Fewer than
+// three entries render only the spots that exist (no empty placeholders): the
+// row stays centered so one or two winners still read as a deliberate podium.
+function Podium({ rows }: { rows: RankRow[] }) {
+  const first = rows[0];
+  const second = rows[1];
+  const third = rows[2];
+  return (
+    <View style={styles.podium}>
+      {second ? <PodiumSpot row={second} place={2} /> : null}
+      {first ? <PodiumSpot row={first} place={1} /> : null}
+      {third ? <PodiumSpot row={third} place={3} /> : null}
+    </View>
+  );
+}
+
+function PodiumSpot({ row, place }: { row: RankRow; place: 1 | 2 | 3 }) {
+  const first = place === 1;
+  const name = row.name ?? row.username ?? 'Player';
+  return (
+    <View
+      style={[
+        styles.podiumSpot,
+        first ? styles.podiumFirst : styles.podiumSide,
+        { backgroundColor: first ? withAlpha(colors.gold, 0.18) : colors.overlay },
+        row.isSelf && styles.podiumSelf,
+      ]}
+    >
+      <Text style={first ? styles.podiumMedalBig : styles.podiumMedal}>{MEDALS[place - 1]}</Text>
+      <View style={first ? styles.goldRing : styles.plainRing}>
+        <Avatar url={row.image} name={name} size={first ? 64 : 48} />
+      </View>
+      <Text style={styles.podiumName} numberOfLines={1} ellipsizeMode="tail">
+        {name}
+      </Text>
+      <Text style={styles.podiumScore}>
+        {row.firsts} <Text style={styles.podiumScoreUnit}>1st</Text>
+      </Text>
+    </View>
+  );
+}
+
 function RankRowItem({ row, position }: { row: RankRow; position: number }) {
-  const winRatePct = Math.round(row.winRate * 100);
+  const name = row.name ?? row.username ?? 'Player';
   return (
     <ListRow
       style={row.isSelf ? styles.rowSelf : undefined}
       leading={
         <View style={styles.leadingWrap}>
-          <Text style={[styles.position, row.isSelf && styles.positionSelf]}>#{position}</Text>
-          <Avatar url={row.image} name={row.name ?? row.username ?? 'Player'} size={44} />
+          <Text style={[styles.position, row.isSelf && styles.positionSelf]}>{position}</Text>
+          <Avatar url={row.image} name={name} size={44} />
         </View>
       }
-      trailing={<BigStat value={row.firsts} label="1st place" />}
+      trailing={
+        <View style={styles.scoreTrailing}>
+          <Text style={styles.scoreValue}>{row.firsts}</Text>
+          <Text style={styles.scoreLabel}>1st place</Text>
+        </View>
+      }
     >
       <View style={styles.rowText}>
         {row.username ? <Text style={styles.username} ellipsizeMode="tail" numberOfLines={1}>@{row.username}</Text> : null}
         <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
-          {row.name ?? 'Player'}
-        </Text>
-        <Text style={styles.supporting}>
-          {row.games} game{row.games === 1 ? '' : 's'} played, {winRatePct}% win rate
+          {name}
         </Text>
       </View>
     </ListRow>
@@ -137,10 +189,59 @@ const styles = StyleSheet.create({
     ...typography.subheading,
     color: colors.textMuted,
     width: 30,
+    textAlign: 'center',
   },
   positionSelf: { color: colors.felt },
   rowText: { flex: 1, minWidth: 0 },
   username: { ...typography.bodyBold, color: colors.textPrimary },
   name: { ...typography.caption, color: colors.textMuted },
-  supporting: { ...typography.tiny, color: colors.textFaint, marginTop: 2 },
+  scoreTrailing: { alignItems: 'center', minWidth: 56 },
+  scoreValue: { ...typography.bodyBold, color: colors.felt },
+  scoreLabel: { ...typography.tiny, color: colors.textMuted, marginTop: 1 },
+
+  // --- Podium (top 3) ---
+  podium: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  podiumSpot: {
+    flex: 1,
+    maxWidth: 130,
+    alignItems: 'center',
+    borderRadius: radii.xl,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+    gap: spacing.xs,
+  },
+  // The center (1st) spot sits flush to the top; the side spots are pushed
+  // down so 1st reads as raised above them.
+  podiumFirst: {},
+  podiumSide: { marginTop: spacing.xxl + spacing.sm },
+  podiumSelf: { borderWidth: 2, borderColor: colors.gold },
+  podiumMedal: { fontSize: 22 },
+  podiumMedalBig: { fontSize: 30 },
+  goldRing: {
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: colors.gold,
+  },
+  plainRing: {
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: withAlpha(colors.felt, 0.15),
+  },
+  podiumName: {
+    ...typography.caption,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    maxWidth: '100%',
+  },
+  podiumScore: { ...typography.subheading, color: colors.felt },
+  podiumScoreUnit: { ...typography.tiny, color: colors.textMuted, fontWeight: '700' },
 });

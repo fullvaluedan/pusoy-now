@@ -12,11 +12,13 @@
 // two-tap remove. Guests get the same experience as accounts -- ensureSession
 // lazily starts an anonymous session, exactly like Leaderboard.
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Avatar } from '../../components/Avatar';
 import { Button, Card, CompactHeader, Field, ListRow, ScreenContainer } from '../../components/ui';
 import { colors, radii, spacing, typography, withAlpha } from '../../lib/theme';
+
+const EMPTY_ART = require('../../assets/art/empty-state.png');
 import { useAuth } from '../../lib/auth';
 import { getLocalGuestName } from '../../lib/guest';
 import { fetchMyUsername } from '../../lib/profileClient';
@@ -108,17 +110,15 @@ function FriendsContent() {
       ) : (
         <>
           {hasRequests ? (
-            <View style={styles.section}>
-              {(data?.incoming.length ?? 0) > 0 ? (
-                <>
-                  <Text style={styles.sectionTitle}>Requests</Text>
-                  {data!.incoming.map((user) => (
+            <View style={styles.requestsPanel}>
+              <Text style={styles.requestsTitle}>Requests</Text>
+              {(data?.incoming.length ?? 0) > 0
+                ? data!.incoming.map((user) => (
                     <UserRow key={user.userId} user={user}>
                       <IncomingActions user={user} onDone={refresh} />
                     </UserRow>
-                  ))}
-                </>
-              ) : null}
+                  ))
+                : null}
               {(data?.outgoing.length ?? 0) > 0 ? (
                 <View style={styles.outgoingWrap}>
                   {data!.outgoing.map((user) => (
@@ -235,7 +235,7 @@ function AddFriendSection({ onAdded }: { onAdded: () => void }) {
           </View>
         </Card>
       ) : (
-        <Button title="Add friend" variant="primary" onPress={() => setOpen(true)} />
+        <Button title="Add friend" variant="primary" size="big" onPress={() => setOpen(true)} />
       )}
       {myHandle ? (
         <Text style={styles.handleCaption}>
@@ -326,6 +326,7 @@ function FriendsList({ friends, onChanged }: { friends: AcceptedFriend[]; onChan
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Friends</Text>
         <Card style={styles.emptyCard}>
+          <Image source={EMPTY_ART} style={styles.emptyArt} resizeMode="contain" accessibilityLabel="No friends yet" />
           <Text style={styles.emptyText}>
             No friends yet. Add one by username, or play a Private game together -- joining a room makes you
             friends automatically.
@@ -362,10 +363,15 @@ function FriendsList({ friends, onChanged }: { friends: AcceptedFriend[]; onChan
 }
 
 function H2HChip({ h2h }: { h2h: AcceptedFriend['h2h'] }) {
-  const neutral = h2h.wins === 0 && h2h.losses === 0;
+  // Color the pill by the record: green tint when you lead, red when behind,
+  // neutral when even (or no shared games yet).
+  const lead = h2h.wins > h2h.losses;
+  const behind = h2h.wins < h2h.losses;
+  const chipStyle = lead ? styles.h2hChipLead : behind ? styles.h2hChipBehind : styles.h2hChipNeutral;
+  const textStyle = lead ? styles.h2hTextLead : behind ? styles.h2hTextBehind : styles.h2hTextNeutral;
   return (
-    <View style={[styles.h2hChip, neutral && styles.h2hChipNeutral]}>
-      <Text style={[styles.h2hText, neutral && styles.h2hTextNeutral]}>{formatH2h(h2h)}</Text>
+    <View style={[styles.h2hChip, chipStyle]}>
+      <Text style={[styles.h2hText, textStyle]}>{formatH2h(h2h)}</Text>
     </View>
   );
 }
@@ -394,7 +400,7 @@ function FriendActions({ user, onDone }: { user: FriendUser; onDone: () => void 
   return (
     <Button
       title={confirming ? 'Sure?' : 'Remove'}
-      variant="ghost"
+      variant={confirming ? 'danger' : 'ghost'}
       disabled={busy}
       onPress={() => void onPress()}
       style={styles.removeBtn}
@@ -423,9 +429,23 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: spacing.sm,
   },
+  // Requests live in an inset sky-blue-tinted panel so pending asks read as a
+  // distinct, attention-worthy zone rather than plain rows on cream.
+  requestsPanel: {
+    marginBottom: spacing.lg,
+    backgroundColor: withAlpha(colors.skyBlue, 0.12),
+    borderRadius: radii.xl,
+    padding: spacing.md,
+  },
+  requestsTitle: {
+    ...typography.subheading,
+    color: colors.felt,
+    marginBottom: spacing.sm,
+  },
   outgoingWrap: { marginTop: spacing.sm },
-  emptyCard: { padding: spacing.md },
-  emptyText: { ...typography.body, color: colors.textMuted },
+  emptyCard: { padding: spacing.md, alignItems: 'center' },
+  emptyArt: { width: 96, height: 96, marginBottom: spacing.sm },
+  emptyText: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
   rowText: { flex: 1, minWidth: 0 },
   username: { ...typography.bodyBold, color: colors.textPrimary },
   name: { ...typography.caption, color: colors.textMuted },
@@ -441,10 +461,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    backgroundColor: withAlpha(colors.felt, 0.1),
   },
+  h2hChipLead: { backgroundColor: withAlpha(colors.successBright, 0.15) },
+  h2hChipBehind: { backgroundColor: withAlpha(colors.dangerBright, 0.15) },
   h2hChipNeutral: { backgroundColor: colors.overlay },
-  h2hText: { ...typography.tiny, color: colors.felt, fontWeight: '700' },
+  h2hText: { ...typography.tiny, fontWeight: '800' },
+  h2hTextLead: { color: colors.successEdge },
+  h2hTextBehind: { color: colors.dangerEdge },
   h2hTextNeutral: { color: colors.textFaint },
   removeBtn: { minHeight: 44, paddingVertical: spacing.xs, paddingHorizontal: spacing.sm },
 });

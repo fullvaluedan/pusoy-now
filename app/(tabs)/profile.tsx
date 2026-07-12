@@ -17,9 +17,9 @@
 // rather than pointed at it.
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
-import { Button, CompactHeader, ListRow, ScreenContainer } from '../../components/ui';
+import { Button, CompactHeader, FeltHero, IconTile, ListRow, ScreenContainer } from '../../components/ui';
 import { colors, spacing, typography } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { getLocalGuestName } from '../../lib/guest';
@@ -34,52 +34,56 @@ export default function ProfileTab() {
   }, []);
 
   const signedIn = Boolean(session) && !isAnonymous;
+  const heroName = signedIn ? profile?.displayName ?? 'Player' : guestName ?? 'Guest';
+  const subtitle = signedIn
+    ? 'Progress saved to your account'
+    : 'Guest account - progress saved on this device';
 
   return (
     <ScreenContainer scroll>
       <CompactHeader title="Profile" back={false} />
 
-      {signedIn ? (
-        <ListRow
-          leading={<Avatar name={profile?.displayName ?? 'Player'} url={profile?.avatarUrl} size={44} />}
-          chevron
-          onPress={() => router.push('/profile')}
-          style={styles.identityRow}
-        >
-          <View style={styles.identityTextGroup}>
-            <Text style={styles.identityTitle}>Signed in</Text>
-            <Text style={styles.identitySubtitle} numberOfLines={1} ellipsizeMode="tail">
-              {profile?.displayName}
-            </Text>
+      <FeltHero style={styles.hero}>
+        {signedIn ? (
+          <Pressable
+            onPress={() => router.push('/profile')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Open full profile"
+            style={styles.heroTap}
+          >
+            <HeroIdentity name={heroName} subtitle={subtitle} url={profile?.avatarUrl} />
+          </Pressable>
+        ) : (
+          <View style={styles.heroTap}>
+            <HeroIdentity name={heroName} subtitle={subtitle} url={null} />
+            <Button
+              title="Sign in to keep your progress"
+              variant="primary"
+              color={colors.gold}
+              onPress={() => router.push('/sign-in')}
+              style={styles.heroCta}
+            />
           </View>
-        </ListRow>
-      ) : (
-        <View style={styles.guestWrap}>
-          {guestName ? <Text style={styles.guestLine} numberOfLines={1} ellipsizeMode="tail">Playing as {guestName}</Text> : null}
-          <Button
-            title="Sign in to save your progress"
-            variant="primary"
-            onPress={() => router.push('/sign-in')}
-          />
-        </View>
-      )}
+        )}
+      </FeltHero>
 
       <View style={styles.menuSection}>
         <ListRow
           label="Scoreboard"
-          leading={<Text style={styles.rowEmoji}>📊</Text>}
+          leading={<IconTile emoji="📊" tint={colors.gold} />}
           chevron
           onPress={() => router.push('/stats')}
         />
         <ListRow
           label="Settings"
-          leading={<Text style={styles.rowEmoji}>⚙️</Text>}
+          leading={<IconTile emoji="⚙️" tint={colors.textMuted} />}
           chevron
           onPress={() => router.push('/settings')}
         />
         <ListRow
           label="How to play"
-          leading={<Text style={styles.rowEmoji}>📖</Text>}
+          leading={<IconTile emoji="📖" tint={colors.skyBlue} />}
           chevron
           onPress={() => router.push('/how-to-play')}
         />
@@ -88,13 +92,39 @@ export default function ProfileTab() {
   );
 }
 
+// The identity block inside the felt hero: a gold-ringed avatar, the display
+// name in white heading type, and a muted-white subtitle line.
+function HeroIdentity({ name, subtitle, url }: { name: string; subtitle: string; url?: string | null }) {
+  return (
+    <View style={styles.heroIdentity}>
+      <View style={styles.goldRing}>
+        <Avatar name={name} url={url} size={72} />
+      </View>
+      <View style={styles.heroTextGroup}>
+        <Text style={styles.heroName} numberOfLines={1} ellipsizeMode="tail">
+          {name}
+        </Text>
+        <Text style={styles.heroSubtitle} numberOfLines={2}>
+          {subtitle}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  identityRow: { marginBottom: spacing.lg },
-  identityTextGroup: { flex: 1, minWidth: 0 },
-  identityTitle: { ...typography.bodyBold, color: colors.textPrimary },
-  identitySubtitle: { ...typography.caption, color: colors.textMuted, marginTop: 2, flex: 1, minWidth: 0 },
-  guestWrap: { marginBottom: spacing.lg, gap: spacing.sm },
-  guestLine: { ...typography.caption, color: colors.textMuted, flex: 1, minWidth: 0 },
+  hero: { marginBottom: spacing.lg, padding: spacing.lg },
+  heroTap: { gap: spacing.md },
+  heroIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  goldRing: {
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: colors.gold,
+  },
+  heroTextGroup: { flex: 1, minWidth: 0 },
+  heroName: { ...typography.heading, color: colors.textOnFelt },
+  heroSubtitle: { ...typography.caption, color: colors.textOnFeltMuted, marginTop: 2 },
+  heroCta: { width: '100%' },
   menuSection: { marginTop: spacing.sm },
-  rowEmoji: { fontSize: 22 },
 });

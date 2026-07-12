@@ -24,7 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { PresenceChip } from '../../components/PresenceChip';
-import { Button, Card, ScreenContainer } from '../../components/ui';
+import { Button, Card, FeltHero, IconTile, ScreenContainer } from '../../components/ui';
 import { colors, radii, spacing, typography } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { getLocalGuestName } from '../../lib/guest';
@@ -172,34 +172,34 @@ export default function Home() {
           <PresenceChip count={onlineCount} />
         </View>
 
-        {identityName ? (
-          <Pressable
-            onPress={() => router.push('/profile')}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Playing as ${identityName}. Open profile.`}
-            style={styles.identityRow}
-          >
-            <Text style={styles.identityText} numberOfLines={1}>
-              Playing as <Text style={styles.identityName}>{identityName}</Text>
-            </Text>
-          </Pressable>
-        ) : null}
-
-        <View style={styles.heroWrap}>
+        <FeltHero style={styles.heroWrap}>
           <Image
             source={HERO_IMG}
             style={styles.hero}
             resizeMode="cover"
             accessibilityLabel="Prends table art"
           />
-          {tiles?.visible ? (
-            <View style={styles.statRow}>
-              <StatTile value={tiles.gamesLabel} label="Games played" />
-              <StatTile value={tiles.bestTimeLabel} label="Best win time" />
-            </View>
+          {identityName ? (
+            <Pressable
+              onPress={() => router.push('/profile')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Playing as ${identityName}. Open profile.`}
+              style={styles.identityStrip}
+            >
+              <Text style={styles.identityText} numberOfLines={1}>
+                Playing as <Text style={styles.identityName}>{identityName}</Text>
+              </Text>
+            </Pressable>
           ) : null}
-        </View>
+        </FeltHero>
+
+        {tiles?.visible ? (
+          <View style={styles.statRow}>
+            <StatTile emoji="🎮" tint={colors.skyBlue} value={tiles.gamesLabel} label="Games played" />
+            <StatTile emoji="⏱️" tint={colors.gold} value={tiles.bestTimeLabel} label="Best win time" />
+          </View>
+        ) : null}
 
         <View style={styles.actionsStack}>
           {pickerOpen ? (
@@ -274,14 +274,18 @@ export default function Home() {
   );
 }
 
-// One Duolingo-style stat tile: a bold numeral over a small caption label,
-// in a Card so the two tiles read as a distinct row.
-function StatTile({ value, label }: { value: string; label: string }) {
+// One Duolingo-style colored stat tile: a tinted emoji chip alongside a bold
+// numeral + a tiny caption, in a bordered white card so the two tiles read as
+// a distinct row of chips between the hero and the actions.
+function StatTile({ emoji, tint, value, label }: { emoji: string; tint: string; value: string; label: string }) {
   return (
-    <Card style={styles.statTile}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </Card>
+    <View style={styles.statTile}>
+      <IconTile emoji={emoji} tint={tint} size={34} />
+      <View style={styles.statTextGroup}>
+        <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
+        <Text style={styles.statLabel} numberOfLines={1}>{label}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -296,11 +300,15 @@ const styles = StyleSheet.create({
   brandGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   logo: { width: LOGO_SIZE, height: LOGO_SIZE },
   wordmark: { ...typography.subheading, color: colors.felt },
-  // Slim identity caption under the wordmark row. A fixed, small height so the
-  // flex:1 hero region below simply absorbs it and the page stays zero-scroll.
-  identityRow: { marginTop: -spacing.xs, marginBottom: spacing.xs, alignSelf: 'flex-start' },
-  identityText: { ...typography.caption, color: colors.textMuted },
-  identityName: { ...typography.caption, color: colors.felt, fontWeight: '700' },
+  // Identity caption is now a gold-on-felt strip docked to the bottom of the
+  // hero block (part of the designed header ensemble), not a separate row.
+  identityStrip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.felt,
+  },
+  identityText: { ...typography.caption, color: colors.textOnFeltMuted },
+  identityName: { ...typography.caption, color: colors.gold, fontWeight: '800' },
   // Round 10 U5: the hero region is flex:1 (not a window-height gate) so it
   // soaks up exactly whatever vertical space the fixed rows above/below
   // leave behind -- the page is always exactly full, at 360x570 through
@@ -311,13 +319,24 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     width: '100%',
-    borderRadius: radii.xl,
     backgroundColor: colors.felt,
   },
-  statRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  statTile: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm },
-  statValue: { ...typography.heading, color: colors.felt },
-  statLabel: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  statRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  statTile: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 2,
+    borderColor: colors.creamEdge,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  statTextGroup: { flex: 1, minWidth: 0 },
+  statValue: { ...typography.subheading, color: colors.felt },
+  statLabel: { ...typography.tiny, color: colors.textMuted },
   // Vertical stack of full-width chunky actions (Round 10 U5): PLAY is the
   // hero (size="big"), then QUICK MATCH, then PRIVATE, each its own
   // full-width row rather than a cramped equal-thirds row.

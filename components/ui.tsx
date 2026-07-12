@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { colors, radii, shadows, spacing, typography } from '../lib/theme';
+import { colors, radii, shadows, spacing, typography, withAlpha } from '../lib/theme';
 import {
   isButtonInert,
   resolveBackTarget,
@@ -101,6 +101,65 @@ const cardStyles = StyleSheet.create({
     ...shadows.card,
   },
 });
+
+// ---------------------------------------------------------------------------
+// FeltHero: the bold felt-green header block shared by Home and Profile. A
+// deep-felt rounded card (radii.xl) with a 4px darker feltEdge bottom border
+// so it reads as a tactile 3D color block, not a flat panel. overflow hidden
+// clips any hero art inside to the rounded corners. Children compose the
+// block's contents (art, avatar, identity text, an inside CTA button).
+// ---------------------------------------------------------------------------
+interface FeltHeroProps {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}
+
+export function FeltHero({ children, style }: FeltHeroProps) {
+  return <View style={[feltHeroStyles.hero, style]}>{children}</View>;
+}
+
+const feltHeroStyles = StyleSheet.create({
+  hero: {
+    backgroundColor: colors.felt,
+    borderRadius: radii.xl,
+    borderBottomWidth: 4,
+    borderBottomColor: colors.feltEdge,
+    overflow: 'hidden',
+  },
+});
+
+// ---------------------------------------------------------------------------
+// IconTile: a small tinted rounded square with a centered emoji, used as the
+// colored leading icon on menu rows and the icon chip on Home's stat tiles.
+// `tint` is a base theme color; the fill is that color at low alpha so the
+// tile reads as a soft colored block behind the glyph.
+// ---------------------------------------------------------------------------
+interface IconTileProps {
+  emoji: string;
+  tint: string;
+  size?: number;
+  style?: StyleProp<ViewStyle>;
+}
+
+export function IconTile({ emoji, tint, size = 28, style }: IconTileProps) {
+  return (
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius: Math.round(size * 0.32),
+          backgroundColor: withAlpha(tint, 0.16),
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        style,
+      ]}
+    >
+      <Text style={{ fontSize: Math.round(size * 0.56) }}>{emoji}</Text>
+    </View>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Button: themed Pressable with title + optional subtitle line. Renders as a
