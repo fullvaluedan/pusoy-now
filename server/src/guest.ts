@@ -32,10 +32,17 @@ export const NOUNS: readonly string[] = [
 // Generate a guest username of the form "AdjectiveNoun-NNNN" where NNNN is a
 // 4-digit number 1000-9999. `rng` returns a float in [0, 1) (default
 // Math.random); injecting a seeded rng makes the output fully deterministic for
-// tests. Three rng draws in a fixed order: adjective, noun, number.
+// tests. Retries until adjective + noun <= 14 chars (so full name <= 19 chars
+// with -NNNN); number is always the last draw. Does not break determinism: the
+// same seed always produces the same name because the rng stream is fixed.
 export function generateGuestName(rng: () => number = Math.random): string {
-  const adjective = ADJECTIVES[Math.floor(rng() * ADJECTIVES.length)];
-  const noun = NOUNS[Math.floor(rng() * NOUNS.length)];
+  let adjective: string;
+  let noun: string;
+  // Retry until adjective + noun is within the length cap.
+  do {
+    adjective = ADJECTIVES[Math.floor(rng() * ADJECTIVES.length)];
+    noun = NOUNS[Math.floor(rng() * NOUNS.length)];
+  } while (adjective.length + noun.length > 14);
   const number = 1000 + Math.floor(rng() * 9000);
   return `${adjective}${noun}-${number}`;
 }

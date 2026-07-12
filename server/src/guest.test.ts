@@ -99,6 +99,34 @@ async function main() {
     ok('300 seeds produce a wide variety of names', names.size > 250, names.size);
   }
 
+  // --- length cap: adjective + noun must be <= 14 chars (full name <= 19 with suffix) ---
+  {
+    let allCapped = true;
+    let longestPair = '';
+    for (let s = 0; s < 500; s++) {
+      const name = generateGuestName(seeded(s));
+      const adjNoun = name.split('-')[0]; // e.g. "SwiftNarwhal"
+      if (adjNoun.length > 14) {
+        allCapped = false;
+        longestPair = adjNoun;
+        break;
+      }
+    }
+    ok('500 seeded draws all have adjective+noun <= 14 chars', allCapped, longestPair);
+  }
+
+  // --- length cap determinism: same seed -> same (short) name ----------------
+  {
+    const a = generateGuestName(seeded(12345));
+    const b = generateGuestName(seeded(12345));
+    const aPair = a.split('-')[0];
+    ok(
+      'determinism preserved with length cap: same seed -> same name and valid length',
+      a === b && aPair.length <= 14,
+      [a, aPair.length],
+    );
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
 }

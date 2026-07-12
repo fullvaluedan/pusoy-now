@@ -103,8 +103,8 @@ function RankCard({ row, position }: { row: RankRow; position: number }) {
         <Text style={[styles.position, row.isSelf && styles.positionSelf]}>#{position}</Text>
         <Avatar url={row.image} name={row.name ?? row.username ?? 'Player'} size={44} />
         <View style={styles.rowText}>
-          {row.username ? <Text style={styles.username}>@{row.username}</Text> : null}
-          <Text style={styles.name} numberOfLines={1}>
+          {row.username ? <Text style={styles.username} ellipsizeMode="tail" numberOfLines={1}>@{row.username}</Text> : null}
+          <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
             {row.name ?? 'Player'}
           </Text>
           <Text style={styles.supporting}>

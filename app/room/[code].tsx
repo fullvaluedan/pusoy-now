@@ -188,7 +188,7 @@ function LobbySection({
         <Text style={styles.sectionTitle}>Players</Text>
         {view.players.map((p) => (
           <View key={p.seat} style={styles.playerRow}>
-            <Text style={styles.playerName} numberOfLines={1}>
+            <Text style={styles.playerName} numberOfLines={1} ellipsizeMode="tail">
               {p.username ?? 'Player'}
             </Text>
             <Text style={styles.playerStatus}>{p.connected ? 'Connected' : 'Waiting'}</Text>
@@ -260,7 +260,7 @@ function LiveTable({
               p.kind === 'human' && !p.connected && styles.oppBoxLeft,
             ]}
           >
-            <Text style={styles.oppName} numberOfLines={1}>
+            <Text style={styles.oppName} numberOfLines={1} ellipsizeMode="tail">
               {p.username ?? (p.kind === 'bot' ? `Bot ${p.seat + 1}` : 'Player')}
             </Text>
             <OpponentCardStack count={p.handCount} small />
@@ -317,7 +317,7 @@ function FinishedSection({ view, onHome }: { view: OnlineRoomView; onHome: () =>
         {view.finishOrder.map((seat, i) => (
           <View key={seat} style={styles.playerRow}>
             <Text style={styles.finishPlace}>{i + 1}.</Text>
-            <Text style={styles.playerName} numberOfLines={1}>
+            <Text style={styles.playerName} numberOfLines={1} ellipsizeMode="tail">
               {playerLabel(view, seat)}
             </Text>
           </View>
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.xs + 2,
   },
-  playerName: { ...typography.bodyBold, color: colors.textPrimary, flex: 1, marginRight: spacing.sm },
+  playerName: { ...typography.bodyBold, color: colors.textPrimary, flex: 1, minWidth: 0, marginRight: spacing.sm },
   playerStatus: { ...typography.caption, color: colors.textMuted },
   playerNameEmpty: { ...typography.body, color: colors.textFaint, flex: 1, marginRight: spacing.sm },
   playerStatusEmpty: { ...typography.caption, color: colors.textFaint },
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   // A seat whose human walked away: dimmed, with a red LEFT TABLE tag in place
   // of the card count. They keep auto-passing until they reconnect.
   oppBoxLeft: { opacity: 0.55 },
-  oppName: { ...typography.caption, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs, maxWidth: '100%' },
+  oppName: { ...typography.caption, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs, flex: 1, minWidth: 0 },
   oppCount: { ...typography.tiny, color: colors.textMuted, marginTop: spacing.xs },
   oppLeft: {
     ...typography.tiny,

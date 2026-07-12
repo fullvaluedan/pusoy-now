@@ -45,7 +45,7 @@ export default function ProfileTab() {
             <Avatar name={profile?.displayName ?? 'Player'} url={profile?.avatarUrl} size={56} />
             <View style={styles.identityTextGroup}>
               <Text style={styles.identityTitle}>Signed in</Text>
-              <Text style={styles.identitySubtitle} numberOfLines={1}>
+              <Text style={styles.identitySubtitle} numberOfLines={1} ellipsizeMode="tail">
                 {profile?.displayName}
               </Text>
             </View>
@@ -53,7 +53,7 @@ export default function ProfileTab() {
         </Pressable>
       ) : (
         <View style={styles.guestWrap}>
-          {guestName ? <Text style={styles.guestLine}>Playing as {guestName}</Text> : null}
+          {guestName ? <Text style={styles.guestLine} numberOfLines={1} ellipsizeMode="tail">Playing as {guestName}</Text> : null}
           <Button
             title="Sign in to save your progress"
             variant="primary"
@@ -96,11 +96,11 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.lg,
   },
-  identityTextGroup: { flex: 1 },
+  identityTextGroup: { flex: 1, minWidth: 0 },
   identityTitle: { ...typography.bodyBold, color: colors.textPrimary },
-  identitySubtitle: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  identitySubtitle: { ...typography.caption, color: colors.textMuted, marginTop: 2, flex: 1, minWidth: 0 },
   guestWrap: { marginBottom: spacing.lg, gap: spacing.sm },
-  guestLine: { ...typography.caption, color: colors.textMuted },
+  guestLine: { ...typography.caption, color: colors.textMuted, flex: 1, minWidth: 0 },
   menuSection: { marginTop: spacing.sm },
   menuItem: { marginBottom: spacing.xs },
 });

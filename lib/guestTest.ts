@@ -70,6 +70,33 @@ async function main() {
     generateGuestNameClient(seqRng([0, 0, 0])) === `${ADJECTIVES[0]}${NOUNS[0]}-1000`,
   );
 
+  // --- length cap: adjective + noun must be <= 14 chars (full name <= 19 with suffix) ---
+  {
+    let allCapped = true;
+    let longestPair = '';
+    for (let s = 0; s < 500; s++) {
+      const name = generateGuestNameClient(seqRng([Math.random(), Math.random(), Math.random()]));
+      const adjNoun = name.split('-')[0]; // e.g. "SwiftNarwhal"
+      if (adjNoun.length > 14) {
+        allCapped = false;
+        longestPair = adjNoun;
+        break;
+      }
+    }
+    ok('500 random draws all have adjective+noun <= 14 chars', allCapped, longestPair);
+  }
+
+  {
+    const a = generateGuestNameClient(seqRng([0.2, 0.3, 0.5]));
+    const b = generateGuestNameClient(seqRng([0.2, 0.3, 0.5]));
+    const aPair = a.split('-')[0];
+    ok(
+      'determinism preserved with length cap: same rng -> same name and valid length',
+      a === b && aPair.length <= 14,
+      [a, aPair.length],
+    );
+  }
+
   // --- persistence across "restarts" (storage fake) --------------------------
   const storage = fakeStorage();
   const first = await getOrCreateGuestName(storage, seqRng([0.1, 0.2, 0.3]));

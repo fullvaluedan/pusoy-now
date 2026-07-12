@@ -309,7 +309,7 @@ function SeatPlate({
         style={compact ? styles.oppAvatarMarginCompact : styles.oppAvatarMargin}
       />
       <View style={[styles.oppNameRow, compact && styles.oppNameRowCompact]}>
-        <Text style={[styles.oppName, compact && styles.oppNameCompact]} numberOfLines={1}>{name}</Text>
+        <Text style={[styles.oppName, compact && styles.oppNameCompact]} numberOfLines={1} ellipsizeMode="tail">{name}</Text>
         {/* Micro seat (compact): one text line only -- name, the PASS/place
             status chip (null until it applies), and the card-count chip. The
             face-down stack art is dropped entirely, reclaiming its ~50px so the
@@ -976,7 +976,7 @@ export default function LocalGameScreen() {
               framed
               active={isMyTurn}
             />
-            <Text style={styles.youName} numberOfLines={1}>{humanDisplayName}</Text>
+            <Text style={styles.youName} numberOfLines={1} ellipsizeMode="tail">{humanDisplayName}</Text>
             <SeatChip passed={humanPassed} place={placeOf(humanSeat)} />
             <Pressable style={({ pressed }) => [styles.btnSmall, pressed && styles.btnSmallPressed]} onPress={onOrganize}>
               <Text style={styles.btnSmallText}>
@@ -1400,7 +1400,7 @@ const styles = StyleSheet.create({
   // Micro seat: no bottom margin (single line, nothing below it) and a tighter
   // gap so name + status + count sit compactly on one row.
   oppNameRowCompact: { marginBottom: 0, gap: 4 },
-  oppName: { color: colors.textOnFelt, fontSize: 15, fontWeight: '700' },
+  oppName: { color: colors.textOnFelt, fontSize: 15, fontWeight: '700', flex: 1, minWidth: 0 },
   oppNameCompact: { fontSize: 13 },
   oppStackRow: { flexDirection: 'row', alignItems: 'center' },
   oppStackWrap: { position: 'relative' },
@@ -1543,7 +1543,7 @@ const styles = StyleSheet.create({
   // Short-viewport: pull the hand fan up nearer the Sort/name toolbar.
   handToolbarCompact: { marginBottom: 2 },
   handToolbarLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  youName: { color: colors.textOnFelt, fontSize: typography.caption.fontSize, fontWeight: '700', maxWidth: 110 },
+  youName: { color: colors.textOnFelt, fontSize: typography.caption.fontSize, fontWeight: '700', flex: 1, minWidth: 0 },
   selLabel: { color: colors.textOnFeltMuted, fontSize: typography.caption.fontSize },
   selOk: { color: colors.success, fontWeight: '700' },
   selBad: { color: colors.dangerLight, fontWeight: '600' },
