@@ -221,28 +221,32 @@ export type SortMode = 'rank' | 'suit' | 'hands';
 // Display order for grouping suits in the hand (not strength order).
 const SUIT_DISPLAY: Record<Card['suit'], number> = { C: 1, D: 2, H: 3, S: 4 };
 
-// Auto-sort the human's hand.
+// Pure hand-sort, shared by the bot table (sortHumanHand below) and the online
+// table (app/room/[code].tsx), so both order a hand identically:
 //   rank  — rank ascending, suit tiebreak
 //   suit  — group by suit, rank ascending within each
 //   hands — group into playable combos: singles, pairs, trips, 5-card hands
-export function sortHumanHand(game: LocalGame, mode: SortMode = 'rank'): void {
-  const seat = findHumanSeat(game);
-  const hand = game.hands[seat];
-  if (mode === 'hands') {
-    game.hands[seat] = arrangeByCombos(hand);
-  } else if (mode === 'suit') {
-    game.hands[seat] = hand.slice().sort((a, b) => {
+// Returns a new array; never mutates the input.
+export function sortHand(hand: Card[], mode: SortMode = 'rank'): Card[] {
+  if (mode === 'hands') return arrangeByCombos(hand);
+  if (mode === 'suit') {
+    return hand.slice().sort((a, b) => {
       const s = SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit];
       if (s !== 0) return s;
       return RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
     });
-  } else {
-    game.hands[seat] = hand.slice().sort((a, b) => {
-      const r = RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
-      if (r !== 0) return r;
-      return SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit];
-    });
   }
+  return hand.slice().sort((a, b) => {
+    const r = RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
+    if (r !== 0) return r;
+    return SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit];
+  });
+}
+
+// Auto-sort the human's hand in place, then notify subscribers.
+export function sortHumanHand(game: LocalGame, mode: SortMode = 'rank'): void {
+  const seat = findHumanSeat(game);
+  game.hands[seat] = sortHand(game.hands[seat], mode);
   emit(game);
 }
 

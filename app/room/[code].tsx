@@ -3,17 +3,91 @@
 // the server-authoritative WebSocket (lib/onlineGame.useOnlineRoom) -- this
 // screen only ever renders the room's redacted view; it never has another
 // seat's cards. headerShown:false in app/_layout.tsx (see there) because this
-// becomes a felt-less but still full table once play starts, so the header
-// here is drawn in-line instead of the native Stack header.
-import { useEffect, useState } from 'react';
+// becomes a full felt table once play starts, so the header here is drawn
+// in-line instead of the native Stack header.
+//
+// The PLAYING phase renders on the shared table kit (components/table/*), the
+// exact same felt/gold/seat/pool/hand surface the bot table (app/game-local.tsx)
+// uses, so the online table matches it by construction. Only multiplayer
+// specifics stay local here: the turn countdown, the LEFT TABLE state, and the
+// server-authoritative play/pass sends. The lobby and finished phases keep the
+// design-system card layout.
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Platform,
+  Pressable,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { Button, Card, Header, ScreenContainer } from '../../components/ui';
-import { OpponentCardStack, PlayingCard } from '../../components/PlayingCard';
+import { Avatar } from '../../components/Avatar';
+import {
+  BannerStrip,
+  CENTER_ACTION_HIT_SLOP,
+  COMPACT_PANEL_HEIGHT,
+  HandRow,
+  PoolRegion,
+  SeatChip,
+  SeatPlate,
+  TablePanel,
+  TopBar,
+  usablePanelHeight,
+} from '../../components/table';
 import { canPlay, detectCombo } from '../../lib/pusoy/combo';
-import { colors, radii, spacing, typography, withAlpha } from '../../lib/theme';
+import { findLegalPlays } from '../../lib/pusoy/bot';
+import { SUIT_VALUE } from '../../lib/pusoy/deck';
+import { sortHand, type SortMode } from '../../lib/pusoy/localGame';
+import { colors, layout, radii, spacing, typography, withAlpha } from '../../lib/theme';
+import { useAuth } from '../../lib/auth';
 import { useOnlineRoom, type OnlineRoomView } from '../../lib/onlineGame';
-import type { Card as CardT, PlayedCombo } from '../../lib/pusoy/types';
+import { opponentSeats } from '../../lib/onlineSeats';
+import type { Card as CardT, FiveCardType, PlayedCombo } from '../../lib/pusoy/types';
+
+const BOT_AVATAR_IMG = require('../../assets/art/bot-avatar.png');
+const TURN_GLOW_IMG = require('../../assets/art/turn-glow.png');
+
+const RANK_DISPLAY: Record<CardT['rank'], string> = {
+  '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
+  '10': '10', J: 'J', Q: 'Q', K: 'K', A: 'A', '2': '2',
+};
+const SUIT_GLYPH: Record<CardT['suit'], string> = { C: '♣', D: '♦', H: '♥', S: '♠' };
+
+function cardLabel(c: CardT): string {
+  return `${RANK_DISPLAY[c.rank]}${SUIT_GLYPH[c.suit]}`;
+}
+
+const FIVE_TYPE_LABEL: Record<FiveCardType, string> = {
+  straight: 'Straight',
+  flush: 'Flush',
+  fullHouse: 'Full house',
+  fourOfAKind: 'Four of a kind',
+  straightFlush: 'Straight flush',
+};
+
+function comboName(c: PlayedCombo): string {
+  if (c.fiveType) return FIVE_TYPE_LABEL[c.fiveType];
+  if (c.type === 'single') return 'Single';
+  if (c.type === 'pair') return 'Pair';
+  return 'Three of a kind';
+}
+
+function comboLabel(c: PlayedCombo): string {
+  return `${comboName(c)} - ${c.cards.map(cardLabel).join(' ')}`;
+}
+
+const SORT_LABEL: Record<SortMode, string> = { rank: 'Rank', suit: 'Suit', hands: 'Hands' };
+const NEXT_SORT: Record<SortMode, SortMode> = { rank: 'suit', suit: 'hands', hands: 'rank' };
+const LEVEL_LABEL: Record<OnlineRoomView['botLevel'], string> = {
+  easy: 'Easy',
+  normal: 'Normal',
+  expert: 'Expert',
+};
 
 // Web falls back to this app's own /join/[code] route on its own origin;
 // native falls back to the prends:// deep link. Both are overridden by the
@@ -33,60 +107,36 @@ function playerLabel(view: OnlineRoomView, seat: number): string {
   return p.kind === 'bot' ? `Bot ${seat + 1}` : 'Player';
 }
 
+// Reconcile the local hand display order with the server hand: keep the local
+// order for cards still held (so a drag-reorder or Sort survives the next,
+// unrelated state update), drop cards that were played, append anything new.
+function reconcileHand(prev: CardT[], server: CardT[]): CardT[] {
+  const byId = new Map(server.map((c) => [c.id, c]));
+  const kept: CardT[] = [];
+  const keptIds = new Set<string>();
+  for (const c of prev) {
+    const fresh = byId.get(c.id);
+    if (fresh) {
+      kept.push(fresh);
+      keptIds.add(c.id);
+    }
+  }
+  for (const c of server) if (!keptIds.has(c.id)) kept.push(c);
+  return kept;
+}
+
 export default function RoomScreen() {
   const params = useLocalSearchParams<{ code: string; link?: string; deepLink?: string }>();
   const code = params.code ?? '';
   const router = useRouter();
   const { view, status, error, playCards, pass, start, clearError } = useOnlineRoom(code || null);
+  const { profile } = useAuth();
 
-  const [selected, setSelected] = useState<CardT[]>([]);
   const [copied, setCopied] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
 
-  const humanSeat = view?.yourSeat ?? null;
-  // Better-auth's profile does not expose a raw userId here, so "host" is
-  // read off the room shape itself: the first seat is always the creator (see
-  // server/src/roomLogic.ts joinRoom, which assigns seats in join order and
-  // the DO seats the creator first).
-  const isHost = humanSeat === 0;
-  const isMyTurn =
-    view?.phase === 'playing' &&
-    view.handState != null &&
-    humanSeat != null &&
-    view.handState.currentPlayerIndex === humanSeat;
-
-  // Turn countdown: only ticks while it is your turn, cleared on unmount / turn
-  // change so it never runs in the background.
-  useEffect(() => {
-    if (!isMyTurn || !view?.turnDeadline) return;
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, [isMyTurn, view?.turnDeadline]);
-
-  // Selection resets once the turn moves on -- either your play landed, or the
-  // turn passed to someone else while you were deciding.
-  useEffect(() => {
-    setSelected([]);
-  }, [view?.handState?.currentPlayerIndex]);
-
-  const seconds =
-    isMyTurn && view?.turnDeadline ? Math.max(0, Math.ceil((view.turnDeadline - now) / 1000)) : null;
-
-  const lead = view?.handState?.leadCombo ?? null;
-  const selCombo = selected.length ? detectCombo(selected) : null;
-  const selLegal = !!selCombo && canPlay(selCombo, lead);
-
-  function toggleCard(c: CardT) {
-    setSelected((sel) => (sel.find((s) => s.id === c.id) ? sel.filter((s) => s.id !== c.id) : [...sel, c]));
-  }
-
-  function onPlay() {
-    if (!selCombo) return;
-    playCards({ ...selCombo, cards: selected } as PlayedCombo);
-    setSelected([]);
-  }
-
-  const joinLink = params.link ?? (Platform.OS === 'web' ? deriveJoinLink(code) : params.deepLink ?? deriveJoinLink(code));
+  const joinLink =
+    params.link ??
+    (Platform.OS === 'web' ? deriveJoinLink(code) : params.deepLink ?? deriveJoinLink(code));
 
   async function onShare() {
     if (Platform.OS === 'web') {
@@ -115,8 +165,26 @@ export default function RoomScreen() {
     );
   }
 
+  // Live play renders on the shared felt table, full-bleed, with its own
+  // in-table top bar (no ScreenContainer / native header).
+  if (view.phase === 'playing') {
+    return (
+      <LiveTable
+        view={view}
+        status={status}
+        error={error}
+        clearError={clearError}
+        onPlay={playCards}
+        onPass={pass}
+        profile={profile}
+        onExit={() => router.replace('/')}
+      />
+    );
+  }
+
+  // Lobby + finished stay on the design-system card layout.
   return (
-    <ScreenContainer scroll={view.phase !== 'playing'}>
+    <ScreenContainer scroll>
       <Header title={`Room ${view.code}`} onBack={() => router.replace('/')} />
 
       {status === 'reconnecting' ? (
@@ -135,24 +203,10 @@ export default function RoomScreen() {
         <LobbySection
           view={view}
           joinLink={joinLink}
-          isHost={isHost}
+          isHost={view.yourSeat === 0}
           copied={copied}
           onStart={start}
           onShare={() => void onShare()}
-        />
-      ) : null}
-
-      {view.phase === 'playing' ? (
-        <LiveTable
-          view={view}
-          humanSeat={humanSeat}
-          selected={selected}
-          onToggle={toggleCard}
-          onPlay={onPlay}
-          onPass={pass}
-          selLegal={selLegal}
-          seconds={seconds}
-          isMyTurn={isMyTurn}
         />
       ) : null}
 
@@ -160,6 +214,396 @@ export default function RoomScreen() {
         <FinishedSection view={view} onHome={() => router.replace('/')} />
       ) : null}
     </ScreenContainer>
+  );
+}
+
+// --- Live table (shared kit) --------------------------------------------------
+
+function LiveTable({
+  view,
+  status,
+  error,
+  clearError,
+  onPlay,
+  onPass,
+  profile,
+  onExit,
+}: {
+  view: OnlineRoomView;
+  status: string;
+  error: string | null;
+  clearError: () => void;
+  onPlay: (combo: PlayedCombo) => void;
+  onPass: () => void;
+  profile: { displayName: string; avatarUrl: string | null } | null;
+  onExit: () => void;
+}) {
+  // Same compact budget the bot table derives, so the two flip to the compact
+  // layout at the exact same viewport.
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const compact = usablePanelHeight(winHeight, winWidth > layout.maxTableWidth) < COMPACT_PANEL_HEIGHT;
+
+  const hs = view.handState;
+  const yourSeat = view.yourSeat;
+  const currentSeat = hs?.currentPlayerIndex ?? null;
+  const isMyTurn = hs != null && yourSeat != null && currentSeat === yourSeat;
+  const lead = hs?.leadCombo ?? null;
+
+  const [selected, setSelected] = useState<CardT[]>([]);
+  const [sortMode, setSortMode] = useState<SortMode | null>(null);
+  const [handOrder, setHandOrder] = useState<CardT[]>(() => view.yourHand ?? []);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Keep the local hand order reconciled against the server's authoritative
+  // hand every state update.
+  const serverHand = view.yourHand;
+  useEffect(() => {
+    setHandOrder((prev) => reconcileHand(prev, serverHand ?? []));
+  }, [serverHand]);
+
+  // Turn countdown: only ticks while it is your turn, cleared on turn change /
+  // unmount so it never runs in the background.
+  const turnDeadline = view.turnDeadline;
+  useEffect(() => {
+    if (!isMyTurn || !turnDeadline) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [isMyTurn, turnDeadline]);
+
+  // Selection (and any stale server error) reset once the turn moves on --
+  // either your play landed or the turn passed while you were deciding.
+  useEffect(() => {
+    setSelected([]);
+    clearError();
+    // clearError identity changes each render; only the turn index should
+    // trigger this reset.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSeat]);
+
+  const seconds =
+    isMyTurn && turnDeadline ? Math.max(0, Math.ceil((turnDeadline - now) / 1000)) : null;
+
+  // Every legal play available right now, or null when it is not our turn.
+  // Computed from the server hand (same set as handOrder, canonical order).
+  const legalPlays = useMemo(() => {
+    if (!isMyTurn || !serverHand) return null;
+    return findLegalPlays(serverHand, lead);
+  }, [isMyTurn, serverHand, lead]);
+
+  // Cards that can be part of a legal play. Selection-aware: once cards are
+  // selected, only plays that CONTAIN the whole selection keep cards lit.
+  let playableIds: Set<string> | null = null;
+  if (legalPlays) {
+    const pool = selected.length
+      ? legalPlays.filter((p) => selected.every((s) => p.cards.some((c) => c.id === s.id)))
+      : legalPlays;
+    playableIds = new Set<string>();
+    for (const p of pool) for (const c of p.cards) playableIds.add(c.id);
+  }
+
+  // Selection-independent eligibility: every card in any legal play right now.
+  let eligibleIds: Set<string> | null = null;
+  if (legalPlays) {
+    eligibleIds = new Set<string>();
+    for (const p of legalPlays) for (const c of p.cards) eligibleIds.add(c.id);
+  }
+
+  const selCombo = selected.length ? detectCombo(selected) : null;
+  const selLegal = !!selCombo && canPlay(selCombo, lead);
+  const handCount = handOrder.length;
+  const selFeedback =
+    selected.length === 0
+      ? `${handCount} cards`
+      : !selCombo
+        ? 'Not a combo'
+        : !selLegal
+          ? `${comboName(selCombo)}: doesn't beat lead`
+          : `${comboName(selCombo)} ✓`;
+
+  const placeOf = (seat: number): number | null => {
+    const idx = hs?.finishedOrder.indexOf(seat) ?? -1;
+    return idx === -1 ? null : idx + 1;
+  };
+  const passedOf = (seat: number): boolean => hs?.passed.includes(seat) ?? false;
+
+  const doPlay = (cards: CardT[]) => {
+    const combo = detectCombo(cards);
+    if (!combo || !canPlay(combo, lead)) return;
+    onPlay({ ...combo, cards } as PlayedCombo);
+    setSelected([]);
+  };
+
+  const onPlayPress = () => {
+    if (selected.length === 0 || !selLegal) return;
+    doPlay(selected);
+  };
+
+  const onPassPress = () => {
+    if (!isMyTurn || lead === null) return;
+    onPass();
+  };
+
+  // Cycle sort mode rank -> suit -> hands, ordering the local hand copy. Clears
+  // the selection (after a re-sort the picked cards are scattered).
+  const onOrganize = () => {
+    const next = sortMode === null ? 'rank' : NEXT_SORT[sortMode];
+    setSortMode(next);
+    setHandOrder((prev) => sortHand(prev, next));
+    setSelected([]);
+  };
+
+  // Stable identity so the 13 DraggableCards don't each rebuild their
+  // PanResponder on every re-render.
+  const handleReorder = useCallback((from: number, to: number) => {
+    setHandOrder((prev) => {
+      if (from < 0 || from >= prev.length) return prev;
+      const clamped = Math.max(0, Math.min(prev.length - 1, to));
+      if (clamped === from) return prev;
+      const next = prev.slice();
+      const [moved] = next.splice(from, 1);
+      next.splice(clamped, 0, moved);
+      return next;
+    });
+  }, []);
+
+  // Tap-select, lead-aware, mirroring the bot table so an illegal or
+  // wrong-shaped play can't be built:
+  //   not our turn / ineligible: ignored
+  //   leading: free multi-select
+  //   single lead: one card, tapping another replaces it
+  //   pair lead: auto-picks the whole legal pair of that rank (lowest suits)
+  //   5-card lead: manual multi-select, capped at five
+  const toggleCard = (c: CardT) => {
+    if (eligibleIds && !eligibleIds.has(c.id)) return;
+    if (!lead) {
+      setSelected((sel) =>
+        sel.find((s) => s.id === c.id) ? sel.filter((s) => s.id !== c.id) : [...sel, c],
+      );
+      return;
+    }
+    if (lead.length === 1) {
+      setSelected((sel) => (sel.length === 1 && sel[0].id === c.id ? [] : [c]));
+      return;
+    }
+    if (lead.length === 2) {
+      setSelected((sel) => {
+        if (sel.length === 2 && sel[0].rank === c.rank) return [];
+        const pairs = (legalPlays ?? []).filter(
+          (p) => p.length === 2 && p.cards[0].rank === c.rank,
+        );
+        if (pairs.length === 0) return sel;
+        pairs.sort(
+          (a, b) =>
+            Math.max(SUIT_VALUE[a.cards[0].suit], SUIT_VALUE[a.cards[1].suit]) -
+            Math.max(SUIT_VALUE[b.cards[0].suit], SUIT_VALUE[b.cards[1].suit]),
+        );
+        return pairs[0].cards;
+      });
+      return;
+    }
+    setSelected((sel) => {
+      if (sel.find((s) => s.id === c.id)) return sel.filter((s) => s.id !== c.id);
+      if (sel.length >= 5) return sel;
+      return [...sel, c];
+    });
+  };
+
+  // Flick a card up into the center to auto-play an established hand, matching
+  // the bot table's drag-to-play rules.
+  const playByDrag = (c: CardT) => {
+    if (!isMyTurn) return;
+    let cards: CardT[] | null = null;
+    if (!lead) {
+      if (selected.length > 0) {
+        if (!selLegal) return;
+        cards = selected;
+      } else {
+        cards = [c];
+      }
+    } else if (lead.length === 1) {
+      const single = detectCombo([c]);
+      if (single && canPlay(single, lead)) cards = [c];
+    } else if (lead.length === 2) {
+      const pairs = (legalPlays ?? []).filter(
+        (p) => p.length === 2 && p.cards[0].rank === c.rank,
+      );
+      if (pairs.length) {
+        pairs.sort(
+          (a, b) =>
+            Math.max(SUIT_VALUE[a.cards[0].suit], SUIT_VALUE[a.cards[1].suit]) -
+            Math.max(SUIT_VALUE[b.cards[0].suit], SUIT_VALUE[b.cards[1].suit]),
+        );
+        cards = pairs[0].cards;
+      }
+    } else if (selected.length === 5 && selLegal) {
+      cards = selected;
+    }
+    if (!cards) return;
+    doPlay(cards);
+  };
+
+  const slots = yourSeat != null ? opponentSeats(yourSeat, view.seats) : [];
+  const singleOpponent = slots.length === 1;
+
+  const lastPlay = view.trickHistory[0];
+  const prevPlay = view.trickHistory[1];
+
+  const humanName =
+    (yourSeat != null ? view.players.find((p) => p.seat === yourSeat)?.username : null) ??
+    profile?.displayName ??
+    'You';
+  const humanPassed = yourSeat != null ? passedOf(yourSeat) : false;
+  const humanPlace = yourSeat != null ? placeOf(yourSeat) : null;
+
+  const turnLabel =
+    status === 'reconnecting'
+      ? 'Reconnecting...'
+      : isMyTurn
+        ? 'Your turn'
+        : currentSeat != null
+          ? `${playerLabel(view, currentSeat)}'s turn`
+          : '';
+
+  const canPass = isMyTurn && lead !== null;
+
+  return (
+    <TablePanel>
+      <View style={styles.tableColumn}>
+        <TopBar
+          title={`${LEVEL_LABEL[view.botLevel]} online`}
+          turnLabel={turnLabel}
+          onBack={onExit}
+          compact={compact}
+        />
+
+        {/* Opponents arc around the top; the viewer sits at the bottom with
+            their hand. A single opponent (2-player room) centers; two or three
+            spread across the row. */}
+        <View
+          style={[
+            styles.oppRow,
+            compact && styles.oppRowCompact,
+            singleOpponent && styles.oppRowSingle,
+          ]}
+        >
+          {slots.map((slot) => {
+            const p = view.players.find((pl) => pl.seat === slot.seat);
+            if (!p) return null;
+            const disconnected = p.kind === 'human' && !p.connected;
+            return (
+              <SeatPlate
+                key={slot.seat}
+                name={p.username ?? (p.kind === 'bot' ? `Bot ${slot.seat + 1}` : 'Player')}
+                avatarSource={p.kind === 'bot' ? BOT_AVATAR_IMG : undefined}
+                isCurrent={currentSeat === slot.seat}
+                place={placeOf(slot.seat)}
+                passed={passedOf(slot.seat)}
+                count={p.handCount}
+                raised={slot.raised}
+                compact={compact}
+                disconnected={disconnected}
+              />
+            );
+          })}
+        </View>
+
+        {/* Center: the played pool is the hero, PASS above / PLAY below in the
+            same slots the bot table uses. */}
+        <PoolRegion
+          lastPlay={
+            lastPlay
+              ? {
+                  cards: lastPlay.combo.cards,
+                  playerName: playerLabel(view, lastPlay.playerIndex),
+                  label: comboLabel(lastPlay.combo),
+                }
+              : null
+          }
+          prevPlay={prevPlay ? { cards: prevPlay.combo.cards } : null}
+          emptyText={
+            isMyTurn
+              ? 'Your turn, lead with any hand'
+              : currentSeat != null
+                ? `${playerLabel(view, currentSeat)} to lead`
+                : 'Waiting...'
+          }
+          compact={compact}
+          passSlot={
+            <Pressable
+              style={({ pressed }) => [styles.btn, styles.btnPass, styles.centerActionBtn, compact && styles.centerActionBtnCompact, pressed && canPass && styles.btnPressed, !canPass && styles.btnDisabled]}
+              hitSlop={compact ? CENTER_ACTION_HIT_SLOP : undefined}
+              disabled={!canPass}
+              onPress={onPassPress}
+            >
+              <Text style={styles.btnText}>Pass</Text>
+            </Pressable>
+          }
+          playSlot={
+            <Pressable
+              style={({ pressed }) => [styles.btn, styles.btnPrimary, styles.centerActionBtn, compact && styles.centerActionBtnCompact, pressed && isMyTurn && selLegal && styles.btnPressed, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+              hitSlop={compact ? CENTER_ACTION_HIT_SLOP : undefined}
+              disabled={!isMyTurn || !selLegal}
+              onPress={onPlayPress}
+            >
+              <Text style={[styles.btnText, styles.btnPrimaryText]}>Play</Text>
+            </Pressable>
+          }
+        />
+
+        {/* Bottom: the viewer's seat + hand. */}
+        <View style={[styles.bottom, compact && styles.bottomCompact, isMyTurn && styles.bottomActive]}>
+          {isMyTurn && (
+            <Image
+              source={TURN_GLOW_IMG}
+              style={styles.turnGlow}
+              resizeMode="contain"
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+            />
+          )}
+          {/* Fixed-height headroom strip: the "Your turn - Ns" pill, and server
+              errors, render INSIDE it so nothing below ever shifts as the
+              countdown ticks or a message appears. */}
+          <BannerStrip
+            autoPassing={false}
+            error={error}
+            isMyTurn={isMyTurn}
+            compact={compact}
+            turnText={seconds !== null ? `Your turn - ${seconds}s` : 'Your turn'}
+          />
+          <View style={[styles.handToolbar, compact && styles.handToolbarCompact]}>
+            <View style={styles.handToolbarLeft}>
+              <Avatar name={humanName} url={profile?.avatarUrl ?? null} size={24} framed active={isMyTurn} />
+              <Text style={styles.youName} numberOfLines={1} ellipsizeMode="tail">{humanName}</Text>
+              <SeatChip passed={humanPassed} place={humanPlace} />
+              <Pressable style={({ pressed }) => [styles.btnSmall, pressed && styles.btnSmallPressed]} onPress={onOrganize}>
+                <Text style={styles.btnSmallText}>
+                  {sortMode === null ? 'Sort' : `Sort: ${SORT_LABEL[sortMode]}`}
+                </Text>
+              </Pressable>
+            </View>
+            <Text
+              style={[
+                styles.selLabel,
+                selected.length > 0 && (selLegal ? styles.selOk : styles.selBad),
+              ]}
+            >
+              {selFeedback}
+            </Text>
+          </View>
+
+          <HandRow
+            hand={handOrder}
+            selected={selected}
+            playableIds={playableIds}
+            onTap={toggleCard}
+            onReorder={handleReorder}
+            onDropToCenter={playByDrag}
+            dropEnabled={isMyTurn}
+          />
+        </View>
+      </View>
+    </TablePanel>
   );
 }
 
@@ -217,93 +661,6 @@ function LobbySection({
         <Text style={styles.waitingHost}>Waiting for the host to start.</Text>
       )}
     </>
-  );
-}
-
-// --- Live table ---------------------------------------------------------------
-
-function LiveTable({
-  view,
-  humanSeat,
-  selected,
-  onToggle,
-  onPlay,
-  onPass,
-  selLegal,
-  seconds,
-  isMyTurn,
-}: {
-  view: OnlineRoomView;
-  humanSeat: number | null;
-  selected: CardT[];
-  onToggle: (c: CardT) => void;
-  onPlay: () => void;
-  onPass: () => void;
-  selLegal: boolean;
-  seconds: number | null;
-  isMyTurn: boolean;
-}) {
-  const opponents = view.players.filter((p) => p.seat !== humanSeat).sort((a, b) => a.seat - b.seat);
-  const lastPlay = view.trickHistory[0];
-  const currentSeat = view.handState?.currentPlayerIndex ?? null;
-  const canPass = isMyTurn && !!view.handState?.leadCombo;
-
-  return (
-    <View style={styles.tableWrap}>
-      <View style={styles.oppRow}>
-        {opponents.map((p) => (
-          <View
-            key={p.seat}
-            style={[
-              styles.oppBox,
-              currentSeat === p.seat && styles.oppBoxActive,
-              p.kind === 'human' && !p.connected && styles.oppBoxLeft,
-            ]}
-          >
-            <Text style={styles.oppName} numberOfLines={1} ellipsizeMode="tail">
-              {p.username ?? (p.kind === 'bot' ? `Bot ${p.seat + 1}` : 'Player')}
-            </Text>
-            <OpponentCardStack count={p.handCount} small />
-            {p.kind === 'human' && !p.connected ? (
-              <Text style={styles.oppLeft}>LEFT TABLE</Text>
-            ) : (
-              <Text style={styles.oppCount}>{p.handCount} cards</Text>
-            )}
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.center}>
-        <Text style={styles.turnLabel}>
-          {isMyTurn ? 'Your turn' : currentSeat != null ? `${playerLabel(view, currentSeat)} to play` : ''}
-        </Text>
-        {isMyTurn && seconds !== null ? <Text style={styles.timer}>{seconds}s</Text> : null}
-        {lastPlay ? (
-          <View style={styles.trickCards}>
-            {lastPlay.combo.cards.map((c, i) => (
-              <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -22 }}>
-                <PlayingCard card={c} />
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.trickEmpty}>No plays yet</Text>
-        )}
-      </View>
-
-      <View style={styles.handRow}>
-        {(view.yourHand ?? []).map((c) => (
-          <Pressable key={c.id} onPress={() => onToggle(c)} style={styles.handCard}>
-            <PlayingCard card={c} selected={!!selected.find((s) => s.id === c.id)} />
-          </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.actionsRow}>
-        <Button title="Pass" variant="danger" disabled={!canPass} onPress={onPass} style={styles.actionBtn} />
-        <Button title="Play" disabled={!isMyTurn || !selLegal} onPress={onPlay} style={styles.actionBtn} />
-      </View>
-    </View>
   );
 }
 
@@ -368,54 +725,88 @@ const styles = StyleSheet.create({
 
   finishPlace: { ...typography.subheading, color: colors.felt, width: 32 },
 
-  // Live table
-  tableWrap: { flex: 1, width: '100%' },
-  // Flex-based instead of a fixed minWidth x up to 3 boxes: at 375px with the
-  // old minWidth 90 + oppName's own maxWidth 100, a box could grow past 90
-  // for a long username and 3 of them could exceed the row's ~335px content
-  // width. flex:1 + gap always splits the row evenly, so it never overflows
-  // regardless of name length.
-  oppRow: { flexDirection: 'row', paddingVertical: spacing.sm, gap: spacing.sm },
-  oppBox: {
-    flex: 1,
+  // --- Live table (mirrors app/game-local.tsx's playing layout) ---------------
+  tableColumn: { flex: 1, width: '100%' },
+
+  oppRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  oppRowCompact: { paddingVertical: 2 },
+  // A single opponent (2-player room) centers instead of pinning to the far
+  // left, so it reads as sitting opposite the viewer.
+  oppRowSingle: { justifyContent: 'center' },
+
+  bottom: {
+    paddingBottom: spacing.md - 2,
+    paddingTop: spacing.sm,
+    borderTopWidth: 2,
+    borderTopColor: 'transparent',
+  },
+  bottomCompact: { paddingTop: 2, paddingBottom: spacing.xs },
+  bottomActive: {
+    borderTopColor: colors.gold,
+    backgroundColor: withAlpha(colors.gold, 0.05),
+  },
+  turnGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: undefined,
+    height: undefined,
+    opacity: 0.25,
+    pointerEvents: 'none',
+  },
+  handToolbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: spacing.sm,
-    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg - 4,
+    marginBottom: spacing.xs + 2,
   },
-  oppBoxActive: { backgroundColor: withAlpha(colors.gold, 0.12), borderWidth: 1, borderColor: colors.gold },
-  // A seat whose human walked away: dimmed, with a red LEFT TABLE tag in place
-  // of the card count. They keep auto-passing until they reconnect.
-  oppBoxLeft: { opacity: 0.55 },
-  oppName: { ...typography.caption, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs, flex: 1, minWidth: 0 },
-  oppCount: { ...typography.tiny, color: colors.textMuted, marginTop: spacing.xs },
-  oppLeft: {
-    ...typography.tiny,
-    color: colors.dangerSoftText,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    marginTop: spacing.xs,
-  },
+  handToolbarCompact: { marginBottom: 2 },
+  handToolbarLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  youName: { color: colors.textOnFelt, fontSize: typography.caption.fontSize, fontWeight: '700', flex: 1, minWidth: 0 },
+  selLabel: { color: colors.textOnFeltMuted, fontSize: typography.caption.fontSize },
+  selOk: { color: colors.success, fontWeight: '700' },
+  selBad: { color: colors.dangerLight, fontWeight: '600' },
 
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  turnLabel: { ...typography.subheading, color: colors.felt, marginBottom: spacing.xs },
-  timer: { ...typography.heading, fontSize: 22, color: colors.dangerSoftText, marginBottom: spacing.sm },
-  trickCards: { flexDirection: 'row', justifyContent: 'center' },
-  trickEmpty: { ...typography.body, color: colors.textFaint },
-
-  handRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  // Play / Pass centered around the pool, sized identically to the bot table.
+  centerActionBtn: { minWidth: 150, marginVertical: spacing.md },
+  centerActionBtnCompact: { minHeight: 36, paddingVertical: 6, minWidth: 96, marginVertical: 3 },
+  btn: {
+    backgroundColor: colors.feltLight,
+    minHeight: 44,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: radii.xl,
+    borderBottomWidth: 4,
+    borderBottomColor: colors.felt,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
   },
-  handCard: { marginBottom: spacing.xs },
-
-  actionsRow: {
-    flexDirection: 'row',
+  btnPressed: { borderBottomWidth: 0, transform: [{ translateY: 4 }] },
+  btnPrimary: { backgroundColor: colors.gold, borderBottomColor: colors.goldEdge },
+  btnPrimaryText: { color: colors.ink },
+  btnPass: { backgroundColor: colors.dangerBright, borderBottomColor: colors.dangerEdge },
+  btnDisabled: { opacity: 0.4 },
+  btnText: { color: colors.textOnFelt, fontWeight: '800', fontSize: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
+  btnSmall: {
+    backgroundColor: colors.feltLight,
+    minHeight: 40,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.lg,
+    borderBottomWidth: 4,
+    borderBottomColor: colors.felt,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
   },
-  actionBtn: { minWidth: 120 },
+  btnSmallPressed: { borderBottomWidth: 0, transform: [{ translateY: 4 }] },
+  btnSmallText: { color: colors.textOnFelt, fontWeight: '800', fontSize: typography.caption.fontSize, textTransform: 'uppercase', letterSpacing: 0.3 },
 });

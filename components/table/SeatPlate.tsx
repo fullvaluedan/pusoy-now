@@ -42,6 +42,7 @@ export function SeatPlate({
   count,
   raised,
   compact,
+  disconnected = false,
 }: {
   name: string;
   avatarUrl?: string | null;
@@ -59,6 +60,10 @@ export function SeatPlate({
   // stack -- reclaiming the ~50px the stack occupies so the controls and hand
   // fan stay on-screen.
   compact: boolean;
+  // Online-only: a human seat whose player walked away. The plate dims and a
+  // red LEFT chip replaces the usual status chip; the server keeps auto-passing
+  // for them until they reconnect. The bot table never sets this.
+  disconnected?: boolean;
 }) {
   const finished = place !== null;
   return (
@@ -68,7 +73,7 @@ export function SeatPlate({
         raised ? styles.oppBoxRaised : null,
         compact && styles.oppBoxCompact,
         isCurrent && styles.oppBoxActive,
-        finished && styles.oppBoxDone,
+        (finished || disconnected) && styles.oppBoxDone,
       ]}
     >
       <Avatar
@@ -86,7 +91,13 @@ export function SeatPlate({
             status chip (null until it applies), and the card-count chip. The
             face-down stack art is dropped entirely, reclaiming its ~50px so the
             full-size pool + controls stay on-screen. */}
-        <SeatChip passed={passed} place={place} />
+        {disconnected ? (
+          <View style={styles.leftChip}>
+            <Text style={styles.leftChipText}>LEFT</Text>
+          </View>
+        ) : (
+          <SeatChip passed={passed} place={place} />
+        )}
         {compact ? (
           <View style={styles.oppCountChip}>
             <Text style={styles.oppCountChipText}>{count}</Text>
@@ -191,4 +202,14 @@ const styles = StyleSheet.create({
   seatChipPassText: { color: colors.white, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   seatChipPlace: { backgroundColor: colors.gold },
   seatChipPlaceText: { color: colors.felt, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+
+  // Online-only LEFT chip, standing in for the status chip on a seat whose
+  // human walked away. Loud red so it reads at a glance, like the PASS chip.
+  leftChip: {
+    paddingHorizontal: spacing.xs + 2,
+    paddingVertical: 1,
+    borderRadius: 999,
+    backgroundColor: withAlpha(colors.cardRed, 0.9),
+  },
+  leftChipText: { color: colors.white, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
 });
