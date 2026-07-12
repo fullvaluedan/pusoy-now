@@ -23,6 +23,7 @@ import {
   type StatTotals,
 } from './friends';
 import { sanitizeTotals, shouldApplyStats, syncStats, type StatsStore } from './stats';
+import { headToHead, type GameResultStore } from './gameResults';
 
 let pass = 0;
 let fail = 0;
@@ -216,6 +217,31 @@ async function main() {
     ok('the stored totals are unchanged after a stale sync', data.get('ada')?.games === 3);
     const advance = await syncStats(store, 'ada', totals(4, 2, 1, 1), now);
     ok('an advancing sync applies', advance.applied && data.get('ada')?.firsts === 2);
+  }
+
+  // --- friends payload: head-to-head field ----------------------------------
+  // The GET /api/friends route decorates each accepted friend with
+  // `h2h: {wins, losses}` from a batched headToHead call. A pair of accepted
+  // friends the caller has never shared a finished game with resolves to {0,0}
+  // (the additive field is always present, never null).
+  {
+    const { store: friendStore } = memFriendStore();
+    await ensureFriendship(friendStore, 'me', 'bo', now);
+    await ensureFriendship(friendStore, 'me', 'cy', now);
+    const { accepted } = await listFriends(friendStore, 'me');
+    // No game_result rows recorded, so every accepted friend maps to {0,0}.
+    const emptyResults: GameResultStore = {
+      async insertGame() {},
+      async insertPlayer() {},
+      async headToHeadRows() {
+        return [];
+      },
+    };
+    const h2h = await headToHead(emptyResults, 'me', accepted);
+    ok('every accepted friend gets an h2h entry',
+      accepted.every((id) => h2h[id] !== undefined) && Object.keys(h2h).length === accepted.length);
+    ok('a friend with no shared games -> {0,0}',
+      accepted.every((id) => h2h[id].wins === 0 && h2h[id].losses === 0), h2h);
   }
 
   // --- sanitizeTotals -------------------------------------------------------

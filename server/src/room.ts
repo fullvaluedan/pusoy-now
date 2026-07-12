@@ -30,6 +30,7 @@ import {
 } from './roomLogic';
 import { d1FriendStore, ensureFriendship, type StatTotals } from './friends';
 import { d1StatsStore } from './stats';
+import { d1GameResultStore, recordGameResult } from './gameResults';
 
 // A room with no connected players is cleaned up after this idle window.
 const ROOM_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -301,10 +302,15 @@ export class GameRoom extends DurableObject<Env> {
     await this.persist();
     const store = d1StatsStore(this.env.DB);
     const now = Date.now();
+    // Also collect each human's finishing place for the per-game result rows
+    // (head-to-head). Kept alongside the aggregate stats write below so both
+    // read the same authoritative place.
+    const placings: { userId: string; place: number }[] = [];
     for (const p of this.room.players) {
       if (p.kind !== 'human' || !p.userId) continue;
       const place = placeOfSeat(this.room, p.seat); // 1..seats
       if (place < 1) continue;
+      placings.push({ userId: p.userId, place });
       try {
         const prev: StatTotals = (await store.get(p.userId)) ?? {
           games: 0, firsts: 0, seconds: 0, thirds: 0, fourths: 0,
@@ -318,6 +324,21 @@ export class GameRoom extends DurableObject<Env> {
       } catch {
         // Best-effort: a stats write failure must not crash the finish path.
       }
+    }
+    // Per-game result rows for head-to-head (2+ humans only; recordGameResult
+    // no-ops below 2). gameId is the room's stable hand id (`${code}-h1`), so an
+    // alarm retry that re-runs recordStats writes the same rows idempotently
+    // (INSERT OR IGNORE). Best-effort, like the stats writes above.
+    try {
+      await recordGameResult(
+        d1GameResultStore(this.env.DB),
+        `${this.room.code}-h1`,
+        this.room.code,
+        now,
+        placings,
+      );
+    } catch {
+      // Best-effort: a result write failure must not crash the finish path.
     }
   }
 

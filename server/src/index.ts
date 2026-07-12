@@ -26,6 +26,7 @@ import {
   sendRequest,
 } from './friends';
 import { d1StatsStore, fetchStatsMany, sanitizeTotals, syncStats } from './stats';
+import { d1GameResultStore, headToHead } from './gameResults';
 import { beat, d1PresenceStore } from './presence';
 import { generateRoomCode } from './roomLogic';
 import { GameRoom } from './room';
@@ -227,13 +228,18 @@ async function withDisplay(env: Env, ids: string[]) {
 }
 
 // The caller's friends, split into accepted / incoming / outgoing, each row
-// carrying the other player's display fields. Session-gated.
+// carrying the other player's display fields. Accepted rows additionally carry
+// `h2h: {wins, losses}` - the caller's head-to-head vs that friend from shared
+// finished online games (one batched query; friends with no shared games ->
+// {0, 0}). Session-gated.
 app.get('/api/friends', async (c) => {
   const userId = await requireUserId(c.env, c.req.raw.headers);
   if (!userId) return c.json({ error: 'unauthorized' }, 401);
   const lists = await listFriends(d1FriendStore(c.env.DB), userId);
+  const accepted = await withDisplay(c.env, lists.accepted);
+  const h2h = await headToHead(d1GameResultStore(c.env.DB), userId, lists.accepted);
   return c.json({
-    accepted: await withDisplay(c.env, lists.accepted),
+    accepted: accepted.map((f) => ({ ...f, h2h: h2h[f.userId] ?? { wins: 0, losses: 0 } })),
     incoming: await withDisplay(c.env, lists.incoming),
     outgoing: await withDisplay(c.env, lists.outgoing),
   });
