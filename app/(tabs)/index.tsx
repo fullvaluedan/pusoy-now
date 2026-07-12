@@ -27,6 +27,7 @@ import { PresenceChip } from '../../components/PresenceChip';
 import { Button, Card, ScreenContainer } from '../../components/ui';
 import { colors, radii, spacing, typography } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
+import { getLocalGuestName } from '../../lib/guest';
 import { apiUrl, authClient } from '../../lib/authClient';
 import { usePresence } from '../../lib/presence';
 import { loadStats } from '../../lib/stats';
@@ -52,10 +53,26 @@ const LOGO_SIZE = 44;
 export default function Home() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { session, isAnonymous } = useAuth();
+  const { session, isAnonymous, profile } = useAuth();
   const { count: onlineCount } = usePresence();
 
   const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
+
+  // Identity caption (Round 10 fix): the home redesign moved the "Playing as X"
+  // line to Profile, but a guest still deserves to see the random username they
+  // are playing under. Signed-in users show their display name; a guest shows
+  // the on-device generated name (getLocalGuestName). Tapping opens Profile.
+  const [guestName, setGuestName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void getLocalGuestName().then((n) => {
+      if (!cancelled) setGuestName(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const identityName = profile?.displayName ?? guestName;
 
   // Local bot-game stat tiles (R11), reloaded on every focus rather than
   // only on mount: the bottom tab bar (U3) keeps this screen mounted when
@@ -154,6 +171,20 @@ export default function Home() {
           </View>
           <PresenceChip count={onlineCount} />
         </View>
+
+        {identityName ? (
+          <Pressable
+            onPress={() => router.push('/profile')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Playing as ${identityName}. Open profile.`}
+            style={styles.identityRow}
+          >
+            <Text style={styles.identityText} numberOfLines={1}>
+              Playing as <Text style={styles.identityName}>{identityName}</Text>
+            </Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.heroWrap}>
           <Image
@@ -265,6 +296,11 @@ const styles = StyleSheet.create({
   brandGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   logo: { width: LOGO_SIZE, height: LOGO_SIZE },
   wordmark: { ...typography.subheading, color: colors.felt },
+  // Slim identity caption under the wordmark row. A fixed, small height so the
+  // flex:1 hero region below simply absorbs it and the page stays zero-scroll.
+  identityRow: { marginTop: -spacing.xs, marginBottom: spacing.xs, alignSelf: 'flex-start' },
+  identityText: { ...typography.caption, color: colors.textMuted },
+  identityName: { ...typography.caption, color: colors.felt, fontWeight: '700' },
   // Round 10 U5: the hero region is flex:1 (not a window-height gate) so it
   // soaks up exactly whatever vertical space the fixed rows above/below
   // leave behind -- the page is always exactly full, at 360x570 through

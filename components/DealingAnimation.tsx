@@ -16,7 +16,7 @@
 //     accumulating face-up hand still uses the exact shared fan geometry, so the
 //     deal-to-live-table switch moves nothing.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -52,6 +52,14 @@ import type { DealStep, LocalPlayer } from '../lib/pusoy/localGame';
 const CARD_BACK_IMG = require('../assets/art/card-back.png');
 
 const STEP_MS = 50;
+
+// Hard ceiling on the whole overlay. If the deal has not completed and called
+// onDone within this window -- for ANY reason (a mislaid layout box on some
+// device, rAF starvation, a props-churn race) -- the overlay dismisses itself
+// so it can never trap the player behind a frozen deal. The normal deal runs in
+// ~3s (52 cards x STEP_MS + the 900ms shuffle + 350ms tail), so 12s is a wide
+// margin that only ever trips on a genuine stall.
+const DEAL_FAILSAFE_MS = 12000;
 
 interface Props {
   // Shared.
@@ -144,6 +152,33 @@ export function DealingAnimation({
   const { steps, humanSeat, seatTotal } = frozen.current;
   const totalSteps = steps.length;
 
+  // onDone is often a fresh closure every parent render (e.g. the online room's
+  // `() => setDealing(false)`), and that parent re-renders on its turn-countdown
+  // and game-clock intervals THROUGHOUT the deal. If the dealing effect depended
+  // on onDone directly, those re-renders would restart the effect and, at the
+  // completion branch, perpetually clear+reschedule its 350ms dismiss timer --
+  // starving onDone so the overlay never lifts and traps the player behind the
+  // fully-dealt fan. So we hold onDone in a ref and expose a STABLE `finish`
+  // that fires it exactly once; the effect depends on `finish`, never on the
+  // changing closure. (Bot mode's parent doesn't re-render during dealing, so
+  // this is behaviorally a no-op there.)
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  const finishedRef = useRef(false);
+  const finish = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    onDoneRef.current();
+  }, []);
+
+  // Failsafe: an absolute ceiling, armed once at mount, that dismisses the
+  // overlay even if the step engine never completes. setTimeout (not rAF) so it
+  // fires even when animation frames are throttled.
+  useEffect(() => {
+    const t = setTimeout(finish, DEAL_FAILSAFE_MS);
+    return () => clearTimeout(t);
+  }, [finish]);
+
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [step, setStep] = useState(0);
   const x = useRef(new Animated.Value(0)).current;
@@ -167,7 +202,7 @@ export function DealingAnimation({
   useEffect(() => {
     if (showShuffle || !box) return;
     if (step >= totalSteps) {
-      const t = setTimeout(onDone, 350);
+      const t = setTimeout(finish, 350);
       return () => clearTimeout(t);
     }
     if (step === 0) {
@@ -196,11 +231,11 @@ export function DealingAnimation({
         Animated.timing(opacity, { toValue: 0, duration: 5, useNativeDriver: false }),
       ]),
     ]).start(() => setStep((s) => s + 1));
-  }, [step, showShuffle, box, steps, humanSeat, seatTotal, totalSteps, x, y, opacity, onDone]);
+  }, [step, showShuffle, box, steps, humanSeat, seatTotal, totalSteps, x, y, opacity, finish]);
 
   if (showShuffle) {
     return (
-      <Pressable style={styles.overlay} onPress={onDone} onLayout={onLayout}>
+      <Pressable style={styles.overlay} onPress={finish} onLayout={onLayout}>
         <View style={styles.shuffleBox}>
           <View style={styles.deckStack}>
             <View style={[styles.deckCard, { top: 0, left: 0 }]}>
@@ -257,8 +292,11 @@ export function DealingAnimation({
   const fanWidth = Math.min(windowWidth, layout.maxTableWidth);
   const { stride, startX: fanStartX } = fanRowLayout(totalHumanCards, fanWidth);
 
+  // The whole overlay (absolute-fill) is the skip target -- tapping anywhere
+  // dismisses it, so a mislaid child rect can never make skip unreachable. The
+  // "Tap to skip" text below is only a hint, not the hit box.
   return (
-    <Pressable style={styles.overlay} onPress={onDone} onLayout={onLayout}>
+    <Pressable style={styles.overlay} onPress={finish} onLayout={onLayout}>
       <View style={styles.oppRow}>
         {oppSeats.map((s) => (
           <View key={s} style={styles.oppSlot}>

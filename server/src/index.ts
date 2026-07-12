@@ -391,14 +391,18 @@ app.get('/api/rooms/:code', async (c) => {
 // to the room DO with the resolved identity injected as trusted headers.
 app.get('/api/rooms/:code/ws', async (c) => {
   if (c.req.header('upgrade') !== 'websocket') return c.json({ error: 'expected websocket' }, 426);
-  const userId = await requireUserId(c.env, c.req.raw.headers);
+  const session = await makeAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+  const userId = session?.user?.id;
   if (!userId) return c.json({ error: 'unauthorized' }, 401);
   const code = c.req.param('code').toUpperCase();
   const profile = await d1ProfileStore(c.env.DB).getByUserId(userId);
 
   const headers = new Headers(c.req.raw.headers);
   headers.set('X-User-Id', userId);
-  headers.set('X-Username', profile?.username ?? '');
+  // Claimed profile username first, then the session name so guests carry
+  // their generated name to the table instead of the 'Player' fallback
+  // (mirrors the matchmaking WS route below).
+  headers.set('X-Username', profile?.username ?? session.user?.name ?? '');
   const forwarded = new Request(c.req.raw.url, {
     method: c.req.raw.method,
     headers,
