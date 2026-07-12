@@ -6,10 +6,12 @@ export { SeatPlate, SeatChip } from './SeatPlate';
 export { TopBar } from './TopBar';
 export { BannerStrip } from './BannerStrip';
 export { PoolRegion } from './PoolRegion';
-export { HandRow } from './HandRow';
+export { HandRow, HAND_FAN_CONTAINER_HEIGHT, HAND_FAN_CARD_TOP } from './HandRow';
 export {
   COMPACT_PANEL_HEIGHT,
   POOL_MIN_HEIGHT,
   CENTER_ACTION_HIT_SLOP,
+  HAND_FAN_BOTTOM,
+  HAND_FAN_BOTTOM_COMPACT,
   usablePanelHeight,
 } from './layout';

@@ -25,6 +25,14 @@ import {
   fanRowLayout,
   fanCardArc,
 } from './PlayingCard';
+import {
+  COMPACT_PANEL_HEIGHT,
+  HAND_FAN_BOTTOM,
+  HAND_FAN_BOTTOM_COMPACT,
+  HAND_FAN_CARD_TOP,
+  HAND_FAN_CONTAINER_HEIGHT,
+  usablePanelHeight,
+} from './table';
 import { colors, layout, withAlpha } from '../lib/theme';
 import type { DealStep, LocalPlayer } from '../lib/pusoy/localGame';
 
@@ -66,7 +74,12 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
   // center anchor derive from the measured panel box, not the full window.
   // This keeps the seats and the in-flight card inside the panel instead of
   // flinging them to window corners (the old Dimensions.get('window') defect).
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // Same compact-mode budget app/game-local.tsx derives the live table's
+  // `bottom` section from, so the accumulating hand's bottom offset (below)
+  // matches whichever layout (roomy or compact) the live HandRow will render
+  // in once dealing ends.
+  const compact = usablePanelHeight(windowHeight, windowWidth > layout.maxTableWidth) < COMPACT_PANEL_HEIGHT;
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [step, setStep] = useState(0);
   const x = useRef(new Animated.Value(0)).current;
@@ -184,7 +197,15 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
       </View>
       <Text style={styles.dealingLabel}>Dealing…</Text>
 
-      <View style={styles.dealHandFan}>
+      <View
+        style={[
+          styles.dealHandFan,
+          {
+            height: HAND_FAN_CONTAINER_HEIGHT,
+            bottom: compact ? HAND_FAN_BOTTOM_COMPACT : HAND_FAN_BOTTOM,
+          },
+        ]}
+      >
         {humanDealt.map((c, i) => {
           const arc = fanCardArc(i, totalHumanCards);
           return (
@@ -193,7 +214,11 @@ export function DealingAnimation({ dealOrder, deck, playerKinds, playerNames, on
               style={{
                 position: 'absolute',
                 left: fanStartX + i * stride,
-                bottom: 0,
+                // Top-anchored at the exact same inset HandRow's DraggableCard
+                // rests at, inside a container of the exact same height --
+                // see components/table/HandRow.tsx. This is what makes the
+                // deal-to-play switch move nothing.
+                top: HAND_FAN_CARD_TOP,
                 transform: [{ translateY: arc.translateY }, { rotate: `${arc.rotateDeg}deg` }],
               }}
             >
@@ -283,12 +308,13 @@ const styles = StyleSheet.create({
   flyingCard: {
     position: 'absolute',
   },
-  // The accumulating full-size human hand, at the bottom where the real hand
-  // fan sits once play begins.
+  // The accumulating full-size human hand. height/bottom are set inline to
+  // HAND_FAN_CONTAINER_HEIGHT / HAND_FAN_BOTTOM(_COMPACT) -- the exact same
+  // container geometry the live HandRow uses (components/table/HandRow.tsx,
+  // components/table/layout.ts) -- so the fan sits at the precise spot the
+  // real hand fan will occupy once play begins, and nothing shifts.
   dealHandFan: {
     position: 'absolute',
-    bottom: 56,
     left: 0, right: 0,
-    height: CARD_HEIGHT,
   },
 });
