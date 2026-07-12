@@ -6,6 +6,7 @@ import { buildDeck, dealFour, shuffle, RANK_VALUE } from './deck';
 import { detectCombo, detectFiveCard, compareCombos, canPlay } from './combo';
 import { applyAction, handFinishOrder, isHandOver, newHand } from './engine';
 import { botChoose, findLegalPlays } from './bot';
+import { BOT_MIN_DELAY_MS, BOT_MAX_DELAY_MS, BOT_FORCED_PASS_MS } from './pacing';
 import type {
   BotLevel,
   Card,
@@ -14,13 +15,6 @@ import type {
   PublicGameView,
   RoundAction,
 } from './types';
-
-const BOT_MIN_DELAY_MS = 900;
-const BOT_MAX_DELAY_MS = 2_400;
-// A forced pass (nothing in hand can beat the lead — e.g. the 2 of diamonds
-// bomb, or a 5-card lead against a hand of fewer than 5 cards) needs no
-// thinking, so it resolves almost instantly instead of faking deliberation.
-const BOT_FORCED_PASS_MS = 250;
 
 export type LocalPlayer = 'human' | 'bot';
 

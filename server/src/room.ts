@@ -13,18 +13,20 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Env } from './auth';
 import type { BotLevel, RoundAction } from '../../lib/pusoy/types';
 import {
-  advanceBots,
   applySeatAction,
   canAutoStart,
   canStart,
   createRoomState,
+  currentAutoKind,
   humanUserIds,
   joinRoom,
+  nextAutoActDelay,
   placeOfSeat,
   redactStateFor,
   seatOf,
   setConnected,
   startGame,
+  stepAutoSeat,
   timeoutCurrent,
   type RoomState,
 } from './roomLogic';
@@ -177,7 +179,8 @@ export class GameRoom extends DurableObject<Env> {
         ws.send(JSON.stringify({ type: 'error', message: res.message }));
         return;
       }
-      advanceBots(this.room);
+      // Broadcast the human's own play at once; afterProgress arms the paced
+      // auto-turn for the next seat (a bot, or a disconnected human) if any.
       await this.afterProgress();
       return;
     }
@@ -193,10 +196,9 @@ export class GameRoom extends DurableObject<Env> {
     const meta = ws.deserializeAttachment() as SocketMeta | null;
     if (meta) {
       setConnected(this.room, meta.userId, false);
-      // If it is (or becomes) the departed player's turn, auto-pass through so
-      // the table does not stall on someone who left. afterProgress persists,
-      // broadcasts the "LEFT TABLE" state, and re-arms the alarm.
-      advanceBots(this.room);
+      // If it is the departed player's turn, afterProgress arms a short
+      // auto-pass so the table does not stall on someone who left; either way it
+      // persists, broadcasts the "LEFT TABLE" state, and re-arms the alarm.
       await this.afterProgress();
     }
   }
@@ -207,13 +209,32 @@ export class GameRoom extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     if (!this.room) return;
+    const now = Date.now();
 
-    // Turn timeout: if it is a player's turn and the deadline has passed,
-    // auto-pass via the engine's timeout path, then let bots play on.
+    // Paced auto-turn: a bot (or a disconnected human) acts ONE step at a time,
+    // each with its own human-like delay, so clients see every bot play land as
+    // its own broadcast (matching bot mode). This branch runs before the 30s
+    // turn timeout because an auto delay (<=2.4s) is always sooner than the
+    // deadline, so a bot seat plays here and never trips the timeout below.
+    if (this.room.phase === 'playing' && this.room.autoActAt != null && now >= this.room.autoActAt) {
+      this.room.autoActAt = null;
+      const step = stepAutoSeat(this.room);
+      if (step.acted) {
+        // afterProgress broadcasts this play and arms autoActAt for the NEXT
+        // auto seat (if the seat after it is also a bot / disconnected human).
+        await this.afterProgress();
+        return;
+      }
+      // Nothing was actually pending (state drifted, e.g. the disconnected
+      // player reconnected before this fired): fall through and re-arm.
+    }
+
+    // Turn timeout: a CONNECTED human who stalls past the 30s deadline is
+    // auto-passed. Bots and disconnected humans are handled by the paced branch
+    // above, well before this deadline, so this only ever trips on a live human.
     const hs = this.room.handState;
-    if (this.room.phase === 'playing' && hs?.turnDeadline != null && Date.now() >= hs.turnDeadline) {
+    if (this.room.phase === 'playing' && hs?.turnDeadline != null && now >= hs.turnDeadline) {
       timeoutCurrent(this.room);
-      advanceBots(this.room);
       await this.afterProgress();
       return;
     }
@@ -223,7 +244,6 @@ export class GameRoom extends DurableObject<Env> {
     // arrived) run the same start sequence bots fill the empty seats. If the
     // deadline passed with zero humans connected, nobody showed - discard it.
     if (this.room.phase === 'lobby' && this.room.lobbyDeadline != null) {
-      const now = Date.now();
       if (canAutoStart(this.room, now)) {
         await this.startSequence();
         return;
@@ -240,14 +260,21 @@ export class GameRoom extends DurableObject<Env> {
 
     // Room TTL: a room with no connected players is abandoned - clean up.
     const anyConnected = this.room.players.some((p) => p.kind === 'human' && p.connected);
-    const idleFor = Date.now() - this.room.createdAt;
+    const idleFor = now - this.room.createdAt;
     if (!anyConnected && (this.room.phase === 'finished' || idleFor >= ROOM_TTL_MS)) {
       await this.ctx.storage.deleteAll();
       this.room = null;
       return;
     }
 
-    // Otherwise re-arm so the next turn deadline (or TTL) is checked.
+    // Self-heal: if an auto seat (a bot, or a disconnected human) is pending but
+    // no schedule is armed - e.g. the DO was evicted and reloaded mid-turn, or a
+    // human disconnected exactly on their own turn - arm it now so the paced
+    // chain resumes rather than stalling.
+    this.scheduleAuto();
+    await this.persist();
+
+    // Otherwise re-arm so the next auto turn / turn deadline (or TTL) is checked.
     await this.ctx.storage.setAlarm(this.nextAlarm());
   }
 
@@ -258,15 +285,33 @@ export class GameRoom extends DurableObject<Env> {
   private async startSequence(): Promise<void> {
     if (!this.room) return;
     startGame(this.room);
-    advanceBots(this.room);
+    // afterProgress broadcasts the opening deal and arms the first paced auto
+    // turn if the opener is a bot (or a disconnected human).
     await this.afterProgress();
   }
 
+  // If the current seat plays automatically (a bot, or a disconnected human) and
+  // nothing is armed yet, schedule its action for `now + delay` so the alarm
+  // paces it. When it is a connected human's turn (or the room is not playing),
+  // clear any stale schedule. Idempotent and self-healing: only arms when the
+  // slot is empty, so it never shortens an in-flight delay.
+  private scheduleAuto(): void {
+    if (!this.room) return;
+    const kind = currentAutoKind(this.room);
+    if (kind === null) {
+      this.room.autoActAt = null;
+    } else if (this.room.autoActAt == null) {
+      this.room.autoActAt = Date.now() + nextAutoActDelay(Math.random, kind);
+    }
+  }
+
   // After a start/action/timeout: persist, record stats if the hand just
-  // finished, broadcast the redacted state, and re-arm the turn alarm.
+  // finished, arm the next paced auto turn, broadcast the redacted state, and
+  // re-arm the alarm (soonest of autoActAt / turn deadline / lobby / TTL).
   private async afterProgress(): Promise<void> {
     if (!this.room) return;
     if (this.room.phase === 'finished') await this.recordStats();
+    this.scheduleAuto();
     await this.persist();
     this.broadcast();
     await this.ctx.storage.setAlarm(this.nextAlarm());
@@ -274,7 +319,15 @@ export class GameRoom extends DurableObject<Env> {
 
   private nextAlarm(): number {
     const r = this.room;
-    if (r?.phase === 'playing' && r.handState?.turnDeadline != null) return r.handState.turnDeadline;
+    if (r?.phase === 'playing') {
+      // Whichever is sooner: the next paced auto turn or the current seat's 30s
+      // deadline. For a bot seat autoActAt (<=2.4s) naturally precedes the
+      // deadline, so the bot plays before it can be timed out.
+      const times: number[] = [];
+      if (r.autoActAt != null) times.push(r.autoActAt);
+      if (r.handState?.turnDeadline != null) times.push(r.handState.turnDeadline);
+      if (times.length > 0) return Math.min(...times);
+    }
     // Matchmade lobby: fire at the connect-grace deadline to auto-start/clean up.
     if (r?.phase === 'lobby' && r.lobbyDeadline != null) return r.lobbyDeadline;
     return Date.now() + ROOM_TTL_MS;

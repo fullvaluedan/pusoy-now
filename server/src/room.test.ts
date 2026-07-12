@@ -11,25 +11,37 @@
 
 import {
   ONLINE_TURN_MS,
-  advanceBots,
   applySeatAction,
   canAutoStart,
   canStart,
   createRoomState,
+  currentAutoKind,
   generateRoomCode,
   humanPairs,
   humanUserIds,
   joinRoom,
+  nextAutoActDelay,
   placeOfSeat,
   redactStateFor,
   setConnected,
   startGame,
+  stepAutoSeat,
   timeoutCurrent,
   type RoomState,
 } from './roomLogic';
 import { botChoose } from '../../lib/pusoy/bot';
 import { makeRng } from '../../lib/pusoy/rng';
 import type { RoundAction } from '../../lib/pusoy/types';
+
+// Drain every consecutive automatic turn (bots + disconnected humans) to reach
+// a stable state: the online DO instead paces these one per alarm, but a test
+// that only cares about the end state can step until nothing is pending.
+function drainAuto(r: RoomState, rng?: () => number): void {
+  let guard = 0;
+  while (stepAutoSeat(r, rng).acted && guard++ < 2000) {
+    /* keep stepping */
+  }
+}
 
 let pass = 0;
 let fail = 0;
@@ -161,9 +173,10 @@ function main() {
     startGame(r, makeRng(5));
     const gone = r.handState!.currentPlayerIndex; // the seat about to act
     setConnected(r, r.players[gone].userId!, false);
-    // advanceBots now stands in for the DO's disconnect handler: it must move
-    // the turn off the departed seat (auto-pass/forced) rather than stall.
-    advanceBots(r);
+    // Draining the auto seats stands in for the DO's disconnect handler: it
+    // must move the turn off the departed seat (auto-pass/forced) rather than
+    // stall. Online each of these steps is a separately paced alarm.
+    drainAuto(r);
     const stalled = r.phase === 'playing' && r.handState!.currentPlayerIndex === gone;
     ok('a disconnected player does not hold up the turn', !stalled);
     // Reconnecting restores their seat and they can act again.
@@ -179,7 +192,7 @@ function main() {
     joinRoom(r, 'friend-1', 'friend');
     const rng = makeRng(99);
     startGame(r, rng);
-    advanceBots(r, rng);
+    drainAuto(r, rng);
     let guard = 0;
     while (r.phase === 'playing' && guard++ < 2000) {
       const seat = r.handState!.currentPlayerIndex;
@@ -196,7 +209,7 @@ function main() {
         ok('no action errored during the simulation', false, res.message);
         break;
       }
-      advanceBots(r, rng);
+      drainAuto(r, rng);
     }
     ok('the room reaches a finish without deadlock', r.phase === 'finished');
     ok('the finish order names all 4 seats', r.finishOrder.length === 4 && new Set(r.finishOrder).size === 4);
@@ -257,6 +270,95 @@ function main() {
     ok('an invite room has no lobby deadline', r.lobbyDeadline === null);
     ok('an invite room never auto-starts even far in the future', canAutoStart(r, NOW + 10 * 60 * 1000) === false);
     ok('an invite room still starts via the host path', canStart(r, 'host-1') === 'ok');
+  }
+
+  // --- stepAutoSeat applies EXACTLY ONE auto action per call ----------------
+  {
+    // Two humans + two bots. The humans are driven by the bot brain via
+    // applySeatAction; the two bot seats are stepped one at a time. We assert
+    // that each stepAutoSeat call advances exactly one seat and that a bot's
+    // play lands as exactly one new trick-history entry - so online a chain of
+    // three bots is three separate calls (three separate broadcasts), not one
+    // collapsed snapshot.
+    const r = createRoomState('STEP24', 4, 'host-1', 'normal', NOW);
+    joinRoom(r, 'host-1', 'host');
+    joinRoom(r, 'friend-1', 'friend');
+    const rng = makeRng(42);
+    startGame(r, rng);
+
+    let plays = 0;
+    let onePerCall = true;
+    let growsByOne = true;
+    let guard = 0;
+    while (r.phase === 'playing' && guard++ < 5000) {
+      const seat = r.handState!.currentPlayerIndex;
+      if (r.players[seat].kind === 'bot') {
+        const beforeTrick = r.trickHistory.length;
+        const step = stepAutoSeat(r, rng);
+        if (!step.acted) {
+          onePerCall = false;
+          break;
+        }
+        // Exactly one seat consumed: either the hand ended, or the turn moved
+        // off the bot that just acted (never a whole collapsed chain).
+        if (r.phase === 'playing' && r.handState!.currentPlayerIndex === seat) onePerCall = false;
+        if (step.kind === 'bot') {
+          plays++;
+          // Exactly one new entry lands at the head each step (the trick pile is
+          // capped at 8, so past that the length holds but the head is fresh).
+          const expected = Math.min(beforeTrick + 1, 8);
+          if (r.trickHistory.length !== expected || r.trickHistory[0].playerIndex !== seat) {
+            growsByOne = false;
+          }
+        } else if (r.trickHistory.length !== beforeTrick) {
+          // A forced pass never grows the trick pile.
+          growsByOne = false;
+        }
+      } else {
+        // Drive the connected human seat with the bot brain via applySeatAction.
+        const hand = r.hands![seat];
+        const choice = botChoose(hand, r.handState!.leadCombo, {
+          level: 'normal',
+          rng,
+          context: { seat, playedCards: r.playedCards, handSizes: r.hands!.map((h) => h.length) },
+        });
+        applySeatAction(r, seat, choice ? { kind: 'play', combo: choice } : { kind: 'pass' });
+      }
+    }
+    ok('each stepAutoSeat call advances exactly one seat', onePerCall);
+    ok('a bot play grows trickHistory by exactly one per step', growsByOne);
+    ok('a chain of bot plays is stepped one at a time (>=3 observed)', plays >= 3);
+    ok('the paced hand reaches a finish', r.phase === 'finished');
+    ok('no auto action is pending after the hand ends', stepAutoSeat(r, rng).acted === false);
+  }
+
+  // --- nextAutoActDelay bounds (seeded, deterministic) ----------------------
+  {
+    const rng = makeRng(123);
+    let botInRange = true;
+    for (let i = 0; i < 200; i++) {
+      const d = nextAutoActDelay(rng, 'bot');
+      if (d < 900 || d >= 2400) botInRange = false;
+    }
+    ok('a bot delay stays within [900, 2400)', botInRange);
+    ok('a forced pass resolves in 250ms', nextAutoActDelay(rng, 'forced') === 250);
+    ok('a disconnected auto-pass resolves in 250ms', nextAutoActDelay(rng, 'disconnected') === 250);
+    ok(
+      'a seeded bot delay is deterministic',
+      nextAutoActDelay(makeRng(7), 'bot') === nextAutoActDelay(makeRng(7), 'bot'),
+    );
+  }
+
+  // --- currentAutoKind classifies the current seat --------------------------
+  {
+    const r = twoSeatRoom();
+    joinRoom(r, 'host-1', 'host');
+    joinRoom(r, 'friend-1', 'friend');
+    startGame(r, makeRng(5));
+    ok('a connected human seat has no auto kind', currentAutoKind(r) === null);
+    const cur = r.handState!.currentPlayerIndex;
+    setConnected(r, r.players[cur].userId!, false);
+    ok('a disconnected human seat is classified auto', currentAutoKind(r) === 'disconnected');
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

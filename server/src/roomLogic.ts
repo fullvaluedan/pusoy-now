@@ -18,8 +18,9 @@ import {
   isHandOver,
   newHand,
 } from '../../lib/pusoy/engine';
-import { botChoose } from '../../lib/pusoy/bot';
+import { botChoose, findLegalPlays } from '../../lib/pusoy/bot';
 import { canPlay, detectCombo } from '../../lib/pusoy/combo';
+import { BOT_MIN_DELAY_MS, BOT_MAX_DELAY_MS, BOT_FORCED_PASS_MS } from '../../lib/pusoy/pacing';
 
 // Online turns are 30 seconds (R12). Bot mode is untimed; this is the online
 // value threaded into the shared engine's per-hand turnMs.
@@ -68,6 +69,13 @@ export interface RoomState {
   // starts the game early. Both null for invite rooms, which start host-only.
   lobbyDeadline: number | null;
   expectedUserIds: string[] | null;
+  // Wall-clock time the next automatic turn (a bot, or a disconnected human's
+  // auto-pass) is due. The DO's single alarm fires at this time to play EXACTLY
+  // one auto action, then re-arms for the seat after it - so each bot's play
+  // lands as its own paced broadcast instead of a whole chain collapsing into
+  // one snapshot. null when it is a connected human's turn, or not playing.
+  // Persisted with the room, so a paced turn survives hibernation.
+  autoActAt: number | null;
 }
 
 export function createRoomState(
@@ -93,6 +101,7 @@ export function createRoomState(
     createdAt: now,
     lobbyDeadline: null,
     expectedUserIds: null,
+    autoActAt: null,
   };
 }
 
@@ -229,37 +238,77 @@ export function applySeatAction(state: RoomState, seat: number, action: RoundAct
   return maybeFinish(state);
 }
 
-// Advance every consecutive auto-played turn until it is a connected human's
-// turn or the hand ends. Two seats play automatically: bots (they act instantly
-// server-side, R11) and disconnected humans (someone who left the table keeps
-// auto-passing so the game never stalls waiting on them; they resume the moment
-// they reconnect). Called after start, after each human action, and on a
-// disconnect. A connected human's turn breaks the loop.
-export function advanceBots(state: RoomState, rng: Rng = Math.random): ActionResult {
-  let guard = 0;
-  while (state.phase === 'playing' && state.handState && guard++ < 2000) {
-    const seat = state.handState.currentPlayerIndex;
-    const player = state.players[seat];
-    if (!player) break;
-    if (player.kind === 'bot') {
-      const hand = state.hands![seat];
-      const choice = botChoose(hand, state.handState.leadCombo, {
-        level: state.botLevel,
-        rng,
-        context: { seat, playedCards: state.playedCards, handSizes: state.hands!.map((h) => h.length) },
-      });
-      const res = applySeatAction(state, seat, choice ? { kind: 'play', combo: choice } : { kind: 'pass' });
-      if (res.status !== 'ok') return res;
-    } else if (!player.connected) {
-      // Disconnected human: force a pass (or the minimal forced move when they
-      // are stuck leading) via the shared timeout path, then move on.
-      const res = timeoutCurrent(state);
-      if (res.status !== 'ok') return res;
-    } else {
-      break; // a connected human's turn: wait for their action
-    }
+// The kind of automatic action the current seat owes, or null when it is a
+// connected human's turn (or the room is not playing). Two seats play
+// automatically: bots (R11) and disconnected humans (someone who left the table
+// keeps auto-passing so the game never stalls; they resume on reconnect).
+//   'bot'          a bot that has (or may have) a real move to choose
+//   'forced'       a bot whose only legal action is to pass - resolves fast
+//   'disconnected' a disconnected human, auto-passed via the timeout path
+export type AutoKind = 'bot' | 'forced' | 'disconnected';
+
+export function currentAutoKind(state: RoomState): AutoKind | null {
+  if (state.phase !== 'playing' || !state.handState) return null;
+  const seat = state.handState.currentPlayerIndex;
+  const player = state.players[seat];
+  if (!player) return null;
+  if (player.kind === 'bot') {
+    // Mirror localGame.ts scheduleBots: a bot with no legal play can only pass,
+    // so it resolves near-instantly instead of faking deliberation.
+    const mustPass =
+      state.handState.leadCombo !== null &&
+      findLegalPlays(state.hands![seat], state.handState.leadCombo).length === 0;
+    return mustPass ? 'forced' : 'bot';
   }
-  return { status: 'ok' };
+  if (!player.connected) return 'disconnected';
+  return null;
+}
+
+// How long the current auto seat should "think" before acting. A real bot move
+// takes a human-like 900-2400ms; a forced pass or a disconnected human resolves
+// in 250ms. Pure and deterministic given a seeded rng, so it is unit-testable.
+export function nextAutoActDelay(rng: Rng, kind: AutoKind): number {
+  if (kind === 'bot') return BOT_MIN_DELAY_MS + rng() * (BOT_MAX_DELAY_MS - BOT_MIN_DELAY_MS);
+  return BOT_FORCED_PASS_MS; // 'forced' | 'disconnected'
+}
+
+export interface AutoStep {
+  acted: boolean; // an automatic action was applied this call
+  finished: boolean; // that action ended the hand
+  kind: AutoKind | null; // which kind of auto seat acted (null when none did)
+}
+
+// Apply EXACTLY ONE pending automatic action - a bot's chosen move, or a
+// disconnected human's forced pass - and report what happened. Returns
+// acted:false (and leaves state untouched) when it is a connected human's turn,
+// the room is not playing, or an unexpected engine error occurred (so a caller
+// draining with `while (stepAutoSeat(...).acted) {}` can never spin forever).
+// The DO calls this once per alarm so every bot play is broadcast on its own,
+// spaced by its own delay; tests drain it to reach an end state.
+export function stepAutoSeat(state: RoomState, rng: Rng = Math.random): AutoStep {
+  if (state.phase !== 'playing' || !state.handState) return { acted: false, finished: false, kind: null };
+  const seat = state.handState.currentPlayerIndex;
+  const player = state.players[seat];
+  if (!player) return { acted: false, finished: false, kind: null };
+  if (player.kind === 'bot') {
+    const hand = state.hands![seat];
+    const choice = botChoose(hand, state.handState.leadCombo, {
+      level: state.botLevel,
+      rng,
+      context: { seat, playedCards: state.playedCards, handSizes: state.hands!.map((h) => h.length) },
+    });
+    const res = applySeatAction(state, seat, choice ? { kind: 'play', combo: choice } : { kind: 'pass' });
+    if (res.status === 'error') return { acted: false, finished: false, kind: null };
+    return { acted: true, finished: res.status === 'finished', kind: choice ? 'bot' : 'forced' };
+  }
+  if (!player.connected) {
+    // Disconnected human: force a pass (or the minimal forced move when stuck
+    // leading) via the shared timeout path, then move on.
+    const res = timeoutCurrent(state);
+    if (res.status === 'error') return { acted: false, finished: false, kind: null };
+    return { acted: true, finished: res.status === 'finished', kind: 'disconnected' };
+  }
+  return { acted: false, finished: false, kind: null }; // connected human: wait
 }
 
 // Auto-pass the current player on turn timeout (R12), via the engine's existing
