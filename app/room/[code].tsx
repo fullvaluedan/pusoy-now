@@ -45,6 +45,7 @@ import { findLegalPlays } from '../../lib/pusoy/bot';
 import { SUIT_VALUE } from '../../lib/pusoy/deck';
 import { sortHand, type SortMode } from '../../lib/pusoy/localGame';
 import { shouldAutoPass, autoPassTurnKey } from '../../lib/onlineAutoPass';
+import { isFreshStart } from '../../lib/onlineDeal';
 import { formatTime } from '../../lib/stats';
 import { colors, layout, radii, spacing, typography, withAlpha } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
@@ -309,27 +310,19 @@ function LiveTable({
 
   // Deal animation on a FRESH game start. The online client never receives the
   // deck (redacted), so it synthesizes the deal from its own hand + seat counts.
-  // "Fresh" == just entered play with a full untouched hand and an empty trick
-  // history and no lead. A mid-game reconnect lands in playing with a shorter
-  // hand / non-empty history, so it never deals. The decision latches once, so
-  // later server updates during/after the deal can't re-trigger it.
-  const freshStart =
-    view.trickHistory.length === 0 &&
-    (view.yourHand?.length ?? 0) === 13 &&
-    hs != null &&
-    hs.leadCombo == null &&
-    hs.lastPlay == null;
-  const [dealing, setDealing] = useState(false);
-  const dealDecidedRef = useRef(false);
-  useEffect(() => {
-    if (dealDecidedRef.current) return;
-    // First observation of the playing phase decides it: a fresh start deals,
-    // anything else (reconnect mid-hand) skips straight to the table forever.
-    dealDecidedRef.current = true;
-    if (freshStart) setDealing(true);
-    // Only the first render's verdict matters; deliberately not reactive.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // isFreshStart tolerates the opening bot having already led (a slow join can
+  // deliver a first snapshot after the server's paced opener), while a true
+  // mid-game reconnect never deals. Decided ONCE via the state initializer, at
+  // this component's first playing render, so later snapshots during/after the
+  // deal can never re-trigger it (and the first frame is already the overlay,
+  // no table flash).
+  const [dealing, setDealing] = useState(() =>
+    isFreshStart({
+      playing: hs != null,
+      yourHandLength: view.yourHand?.length ?? null,
+      trickHistoryLength: view.trickHistory.length,
+    }),
+  );
 
   // Every legal play available right now, or null when it is not our turn.
   // Computed from the server hand (same set as handOrder, canonical order).

@@ -10,6 +10,23 @@
 
 import type { Card } from './pusoy/types';
 
+// Should this client run the deal animation for the game it just observed?
+// "Fresh" means the game just started FOR THIS VIEWER: their hand is a full
+// untouched 13 while at most the opening play has landed. The <= 1 tolerance
+// matters on real networks: the server paces the opening bot ~1-2s after
+// auto-start, and a slow join can deliver a first snapshot where that bot has
+// already led - still a brand new game, still deal. A true mid-game reconnect
+// has a shorter hand or a deeper trick history and never deals. (Edge case: a
+// reconnect within the very first trick while still holding 13 cards re-runs
+// the deal; harmless, and strictly better than fresh games skipping it.)
+export function isFreshStart(view: {
+  playing: boolean;
+  yourHandLength: number | null;
+  trickHistoryLength: number;
+}): boolean {
+  return view.playing && view.yourHandLength === 13 && view.trickHistoryLength <= 1;
+}
+
 export interface OnlineDealStep {
   // The seat this card is dealt to.
   seat: number;

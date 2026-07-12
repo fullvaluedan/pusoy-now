@@ -3,7 +3,7 @@
 //
 // Run: tsx lib/onlineDeal.test.ts (or via npm test)
 
-import { buildOnlineDealOrder } from './onlineDeal';
+import { buildOnlineDealOrder, isFreshStart } from './onlineDeal';
 import { buildDeck } from './pusoy/deck';
 import type { Card } from './pusoy/types';
 
@@ -72,6 +72,26 @@ function main() {
   // --- degenerate inputs -----------------------------------------------------
   {
     ok('empty seat counts -> no steps', buildOnlineDealOrder(0, [], []).length === 0);
+  }
+
+  // --- isFreshStart: when the client should run the deal overlay -------------
+  {
+    const fresh = { playing: true, yourHandLength: 13, trickHistoryLength: 0 };
+    ok('untouched hand, empty history -> deal', isFreshStart(fresh) === true);
+    ok(
+      'opener bot already led (slow join race) -> still deal',
+      isFreshStart({ ...fresh, trickHistoryLength: 1 }) === true,
+    );
+    ok(
+      'two plays deep is not fresh',
+      isFreshStart({ ...fresh, trickHistoryLength: 2 }) === false,
+    );
+    ok(
+      'mid-game reconnect (shorter hand) never deals',
+      isFreshStart({ ...fresh, yourHandLength: 9, trickHistoryLength: 1 }) === false,
+    );
+    ok('no hand yet never deals', isFreshStart({ ...fresh, yourHandLength: null }) === false);
+    ok('not playing never deals', isFreshStart({ ...fresh, playing: false }) === false);
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

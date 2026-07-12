@@ -12,6 +12,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from './auth';
 import type { BotLevel, RoundAction } from '../../lib/pusoy/types';
+import { ONLINE_DEAL_GRACE_MS } from '../../lib/pusoy/pacing';
 import {
   GAME_ABANDON_MS,
   abandonGame,
@@ -324,6 +325,14 @@ export class GameRoom extends DurableObject<Env> {
     // afterProgress broadcasts the opening deal and arms the first paced auto
     // turn if the opener is a bot (or a disconnected human).
     await this.afterProgress();
+    // Deal grace: push the opener's first action out so every client finishes
+    // its dealing animation before any play lands (the overlay runs ~4-5s; an
+    // opener at 0.9-2s would race it and greet skippers with a mid-trick pool).
+    if (this.room.autoActAt != null) {
+      this.room.autoActAt += ONLINE_DEAL_GRACE_MS;
+      await this.persist();
+      await this.ctx.storage.setAlarm(this.nextAlarm());
+    }
   }
 
   // If the current seat plays automatically (a bot, or a disconnected human) and

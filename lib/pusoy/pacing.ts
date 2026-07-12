@@ -17,3 +17,8 @@ export const BOT_FORCED_PASS_MS = 250;
 // fires only if that client never acts (backgrounded tab, dead app), so the
 // table keeps moving without waiting out the full 30s deadline.
 export const HUMAN_FORCED_PASS_MS = 2_500;
+// Extra delay added to the FIRST auto action of a fresh online hand, so every
+// client can run its dealing animation before the opening bot leads. Without
+// it the opener plays 0.9-2s after start, racing the deal overlay (and a slow
+// join could even receive its first snapshot mid-trick).
+export const ONLINE_DEAL_GRACE_MS = 4_500;
