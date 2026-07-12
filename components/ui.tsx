@@ -17,8 +17,17 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { colors, radii, shadows, spacing, typography } from '../lib/theme';
-import { isButtonInert, resolveButtonTokens, resolveCheckboxTokens, shouldShowFieldError, type ButtonVariant } from '../lib/uiState';
+import {
+  isButtonInert,
+  resolveBackTarget,
+  resolveButtonTokens,
+  resolveCheckboxTokens,
+  resolvePressedTokens,
+  shouldShowFieldError,
+  type ButtonVariant,
+} from '../lib/uiState';
 
 // ---------------------------------------------------------------------------
 // ScreenContainer: SafeAreaView + cream background + standard padding.
@@ -65,9 +74,10 @@ const screenStyles = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
-// Card: v2 soft, borderless, rounded panel used for stat rows, setup notes,
-// empty states. No border; a faint shadow (shadows.card) lifts it off the
-// cream background instead.
+// Card: v3 soft, rounded panel used for stat rows, setup notes, empty
+// states. A faint shadow (shadows.card) lifts it off the cream background,
+// plus a hairline creamEdge-toned border so it reads as a distinct surface
+// even where shadows don't render (some web contexts).
 // ---------------------------------------------------------------------------
 interface CardProps {
   children: ReactNode;
@@ -82,18 +92,25 @@ const cardStyles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     padding: spacing.lg - 4,
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
+    borderWidth: 2,
+    borderColor: colors.creamEdge,
     ...shadows.card,
   },
 });
 
 // ---------------------------------------------------------------------------
 // Button: themed Pressable with title + optional subtitle line. Renders as a
-// v2 full-width pill (radii.pill). `variant` picks a background from the
-// palette; `color` overrides it for one-off cases (e.g. provider-branded
-// sign-in buttons). `loading` replaces the label with a three-dot indicator
-// and, like `disabled`, makes the button inert; both render the same pale
-// fill + muted text (resolveButtonTokens) instead of a dimmed opacity.
+// v3 chunky full-width rounded-rect (radii.xl): a solid fill plus a darker
+// bottom "edge" border that reads as the button's 3D side. Pressing it
+// swallows the edge and nudges the button down by the same distance
+// (resolvePressedTokens) so it visually presses into the surface.
+// `variant` picks fill/edge/text/caps from resolveButtonTokens; `color`
+// overrides the fill for one-off cases (e.g. provider-branded sign-in
+// buttons), and its edge is derived automatically. `loading` replaces the
+// label with a three-dot indicator and, like `disabled`, makes the button
+// inert; both render the same pale fill + edge + muted text instead of a
+// dimmed opacity.
 // ---------------------------------------------------------------------------
 // 'center' matches the sign-in/settings/stats/leaderboard buttons;
 // 'left' matches the home/bot-select buttons (full-width, text + subtitle
@@ -119,22 +136,30 @@ export function Button({ title, subtitle, onPress, variant = 'primary', align = 
 
   return (
     <Pressable
-      style={[
-        buttonStyles.btn,
-        align === 'left' ? buttonStyles.alignLeft : buttonStyles.alignCenter,
-        { backgroundColor: tokens.backgroundColor },
-        tokens.bordered ? { borderWidth: 1, borderColor: tokens.borderColor } : null,
-        style,
-      ]}
+      style={({ pressed }) => {
+        const pressedTokens = pressed && !inert ? resolvePressedTokens() : null;
+        return [
+          buttonStyles.btn,
+          align === 'left' ? buttonStyles.alignLeft : buttonStyles.alignCenter,
+          { backgroundColor: tokens.fill },
+          tokens.borderColor ? { borderWidth: 1, borderColor: tokens.borderColor } : null,
+          {
+            borderBottomWidth: pressedTokens ? pressedTokens.edgeWidth : tokens.edgeWidth,
+            borderBottomColor: tokens.edge,
+            transform: [{ translateY: pressedTokens ? pressedTokens.translateY : 0 }],
+          },
+          style,
+        ];
+      }}
       onPress={onPress}
       disabled={inert}
     >
       {loading ? (
-        <LoadingDots color={tokens.textColor} />
+        <LoadingDots color={tokens.text} />
       ) : (
         <>
-          <Text style={[buttonStyles.text, { color: tokens.textColor }]}>{title}</Text>
-          {subtitle ? <Text style={[buttonStyles.subtext, { color: tokens.textColor }]}>{subtitle}</Text> : null}
+          <Text style={[buttonStyles.text, { color: tokens.text }, tokens.caps ? buttonStyles.textCaps : null]}>{title}</Text>
+          {subtitle ? <Text style={[buttonStyles.subtext, { color: tokens.text }]}>{subtitle}</Text> : null}
         </>
       )}
     </Pressable>
@@ -173,62 +198,82 @@ function LoadingDots({ color }: { color: string }) {
 const buttonStyles = StyleSheet.create({
   btn: {
     padding: spacing.md + 4,
-    borderRadius: radii.pill,
+    // v3: chunky rounded-rect corners (Duolingo-style), not the old
+    // full-pill stadium shape - the bottom edge border reads as a 3D side,
+    // which only looks right on a rectangle with modest corner rounding.
+    borderRadius: radii.xl,
     minHeight: 56,
     justifyContent: 'center',
   },
   alignLeft: { alignItems: 'stretch' },
   alignCenter: { alignItems: 'center' },
   text: { fontSize: typography.bodyBold.fontSize, fontWeight: typography.bodyBold.fontWeight },
+  textCaps: { textTransform: 'uppercase', letterSpacing: 0.5 },
   subtext: { fontSize: typography.caption.fontSize, marginTop: 2, opacity: 0.75 },
   dotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },
   dot: { width: 8, height: 8, borderRadius: 4 },
 });
 
 // ---------------------------------------------------------------------------
-// Header: v2 minimal header with a back chevron on the left, a centered
-// title, and an optional right-side text action. The chevron is drawn with
-// two borders rotated 45deg (no icon library, no emoji).
+// CompactHeader: v3 slim (~48px) header with a guaranteed back chevron, a
+// centered bold title, and an optional right-side slot. The chevron is
+// drawn with two borders rotated 45deg (no icon library, no emoji), inside
+// a 44x44 tappable area (the platform's minimum touch-target floor).
+//
+// Back behavior (R6): pass `onBack` for a custom action (e.g. a room screen
+// that always replaces to home instead of popping). Omit it and the chevron
+// falls back to router.back() when there is navigation history, else
+// router.replace('/') - so a screen opened directly (deep link, browser
+// refresh) never shows a chevron with nowhere to go. Pass `back={false}` to
+// hide the chevron area entirely (e.g. a screen that is never pushed).
+// resolveBackTarget in lib/uiState.ts is the pure decision behind the
+// fallback, kept testable outside react-native.
 // ---------------------------------------------------------------------------
-interface HeaderProps {
+interface CompactHeaderProps {
   title: string;
   onBack?: () => void;
-  right?: { label: string; onPress: () => void };
+  back?: boolean;
+  right?: ReactNode;
 }
 
-export function Header({ title, onBack, right }: HeaderProps) {
+function defaultHeaderBack() {
+  const target = resolveBackTarget(router.canGoBack());
+  if (target === 'back') {
+    router.back();
+  } else {
+    router.replace('/');
+  }
+}
+
+export function CompactHeader({ title, onBack, back = true, right }: CompactHeaderProps) {
+  const handleBack = onBack ?? defaultHeaderBack;
   return (
-    <View style={headerStyles.row}>
-      <View style={headerStyles.side}>
-        {onBack ? (
-          <Pressable onPress={onBack} hitSlop={10} style={headerStyles.backBtn}>
-            <View style={headerStyles.chevron} />
+    <View style={compactHeaderStyles.row}>
+      <View style={compactHeaderStyles.side}>
+        {back ? (
+          <Pressable onPress={handleBack} hitSlop={8} style={compactHeaderStyles.backBtn}>
+            <View style={compactHeaderStyles.chevron} />
           </Pressable>
         ) : null}
       </View>
-      <Text style={headerStyles.title} numberOfLines={1}>
+      <Text style={compactHeaderStyles.title} numberOfLines={1}>
         {title}
       </Text>
-      <View style={[headerStyles.side, headerStyles.sideRight]}>
-        {right ? (
-          <Pressable onPress={right.onPress} hitSlop={10}>
-            <Text style={headerStyles.rightText}>{right.label}</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      <View style={[compactHeaderStyles.side, compactHeaderStyles.sideRight]}>{right ?? null}</View>
     </View>
   );
 }
 
-const headerStyles = StyleSheet.create({
+const compactHeaderStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.md,
+    height: 48,
   },
   side: { minWidth: 44, justifyContent: 'center' },
   sideRight: { alignItems: 'flex-end' },
-  backBtn: { padding: spacing.xs, alignSelf: 'flex-start' },
+  // Fixed 44x44 tappable area regardless of the chevron's small visual size.
+  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   // Bottom-left corner of a square, rotated 45deg, reads as a left chevron.
   chevron: {
     width: 10,
@@ -245,6 +290,39 @@ const headerStyles = StyleSheet.create({
     fontWeight: typography.subheading.fontWeight,
     color: colors.textPrimary,
   },
+});
+
+// ---------------------------------------------------------------------------
+// Header: the old v2 header API, now a thin wrapper around CompactHeader so
+// every existing `<Header title=.. onBack=.. right=..>` call site keeps
+// compiling and rendering exactly as before (back chevron only when
+// `onBack` is passed - matchmaking's headerless "Finding players" title
+// relies on that). U5 sweeps screens over to CompactHeader directly.
+// ---------------------------------------------------------------------------
+interface HeaderProps {
+  title: string;
+  onBack?: () => void;
+  right?: { label: string; onPress: () => void };
+}
+
+export function Header({ title, onBack, right }: HeaderProps) {
+  return (
+    <CompactHeader
+      title={title}
+      onBack={onBack}
+      back={Boolean(onBack)}
+      right={
+        right ? (
+          <Pressable onPress={right.onPress} hitSlop={10}>
+            <Text style={headerStyles.rightText}>{right.label}</Text>
+          </Pressable>
+        ) : undefined
+      }
+    />
+  );
+}
+
+const headerStyles = StyleSheet.create({
   rightText: {
     color: colors.felt,
     fontSize: typography.body.fontSize,
