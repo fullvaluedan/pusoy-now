@@ -13,6 +13,7 @@ import {
   resolveBackTarget,
   resolveButtonTokens,
   resolveCheckboxTokens,
+  resolveListRowTokens,
   resolvePressedTokens,
   shouldShowFieldError,
   type ButtonVariant,
@@ -150,6 +151,43 @@ function main() {
   // --- resolveBackTarget (CompactHeader's guaranteed-back fallback) --------
   ok('with router history, the back target is "back"', resolveBackTarget(true) === 'back');
   ok('with no router history, the back target falls back to "home"', resolveBackTarget(false) === 'home');
+
+  // --- resolveListRowTokens (Round 10 U6 chunky ListRow) --------------------
+  const rowDefault = resolveListRowTokens();
+  ok(
+    'a default row is a white card with a creamEdge border and primary text',
+    rowDefault.fill === colors.white && rowDefault.borderColor === colors.creamEdge && rowDefault.text === colors.textPrimary,
+  );
+  ok('a default row has a resting edge width', rowDefault.edgeWidth > 0);
+  ok(
+    'a default row edge is darker than its fill (the 3D bottom-edge effect)',
+    rowDefault.edge !== rowDefault.fill && luminance(rowDefault.edge) < luminance(rowDefault.fill),
+  );
+
+  const rowDanger = resolveListRowTokens({ tone: 'danger' });
+  ok(
+    'a danger row keeps the white fill but borders/edges in dangerBright/dangerEdge with soft-red text',
+    rowDanger.fill === colors.white &&
+      rowDanger.borderColor === colors.dangerBright &&
+      rowDanger.edge === colors.dangerEdge &&
+      rowDanger.text === colors.dangerSoftText,
+  );
+  ok(
+    'a danger row edge is darker than its fill',
+    luminance(rowDanger.edge) < luminance(rowDanger.fill),
+  );
+
+  const rowDisabled = resolveListRowTokens({ disabled: true });
+  ok(
+    'a disabled row uses the pale disabled fill + muted text, not a dimmed tone',
+    rowDisabled.fill === colors.disabledFill && rowDisabled.borderColor === colors.disabledFill && rowDisabled.text === colors.disabledText,
+  );
+  ok('disabled wins over tone', resolveListRowTokens({ disabled: true, tone: 'danger' }).fill === colors.disabledFill);
+
+  ok(
+    'a ListRow and a chunky Button share the same resting edge width (one tactile family)',
+    rowDefault.edgeWidth === resolveButtonTokens({ variant: 'primary' }).edgeWidth,
+  );
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
