@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { Button, Card, ScreenContainer } from '../components/ui';
+import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
 import { emptyStats, loadStats, LEVEL_ORDER, LEVEL_TITLE, type BotStats } from '../lib/stats';
 
@@ -31,7 +31,7 @@ export default function Stats() {
 
   return (
     <ScreenContainer scroll>
-      <Text style={styles.title}>Scoreboard</Text>
+      <CompactHeader title="Scoreboard" onBack={() => router.replace("/")} />
       <Text style={styles.subtitle}>
         {totalGames === 0
           ? 'Play a game against the bots to start your record.'
@@ -58,7 +58,6 @@ export default function Stats() {
         );
       })}
 
-      <Button title="Back" variant="ghost" style={styles.btn} onPress={() => router.replace('/')} />
     </ScreenContainer>
   );
 }

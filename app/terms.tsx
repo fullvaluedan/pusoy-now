@@ -2,7 +2,7 @@
 // content policy, service disclaimers, and contact info.
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
-import { Button, Card, ScreenContainer } from '../components/ui';
+import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 
 export default function Terms() {
@@ -10,7 +10,7 @@ export default function Terms() {
 
   return (
     <ScreenContainer scroll>
-      <Text style={styles.title}>Terms of Service</Text>
+      <CompactHeader title="Terms of Service" />
       <Text style={styles.date}>Effective 2026-07-11</Text>
 
       <Card style={styles.card}>
@@ -60,12 +60,6 @@ export default function Terms() {
         </Text>
       </Card>
 
-      <Button
-        title="Back"
-        variant="ghost"
-        style={styles.backBtn}
-        onPress={() => router.back()}
-      />
     </ScreenContainer>
   );
 }

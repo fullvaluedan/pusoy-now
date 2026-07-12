@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import Constants from 'expo-constants';
-import { Button, Card, ScreenContainer } from '../components/ui';
+import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 import { AppSettings, DEFAULT_SETTINGS, loadSettings, saveSettings } from '../lib/settings';
 
@@ -56,6 +56,7 @@ export default function Settings() {
 
   return (
     <ScreenContainer scroll>
+      <CompactHeader title="Settings" />
       {/* Sound & Haptics group */}
       <Card>
         <Text style={styles.groupHeading}>Sound & Haptics</Text>
@@ -106,12 +107,6 @@ export default function Settings() {
       {/* Version footer */}
       <Text style={styles.version}>Prends v{appVersion}</Text>
 
-      <Button
-        title="Back"
-        variant="ghost"
-        style={styles.backBtn}
-        onPress={() => router.back()}
-      />
     </ScreenContainer>
   );
 }

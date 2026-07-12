@@ -4,7 +4,7 @@
 // pretending the mode exists.
 import { useRouter } from 'expo-router';
 import { Image, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, ScreenContainer } from '../components/ui';
+import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 
 const EMPTY_IMG = require('../assets/art/empty-state.png');
@@ -13,13 +13,13 @@ export default function BluetoothInfo() {
   const router = useRouter();
   return (
     <ScreenContainer scroll>
+      <CompactHeader title="Bluetooth multiplayer" onBack={() => router.replace("/")} />
       <View style={styles.hero}>
         <Image source={EMPTY_IMG} style={styles.heroImg} resizeMode="contain" />
         <View style={styles.badge}>
           <Text style={styles.badgeText}>COMING SOON</Text>
         </View>
       </View>
-
       <Text style={styles.title}>Bluetooth multiplayer</Text>
       <Text style={styles.subtitle}>
         Play with people right next to you, no internet needed. Built for flights, commutes, and the back seat.
@@ -40,7 +40,6 @@ export default function BluetoothInfo() {
       </Card>
 
       <Button title="Play vs bots" variant="primary" onPress={() => router.replace('/bot-select')} style={styles.action} />
-      <Button title="Back home" variant="ghost" onPress={() => router.replace('/')} style={styles.action} />
     </ScreenContainer>
   );
 }

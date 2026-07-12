@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, ScreenContainer } from '../components/ui';
+import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
 import type { BotLevel } from '../lib/pusoy/types';
 
@@ -25,7 +25,7 @@ export default function BotSelect() {
 
   return (
     <ScreenContainer>
-      <Text style={styles.title}>Pusoy Dos is a 4-player game</Text>
+      <CompactHeader title="Pusoy Dos is a 4-player game" />
       <Text style={styles.subtitle}>
         You'll play against 3 computer opponents. The player with the 3 of clubs leads first.
       </Text>

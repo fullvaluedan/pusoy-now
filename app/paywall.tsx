@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, ScreenContainer } from '../components/ui';
+import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 import { apiUrl, authClient } from '../lib/authClient';
 
@@ -53,6 +53,7 @@ export default function Paywall() {
 
   return (
     <ScreenContainer scroll>
+      <CompactHeader title="Remove ads" />
       <Image
         source={HERO_IMG}
         style={styles.hero}
@@ -67,7 +68,6 @@ export default function Paywall() {
           resizeMode="contain"
           accessibilityLabel="Premium badge"
         />
-        <Text style={styles.title}>Remove ads</Text>
         <Text style={styles.price}>$9.99 a year, no ads</Text>
       </View>
 
@@ -96,7 +96,6 @@ export default function Paywall() {
         </View>
       ) : null}
 
-      <Button title="Not now" variant="ghost" style={styles.notNow} onPress={() => router.back()} />
     </ScreenContainer>
   );
 }

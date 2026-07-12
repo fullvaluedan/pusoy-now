@@ -5,7 +5,7 @@
 // this app's engine ranks suits club < heart < spade < diamond.
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
-import { Button, Card, ScreenContainer } from '../components/ui';
+import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 
 export default function HowToPlay() {
@@ -13,7 +13,7 @@ export default function HowToPlay() {
 
   return (
     <ScreenContainer scroll>
-      <Text style={styles.title}>How to play</Text>
+      <CompactHeader title="How to play" />
       <Text style={styles.date}>Pusoy Dos rules and app tips</Text>
 
       <Card style={styles.card}>
@@ -80,12 +80,6 @@ export default function HowToPlay() {
         <Text style={styles.bulletList}>- Empty seats in an online game get filled by expert bots.</Text>
       </Card>
 
-      <Button
-        title="Back"
-        variant="ghost"
-        style={styles.backBtn}
-        onPress={() => router.back()}
-      />
     </ScreenContainer>
   );
 }

@@ -7,7 +7,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../components/Avatar';
-import { Button, Card, Field, Header, ScreenContainer } from '../components/ui';
+import { Button, Card, Field, ScreenContainer } from '../components/ui';
+import { CompactHeader } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import {
@@ -40,7 +41,7 @@ export default function Friends() {
   if (failed) {
     return (
       <ScreenContainer>
-        <Header title="Friends" onBack={() => router.back()} />
+        <CompactHeader title="Friends" />
         <Card style={styles.signInCard}>
           <Text style={styles.signInText}>Could not start a session. Check your connection and try again.</Text>
           <Button title="Try again" onPress={() => void tryEnsureSession()} style={styles.signInBtn} />
@@ -87,7 +88,7 @@ function FriendsContent() {
 
   return (
     <ScreenContainer scroll>
-      <Header title="Friends" onBack={() => router.back()} />
+      <CompactHeader title="Friends" />
 
       <AddFriendCard onAdded={refresh} />
 

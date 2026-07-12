@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text } from 'react-native';
-import { Button, Card, ScreenContainer } from '../../components/ui';
+import { CompactHeader, Button, Card, ScreenContainer } from '../../components/ui';
 import { colors, spacing, typography } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 
@@ -35,6 +35,8 @@ export default function JoinScreen() {
   if (failed) {
     return (
       <ScreenContainer>
+      <CompactHeader title="Joining room" />
+        <CompactHeader title="Joining room" />
         <Card style={styles.card}>
           <Text style={styles.title}>Could not join</Text>
           <Text style={styles.body}>
@@ -48,6 +50,7 @@ export default function JoinScreen() {
 
   return (
     <ScreenContainer>
+      <CompactHeader title="Joining room" />
       <ActivityIndicator size="large" color={colors.felt} />
     </ScreenContainer>
   );

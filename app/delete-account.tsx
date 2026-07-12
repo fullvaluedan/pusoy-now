@@ -10,7 +10,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { Button, Card, Field, ScreenContainer } from '../components/ui';
+import { CompactHeader, Button, Card, Field, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { apiUrl, authClient } from '../lib/authClient';
@@ -47,7 +47,6 @@ export default function DeleteAccount() {
           onPress={() => router.replace('/sign-in')}
           style={styles.action}
         />
-        <Button title="Back" variant="ghost" onPress={() => router.back()} style={styles.action} />
       </ScreenContainer>
     );
   }
@@ -77,7 +76,7 @@ export default function DeleteAccount() {
   return (
     <ScreenContainer scroll>
       <Text style={styles.title}>Delete your account</Text>
-
+      <CompactHeader title="Delete your account" />
       <Card style={styles.card}>
         <Text style={styles.sectionTitle}>This permanently deletes</Text>
         <Text style={styles.bullet}>- Your account and sign-in</Text>
@@ -114,7 +113,6 @@ export default function DeleteAccount() {
         onPress={handleDelete}
         style={styles.action}
       />
-      <Button title="Cancel" variant="ghost" onPress={() => router.back()} style={styles.action} />
     </ScreenContainer>
   );
 }

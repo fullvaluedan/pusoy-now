@@ -2,7 +2,7 @@
 // processing, retention, and user rights.
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { Button, Card, ScreenContainer } from '../components/ui';
+import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 
 export default function Privacy() {
@@ -10,7 +10,7 @@ export default function Privacy() {
 
   return (
     <ScreenContainer scroll>
-      <Text style={styles.title}>Privacy Policy</Text>
+      <CompactHeader title="Privacy Policy" />
       <Text style={styles.date}>Effective 2026-07-11</Text>
 
       <Card style={styles.card}>
@@ -111,12 +111,6 @@ export default function Privacy() {
         </Text>
       </Card>
 
-      <Button
-        title="Back"
-        variant="ghost"
-        style={styles.backBtn}
-        onPress={() => router.back()}
-      />
     </ScreenContainer>
   );
 }
