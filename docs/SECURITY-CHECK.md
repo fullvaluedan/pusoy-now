@@ -79,3 +79,17 @@ Round 7 lesson repeated from Rounds 5/6: endpoint checks MUST run in a real brow
 ## Round 8 (Duolingo UI overhaul) — 2026-07-11
 
 UI-only round: no new endpoints, no schema changes, no worker deploy. Device verification (deployed bundle, true 360x640 iframe): game table controls all visible + centered + ad row (check via DOM geometry: PASS y199, PLAY y333, SORT y415, title cx=180/360); home hub zero-scroll with tab bar; how-to-play direct-load back chevron falls back to home; pushed screens hide the tab bar.
+
+## Round 9 (home simplify + friends h2h + pool fix) — 2026-07-12
+
+Worker: api.prends.app (migration 0008 game_result/game_result_player applied remote FIRST, then deploy c7292ada). Web: prends.app (entry-bcdd02f9).
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| 36 | 0008 applied to remote D1 before Worker deploy | PASS | migrations apply -> 0008_game_results.sql OK, then wrangler deploy |
+| 37 | /api/friends h2h payload session-gated + shape | PASS | fresh anon session -> {accepted:[],incoming:[],outgoing:[]}; h2h only on accepted rows, no cross-user leakage (self-join keyed on session userId) |
+| 38 | Game results carry no new PII | PASS | game_result_player stores userId+place only, no names/emails; no FK so account deletion stays clean |
+| 39 | Guest name cap live | PASS | anon sign-in minted FrostyOtter-7072 (11 chars pre-suffix, cap <= 14) |
+| 40 | Deployed bundle = verified bundle | PASS | prends.app entry JS hash === local dist hash (bcdd02f9...); geometry verified against those bytes at 360x570/360x640/412x915 |
+
+Round 9 verification note: browser-pane external navigation was unavailable, so the deployed bundle was verified by hash-matching prends.app's entry JS to the local dist, then serving that identical dist locally for iframe DOM-geometry checks (pool full-size + compact 37px PASS/PLAY at 360x570, no overflow; one-line home row; first-play picker -> instant PLAY). Friends UI session flow needs the prends.app origin (CORS), verified via live API instead.
