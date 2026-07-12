@@ -35,6 +35,7 @@ import {
   type ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AdBanner, AD_BANNER_HEIGHT } from '../components/AdBanner';
 import { Avatar } from '../components/Avatar';
 import { DealingAnimation } from '../components/DealingAnimation';
 import {
@@ -177,8 +178,13 @@ function TablePanel({ children }: { children: ReactNode }) {
   // Cap the panel height so it does not stretch to fill a tall window; the
   // backdrop centers it vertically, giving equal breathing room above and
   // below. On short/narrow windows this resolves to the full available height
-  // (effectively full-screen).
-  const panelHeight = Math.min(height - vMargin * 2, layout.maxTableHeight);
+  // (effectively full-screen). The ad banner's row is reserved out of this
+  // budget up front (rather than stacked on top of it) so the felt panel --
+  // and the card fan inside it -- never gets pushed off-screen or overlapped.
+  const panelHeight = Math.min(
+    height - vMargin * 2 - AD_BANNER_HEIGHT - spacing.sm,
+    layout.maxTableHeight,
+  );
   return (
     <View style={styles.backdrop}>
       <View
@@ -209,7 +215,32 @@ function TablePanel({ children }: { children: ReactNode }) {
           </ImageBackground>
         </View>
       </View>
+      {/* House-ad placeholder, bottom-anchored and entirely outside the felt
+          panel above (the play area), per the reserved row in panelHeight. */}
+      <View style={[styles.adBannerSlot, { maxWidth: layout.maxTableWidth }]}>
+        <AdBanner />
+      </View>
     </View>
+  );
+}
+
+// Height threshold (in usable panel px, after the ad row is reserved) below
+// which the in-progress table switches to its compact layout: smaller
+// opponent seats, a tighter center pool, and slimmer control margins, so the
+// hand fan and the Pass/Play controls always stay on-screen on short phones.
+// At 360x640 the panel resolves to ~588px (640 - 44 ad - 8), which sits under
+// this line; at 412x915 it is ~863px and stays in the roomy default layout.
+const COMPACT_PANEL_HEIGHT = 640;
+
+// Usable panel height for a given window height, mirroring TablePanel's
+// reservation (narrow phones have no side margin, so vMargin drops out). Kept
+// as a pure helper so the in-progress screen derives the exact same budget the
+// panel is drawn at.
+function usablePanelHeight(windowHeight: number, isWide: boolean): number {
+  const vMargin = isWide ? layout.panelMargin : 0;
+  return Math.min(
+    windowHeight - vMargin * 2 - AD_BANNER_HEIGHT - spacing.sm,
+    layout.maxTableHeight,
   );
 }
 
@@ -224,6 +255,7 @@ function SeatPlate({
   passed,
   count,
   raised,
+  compact,
 }: {
   name: string;
   avatarUrl?: string | null;
@@ -236,6 +268,11 @@ function SeatPlate({
   // The middle seat sits higher than the two flanking it, arcing the seats
   // around the table instead of lining them up.
   raised: boolean;
+  // Short-viewport variant: a smaller avatar, the face-down stack art dropped,
+  // and the card count carried as a chip in the name row instead of on the
+  // stack -- reclaiming the ~50px the stack occupies so the controls and hand
+  // fan stay on-screen.
+  compact: boolean;
 }) {
   const finished = place !== null;
   return (
@@ -243,6 +280,7 @@ function SeatPlate({
       style={[
         styles.oppBox,
         raised ? styles.oppBoxRaised : null,
+        compact && styles.oppBoxCompact,
         isCurrent && styles.oppBoxActive,
         finished && styles.oppBoxDone,
       ]}
@@ -251,26 +289,43 @@ function SeatPlate({
         name={name}
         url={avatarUrl}
         localSource={avatarSource}
-        size={48}
+        size={compact ? 36 : 48}
         framed
         active={isCurrent && !finished}
-        style={styles.oppAvatarMargin}
+        style={compact ? styles.oppAvatarMarginCompact : styles.oppAvatarMargin}
       />
       <View style={styles.oppNameRow}>
         <Text style={styles.oppName} numberOfLines={1}>{name}</Text>
-        <SeatChip passed={passed} place={place} />
+        {compact ? (
+          // Count moves into the name row (the stack art below is hidden).
+          <View style={styles.oppCountChip}>
+            <Text style={styles.oppCountChipText}>{count}</Text>
+          </View>
+        ) : (
+          <SeatChip passed={passed} place={place} />
+        )}
       </View>
-      <View style={styles.oppStackRow}>
-        <View style={styles.oppStackWrap}>
-          <OpponentCardStack count={count} small />
-          {/* Compact card-count chip, overlapping the stack's bottom-right
-              corner -- the at-a-glance "how many cards do they hold" cue
-              mobile card games use instead of a bare number. */}
-          <View style={styles.cardCountBadge}>
-            <Text style={styles.cardCountBadgeText}>{count}</Text>
+      {compact ? (
+        // With the stack hidden, PASS/place status still needs a home; show it
+        // under the name so the seat never loses that cue.
+        passed || place !== null ? (
+          <View style={styles.oppStatusRow}>
+            <SeatChip passed={passed} place={place} />
+          </View>
+        ) : null
+      ) : (
+        <View style={styles.oppStackRow}>
+          <View style={styles.oppStackWrap}>
+            <OpponentCardStack count={count} small />
+            {/* Compact card-count chip, overlapping the stack's bottom-right
+                corner -- the at-a-glance "how many cards do they hold" cue
+                mobile card games use instead of a bare number. */}
+            <View style={styles.cardCountBadge}>
+              <Text style={styles.cardCountBadgeText}>{count}</Text>
+            </View>
           </View>
         </View>
-      </View>
+      )}
     </View>
   );
 }
@@ -284,6 +339,7 @@ function TopBar({
   timer,
   onBack,
   onSkip,
+  compact,
 }: {
   title: string;
   // Compact, persistent turn/round status chip under the title. Optional so
@@ -293,6 +349,9 @@ function TopBar({
   timer?: string;
   onBack: () => void;
   onSkip?: () => void;
+  // Short-viewport variant: shortens the skip label to "Skip" so it fits the
+  // now-symmetric right column.
+  compact?: boolean;
 }) {
   return (
     <View style={styles.topBar}>
@@ -300,7 +359,7 @@ function TopBar({
         <Text style={styles.topBarBack}>{'←'}</Text>
       </Pressable>
       <View style={styles.topBarCenter}>
-        <Text style={styles.topBarTitle}>{title}</Text>
+        <Text style={styles.topBarTitle} numberOfLines={1}>{title}</Text>
         {turnLabel ? (
           <View style={styles.turnChip}>
             <Text style={styles.turnChipText} numberOfLines={1}>{turnLabel}</Text>
@@ -310,8 +369,8 @@ function TopBar({
       <View style={[styles.topBarSide, styles.topBarRight]}>
         {timer ? <Text style={styles.timerText}>{timer}</Text> : null}
         {onSkip ? (
-          <Pressable style={styles.btnSmall} onPress={onSkip}>
-            <Text style={styles.btnSmallText} numberOfLines={1}>Skip to end</Text>
+          <Pressable style={({ pressed }) => [styles.btnSmall, styles.btnSkip, pressed && styles.btnSmallPressed]} onPress={onSkip}>
+            <Text style={styles.btnSmallText} numberOfLines={1}>{compact ? 'Skip' : 'Skip to end'}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -323,6 +382,12 @@ export default function LocalGameScreen() {
   const params = useLocalSearchParams<{ bots: string; level: string }>();
   const router = useRouter();
   const { profile, session } = useAuth();
+  // The table switches to its compact layout on short viewports (real phones,
+  // where the browser chrome/safe-area eats into the height). Derived from the
+  // same usable-panel budget TablePanel draws at, so the flag flips exactly
+  // when the roomy layout would stop fitting.
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const compact = usablePanelHeight(winHeight, winWidth > layout.maxTableWidth) < COMPACT_PANEL_HEIGHT;
   const botCount = Math.max(1, Math.min(3, Number(params.bots) || 3));
   const level = parseLevel(params.level);
   // A signed-in player sits at their own name; a guest is just "You".
@@ -499,6 +564,7 @@ export default function LocalGameScreen() {
         <TopBar
           title={`${LEVEL_LABEL[game.level]} table`}
           onBack={() => router.replace('/')}
+          compact={compact}
         />
         <View style={styles.finishCard}>
           <Text style={styles.finishHeadline}>
@@ -532,12 +598,12 @@ export default function LocalGameScreen() {
           })}
           <View style={styles.finishActions}>
             <Pressable
-              style={styles.btn}
+              style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.btnPressed]}
               onPress={() =>
                 router.replace({ pathname: '/game-local', params: { bots: botCount, level } })
               }
             >
-              <Text style={styles.btnText}>Play again</Text>
+              <Text style={[styles.btnText, styles.btnPrimaryText]}>Play again</Text>
             </Pressable>
             <Pressable
               style={[styles.btn, styles.btnGhost]}
@@ -769,11 +835,12 @@ export default function LocalGameScreen() {
           timer={formatTime(elapsedMs)}
           onBack={() => router.replace('/')}
           onSkip={onSkip}
+          compact={compact}
         />
 
         {/* Opponents arc around the top of the table; the human sits at the
             bottom with their hand. */}
-        <View style={styles.oppRow}>
+        <View style={[styles.oppRow, compact && styles.oppRowCompact]}>
           {opponentOrder.map((seat, i) => (
             <SeatPlate
               key={seat}
@@ -784,57 +851,74 @@ export default function LocalGameScreen() {
               passed={game.handState.passed.includes(seat)}
               count={game.hands[seat].length}
               raised={i === 1}
+              compact={compact}
             />
           ))}
         </View>
 
         {/* Center: the played pool is the hero, with the two actions centered
             around it -- Pass above, Play below -- so both sit in the middle of
-            the table, equally reachable and never mis-tapped for each other. */}
+            the table, equally reachable and never mis-tapped for each other.
+            This is the only flexing region: on short viewports the pool shrinks
+            (tighter overlap + scale) while the controls and hand fan below keep
+            their intrinsic height. */}
         <View style={styles.center}>
           <Pressable
-            style={[styles.btn, styles.btnPass, styles.centerActionBtn, (!isMyTurn || lead === null) && styles.btnDisabled]}
+            style={({ pressed }) => [styles.btn, styles.btnPass, styles.centerActionBtn, compact && styles.centerActionBtnCompact, pressed && !(!isMyTurn || lead === null) && styles.btnPressed, (!isMyTurn || lead === null) && styles.btnDisabled]}
             disabled={!isMyTurn || lead === null}
             onPress={onPass}
           >
             <Text style={styles.btnText}>Pass</Text>
           </Pressable>
 
-          {lastPlay ? (
-            <View style={styles.trickArea}>
-              {prevPlay && (
-                <View style={styles.trickGhost} pointerEvents="none">
-                  {prevPlay.combo.cards.map((c, i) => (
-                    <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -34 }}>
-                      <PlayingCard card={c} />
+          {/* Pool wrapper: the ONE flexing region. flexShrink lets it (and only
+              it) give up height when the center box is too short, and overflow
+              hidden clips the pool rather than letting it push Pass/Play out of
+              the center's bounds -- so on any viewport the two controls stay
+              fully visible while the played cards are what shrink. In the roomy
+              layout there is slack, so the pool renders at full size and the
+              group sits centered exactly as before. */}
+          <View style={styles.trickWrap}>
+            {lastPlay ? (
+              <View style={[styles.trickArea, compact && styles.trickAreaCompact]}>
+                {prevPlay && !compact && (
+                  <View style={styles.trickGhost} pointerEvents="none">
+                    {prevPlay.combo.cards.map((c, i) => (
+                      <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -34 }}>
+                        <PlayingCard card={c} />
+                      </View>
+                    ))}
+                  </View>
+                )}
+                <Text style={[styles.trickCaption, compact && styles.trickCaptionCompact]}>
+                  {seatName(game, lastPlay.playerIndex, humanDisplayName).toUpperCase()} PLAYED
+                </Text>
+                <View style={[styles.trickCards, compact && styles.trickCardsCompact]}>
+                  {lastPlay.combo.cards.map((c, i) => (
+                    <View key={c.id} style={{ marginLeft: i === 0 ? 0 : compact ? -14 : -22, zIndex: 10 + i }}>
+                      {/* Compact renders the pool as small cards (54px vs 92px): a
+                          real layout saving -- a transform scale would only shrink
+                          it visually while still reserving full height -- so the
+                          Pass/Play controls below never get pushed off-screen. */}
+                      <PlayingCard card={c} small={compact} />
                     </View>
                   ))}
                 </View>
-              )}
-              <Text style={styles.trickCaption}>
-                {seatName(game, lastPlay.playerIndex, humanDisplayName).toUpperCase()} PLAYED
-              </Text>
-              <View style={styles.trickCards}>
-                {lastPlay.combo.cards.map((c, i) => (
-                  <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -22, zIndex: 10 + i }}>
-                    <PlayingCard card={c} />
-                  </View>
-                ))}
+                <Text style={styles.trickName} numberOfLines={1}>{comboLabel(lastPlay.combo)}</Text>
               </View>
-              <Text style={styles.trickName}>{comboLabel(lastPlay.combo)}</Text>
-            </View>
-          ) : (
-            <View style={styles.trickArea}>
-              <Text style={styles.trickEmpty}>
-                {isMyTurn
-                  ? 'Your turn, lead with any hand'
-                  : `${seatName(game, currentSeat, humanDisplayName)} to lead`}
-              </Text>
-            </View>
-          )}
+            ) : (
+              <View style={[styles.trickArea, compact && styles.trickAreaCompact]}>
+                <Text style={styles.trickEmpty}>
+                  {isMyTurn
+                    ? 'Your turn, lead with any hand'
+                    : `${seatName(game, currentSeat, humanDisplayName)} to lead`}
+                </Text>
+              </View>
+            )}
+          </View>
 
           <Pressable
-            style={[styles.btn, styles.btnPrimary, styles.centerActionBtn, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+            style={({ pressed }) => [styles.btn, styles.btnPrimary, styles.centerActionBtn, compact && styles.centerActionBtnCompact, pressed && !(!isMyTurn || !selLegal) && styles.btnPressed, (!isMyTurn || !selLegal) && styles.btnDisabled]}
             disabled={!isMyTurn || !selLegal}
             onPress={onPlay}
           >
@@ -843,7 +927,7 @@ export default function LocalGameScreen() {
         </View>
 
       {/* Bottom: the human's seat + hand. */}
-      <View style={[styles.bottom, isMyTurn && styles.bottomActive]}>
+      <View style={[styles.bottom, compact && styles.bottomCompact, isMyTurn && styles.bottomActive]}>
         {/* Soft gold glow behind the hand while it is the player's turn. First
             child so it paints behind the toolbar/hand/actions; contain so it
             never distorts; pointerEvents none so it never blocks a tap. */}
@@ -856,11 +940,17 @@ export default function LocalGameScreen() {
             importantForAccessibility="no"
           />
         )}
-        {isMyTurn && (
-          <View style={styles.turnBanner} pointerEvents="none">
-            <Text style={styles.turnBannerText}>Your turn</Text>
-          </View>
-        )}
+        {/* Reserved headroom strip above the toolbar. The gold "Your turn"
+            banner renders inside it (centered) instead of absolutely
+            overlapping the toolbar/Sort row, so the Sort button never shifts
+            between turns -- the strip is always present during play. */}
+        <View style={styles.bannerStrip} pointerEvents="none">
+          {isMyTurn && (
+            <View style={styles.turnBanner}>
+              <Text style={styles.turnBannerText}>Your turn</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.handToolbar}>
           <View style={styles.handToolbarLeft}>
             <Avatar
@@ -872,7 +962,7 @@ export default function LocalGameScreen() {
             />
             <Text style={styles.youName} numberOfLines={1}>{humanDisplayName}</Text>
             <SeatChip passed={humanPassed} place={placeOf(humanSeat)} />
-            <Pressable style={styles.btnSmall} onPress={onOrganize}>
+            <Pressable style={({ pressed }) => [styles.btnSmall, pressed && styles.btnSmallPressed]} onPress={onOrganize}>
               <Text style={styles.btnSmallText}>
                 {sortMode === null ? 'Sort' : `Sort: ${SORT_LABEL[sortMode]}`}
               </Text>
@@ -1103,6 +1193,16 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
     elevation: 16,
   },
+  // Row below the felt panel that hosts the (house-ad-placeholder) AdBanner.
+  // Width-matched to the panel above (maxWidth set inline) so the banner reads
+  // as part of the same column instead of stretching edge to edge on wide
+  // viewports; a small horizontal inset keeps it off the screen edges on
+  // narrow phones.
+  adBannerSlot: {
+    width: '100%',
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
   // The visible table: felt-filled, gold-framed, rounded, clipping its
   // children so the felt and content share one box. Solid felt color base
   // shows through while the tile image loads.
@@ -1183,13 +1283,12 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
   },
   topBarSide: { justifyContent: 'center' },
-  // Left side only ever holds the back arrow, so it gets a narrow fixed
-  // column; the right side needs room for the timer + "Skip to end" button
-  // on one line. Splitting them (instead of one width shared by both, as
-  // before) frees ~60px for the centered title at 375px, where the old
-  // symmetric 116/116 split otherwise squeezed it down to ~115px.
-  topBarLeft: { width: 56 },
-  topBarRight: { width: 116, alignItems: 'flex-end' },
+  // Symmetric side columns (R2): both 96px so the title + turn chip sit at the
+  // true optical center of the bar. The back chevron is left-aligned inside
+  // its column; the timer + Skip button are right-aligned inside theirs (Skip
+  // shortens to "Skip" in compact mode so it fits the 96px column).
+  topBarLeft: { width: 96, alignItems: 'flex-start' },
+  topBarRight: { width: 96, alignItems: 'flex-end' },
   topBarBack: { color: colors.textOnFelt, fontSize: 22, fontWeight: '700' },
   topBarCenter: { flex: 1, alignItems: 'center', gap: 3 },
   topBarTitle: {
@@ -1224,6 +1323,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },
+  // Short-viewport: trim the row's own vertical padding on top of the smaller
+  // seat plates, reclaiming height for the pool + hand.
+  oppRowCompact: {
+    paddingVertical: 2,
+  },
   oppBox: {
     backgroundColor: withAlpha(colors.ink, 0.25),
     paddingHorizontal: spacing.md,
@@ -1239,6 +1343,27 @@ const styles = StyleSheet.create({
   },
   // The middle seat sits higher, arcing the row around the table's far edge.
   oppBoxRaised: { marginTop: 0 },
+  // Short-viewport: a shorter plate (less padding, smaller top offset) to go
+  // with the smaller avatar and hidden stack art.
+  oppBoxCompact: {
+    paddingVertical: spacing.xs,
+    marginTop: spacing.xs,
+    minWidth: 84,
+  },
+  // Count chip carried in the name row when the stack art is hidden (compact).
+  oppCountChip: {
+    minWidth: 20,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: colors.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  oppCountChipText: { color: colors.felt, fontSize: 11, fontWeight: '800' },
+  // Holds the PASS/place chip under the name in compact mode (the stack row,
+  // which normally carries status, is hidden).
+  oppStatusRow: { marginTop: spacing.xs, flexDirection: 'row', alignItems: 'center' },
   // The avatar's own turn-ring (see components/Avatar.tsx) now carries most of
   // the "whose turn" signal, so the plate itself only needs a whisper of gold
   // rather than a full wash + border.
@@ -1249,6 +1374,7 @@ const styles = StyleSheet.create({
   },
   oppBoxDone: { opacity: 0.55 },
   oppAvatarMargin: { marginBottom: spacing.sm },
+  oppAvatarMarginCompact: { marginBottom: spacing.xs },
   oppNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
   oppName: { color: colors.textOnFelt, fontSize: 15, fontWeight: '700' },
   oppStackRow: { flexDirection: 'row', alignItems: 'center' },
@@ -1281,8 +1407,24 @@ const styles = StyleSheet.create({
   seatChipPlaceText: { color: colors.felt, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
 
   // Center pool — the current play is the hero, sitting bare on the felt.
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.md },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.md, minHeight: 120 },
+  // The one flexing region between Pass and Play. flexShrink 1 + minHeight 0
+  // let it surrender height first; overflow hidden clips the pool instead of
+  // pushing the controls out of the center's bounds. Roomy viewports leave it
+  // at natural size (no shrink), so nothing changes there.
+  trickWrap: {
+    flexShrink: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   trickArea: { alignItems: 'center', justifyContent: 'center' },
+  // Short-viewport: nothing to scale (the pool already shrinks by rendering
+  // small cards, which is a real layout saving); kept as a hook for any future
+  // compact-only pool tweaks.
+  trickAreaCompact: {},
   trickCaption: {
     color: colors.textOnFeltMuted,
     fontSize: typography.tiny.fontSize,
@@ -1290,6 +1432,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: spacing.sm,
   },
+  trickCaptionCompact: { marginBottom: spacing.xs },
   // The previous play, ghosted beneath the current one like a discard pile.
   trickGhost: {
     position: 'absolute',
@@ -1298,6 +1441,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-5deg' }, { translateY: -10 }],
   },
   trickCards: { flexDirection: 'row', justifyContent: 'center', marginBottom: spacing.sm },
+  trickCardsCompact: { marginBottom: spacing.xs },
   trickName: { color: colors.gold, fontSize: typography.label.fontSize, fontWeight: '700' },
   trickEmpty: { color: withAlpha(colors.white, 0.8), fontSize: typography.body.fontSize, paddingVertical: 30 },
   error: { color: colors.danger, marginTop: spacing.sm + 2, fontWeight: '600' },
@@ -1309,6 +1453,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     borderTopWidth: 2,
     borderTopColor: 'transparent',
+  },
+  // Short-viewport: trim the bottom section's own padding so the center flex
+  // region keeps more room for the pool + controls (the hand fan itself keeps
+  // its intrinsic height -- only chrome shrinks).
+  bottomCompact: {
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
   },
   // Active-turn highlight on the whole hand area: a gold top edge plus a very
   // faint gold wash, matching the seat-plate active state so the two read as
@@ -1332,15 +1483,19 @@ const styles = StyleSheet.create({
     opacity: 0.25,
     pointerEvents: 'none',
   },
+  // Reserved headroom strip above the toolbar: always present during play so
+  // the toolbar/Sort row never jumps between turns. The banner sits inside it
+  // (in normal flow, no absolute overlap).
+  bannerStrip: {
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   turnBanner: {
-    position: 'absolute',
-    top: -12,
-    alignSelf: 'center',
     backgroundColor: colors.gold,
     paddingHorizontal: spacing.md,
     paddingVertical: 2,
     borderRadius: 999,
-    zIndex: 20,
   },
   turnBannerText: {
     color: colors.felt,
@@ -1382,45 +1537,65 @@ const styles = StyleSheet.create({
   // pair, and vertical margin so neither crowds the cards between them.
   centerActionBtn: {
     minWidth: 150,
-    marginVertical: spacing.md + 2,
+    marginVertical: spacing.md,
+  },
+  // Short-viewport: tighten the vertical margin around Pass/Play so the pool
+  // and controls fit without pushing the hand off-screen. minHeight (44) is
+  // kept so the tap target never shrinks.
+  centerActionBtnCompact: {
+    marginVertical: 4,
   },
   feedbackRow: {
     alignItems: 'center',
     paddingHorizontal: spacing.lg - 4,
   },
-  // Play / Pass / Sort share one height + radius family so they read as one
-  // button set; Sort stays visually secondary via smaller padding/font.
-  // v2: pill corners (radii.pill) to match the full-width pill buttons used
-  // everywhere else in the app; cosmetic only, nothing else here changed.
+  // Play / Pass / Sort share one height family so they read as one button
+  // set; Sort stays visually secondary via smaller padding/font.
+  // v3: chunky Duolingo-style buttons -- a rounded-rect with a darker 3px
+  // bottom edge (borderBottomWidth) that reads as the button's 3D side.
+  // Pressing swallows the edge and nudges the button down by the same amount
+  // (btnPressed) so it visually presses into the felt. The base fill is the
+  // lighter felt; its darker edge is the felt green itself.
   btn: {
     backgroundColor: colors.feltLight,
     minHeight: 44,
-    paddingVertical: spacing.sm + 4,
+    paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.xxl,
-    borderRadius: radii.pill,
+    borderRadius: radii.xl,
+    borderBottomWidth: 4,
+    borderBottomColor: colors.felt,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Play is the primary action when enabled: gold fill, dark ink text so it
-  // reads as the one thing to press. btnDisabled dims it uniformly with Pass.
-  btnPrimary: { backgroundColor: colors.gold },
+  // Shared pressed state for the chunky buttons: drop the 3D edge and slide
+  // down by its thickness so the control appears to press into the surface.
+  btnPressed: { borderBottomWidth: 0, transform: [{ translateY: 4 }] },
+  // Play is the primary action when enabled: gold fill + darker gold edge,
+  // dark ink text so it reads as the one thing to press. btnDisabled dims it
+  // uniformly with Pass.
+  btnPrimary: { backgroundColor: colors.gold, borderBottomColor: colors.goldEdge },
   btnPrimaryText: { color: colors.ink },
   // Pass is the bright-red action, deliberately loud so it reads at a glance.
-  btnPass: { backgroundColor: colors.cardRed },
+  btnPass: { backgroundColor: colors.dangerBright, borderBottomColor: colors.dangerEdge },
   btnDisabled: { opacity: 0.4 },
-  btnText: { color: colors.textOnFelt, fontWeight: '700', fontSize: 16 },
+  btnText: { color: colors.textOnFelt, fontWeight: '800', fontSize: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
+  // Sort / Skip: the felt-light secondary chunky button, smaller than Play/Pass.
   btnSmall: {
-    backgroundColor: withAlpha(colors.white, 0.15),
-    minHeight: 44,
+    backgroundColor: colors.feltLight,
+    minHeight: 40,
     paddingVertical: spacing.xs + 2,
     paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: withAlpha(colors.white, 0.3),
+    borderRadius: radii.lg,
+    borderBottomWidth: 4,
+    borderBottomColor: colors.felt,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnSmallText: { color: colors.textOnFelt, fontWeight: '600', fontSize: typography.caption.fontSize },
+  btnSmallPressed: { borderBottomWidth: 0, transform: [{ translateY: 4 }] },
+  // The top-bar Skip button gets tighter horizontal padding so "Skip to end"
+  // fits the symmetric right column.
+  btnSkip: { paddingHorizontal: spacing.sm },
+  btnSmallText: { color: colors.textOnFelt, fontWeight: '800', fontSize: typography.caption.fontSize, textTransform: 'uppercase', letterSpacing: 0.3 },
   // Elapsed game clock in the top bar, sitting above the Skip button. Tabular
   // width would be ideal but RN has no cross-platform monospace; the fixed
   // right-align keeps it from jittering as the seconds tick.

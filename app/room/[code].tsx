@@ -300,7 +300,7 @@ function LiveTable({
       </View>
 
       <View style={styles.actionsRow}>
-        <Button title="Pass" variant="secondary" disabled={!canPass} onPress={onPass} style={styles.actionBtn} />
+        <Button title="Pass" variant="danger" disabled={!canPass} onPress={onPass} style={styles.actionBtn} />
         <Button title="Play" disabled={!isMyTurn || !selLegal} onPress={onPlay} style={styles.actionBtn} />
       </View>
     </View>
