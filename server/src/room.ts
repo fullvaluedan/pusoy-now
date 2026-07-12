@@ -134,6 +134,7 @@ export class GameRoom extends DurableObject<Env> {
     if (!join.rejoined) await this.autoFriend(userId);
     // A rejoin into a paused (deserted) game clears the abandon watchdog and
     // re-arms normal pacing immediately, instead of waiting for the next alarm.
+    await this.catchUpAuto();
     this.scheduleAuto();
     await this.persist();
     await this.ctx.storage.setAlarm(this.nextAlarm());
@@ -161,6 +162,7 @@ export class GameRoom extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (!this.room) return;
+    await this.catchUpAuto();
     const meta = ws.deserializeAttachment() as SocketMeta | null;
     if (!meta) return;
     let msg: { type?: string; action?: RoundAction };
@@ -254,7 +256,7 @@ export class GameRoom extends DurableObject<Env> {
     // its own broadcast (matching bot mode). This branch runs before the 30s
     // turn timeout because an auto delay (<=2.5s) is always sooner than the
     // deadline, so a bot seat plays here and never trips the timeout below.
-    if (this.room.phase === 'playing' && this.room.autoActAt != null && now >= this.room.autoActAt) {
+    if (this.room.phase === 'playing' && this.room.autoActAt != null && now >= this.room.autoActAt - 50) {
       this.room.autoActAt = null;
       const step = stepAutoSeat(this.room);
       if (step.acted) {
@@ -334,6 +336,19 @@ export class GameRoom extends DurableObject<Env> {
       await this.persist();
       await this.ctx.storage.setAlarm(this.nextAlarm());
     }
+  }
+
+  // Self-healing: if a scheduled auto action is more than a second past due, the
+  // alarm that should have consumed it was lost (evicted DO, early-fire skip, or
+  // an unlucky setAlarm overwrite). Run it now so a stalled table revives on the
+  // next client event instead of freezing until someone reconnects.
+  private async catchUpAuto(): Promise<void> {
+    if (!this.room) return;
+    if (this.room.phase !== 'playing' || this.room.autoActAt == null) return;
+    if (Date.now() < this.room.autoActAt + 1000) return;
+    this.room.autoActAt = null;
+    const step = stepAutoSeat(this.room);
+    if (step.acted) await this.afterProgress();
   }
 
   // If the current seat plays automatically (a bot, or a disconnected human) and
