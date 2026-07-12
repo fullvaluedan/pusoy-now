@@ -16,7 +16,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
-import { BigStat, Button, Card, CompactHeader, ScreenContainer } from '../../components/ui';
+import { BigStat, Button, Card, CompactHeader, ListRow, ScreenContainer } from '../../components/ui';
 import { colors, spacing, typography, withAlpha } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { fetchRanking, type RankRow } from '../../lib/friends';
@@ -89,31 +89,35 @@ function RankingContent() {
           </Text>
         </Card>
       ) : (
-        rows.map((row, i) => <RankCard key={row.userId} row={row} position={i + 1} />)
+        rows.map((row, i) => <RankRowItem key={row.userId} row={row} position={i + 1} />)
       )}
     </ScreenContainer>
   );
 }
 
-function RankCard({ row, position }: { row: RankRow; position: number }) {
+function RankRowItem({ row, position }: { row: RankRow; position: number }) {
   const winRatePct = Math.round(row.winRate * 100);
   return (
-    <Card style={[styles.rowCard, row.isSelf && styles.rowCardSelf]}>
-      <View style={styles.rowMain}>
-        <Text style={[styles.position, row.isSelf && styles.positionSelf]}>#{position}</Text>
-        <Avatar url={row.image} name={row.name ?? row.username ?? 'Player'} size={44} />
-        <View style={styles.rowText}>
-          {row.username ? <Text style={styles.username} ellipsizeMode="tail" numberOfLines={1}>@{row.username}</Text> : null}
-          <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
-            {row.name ?? 'Player'}
-          </Text>
-          <Text style={styles.supporting}>
-            {row.games} game{row.games === 1 ? '' : 's'} played, {winRatePct}% win rate
-          </Text>
+    <ListRow
+      style={row.isSelf ? styles.rowSelf : undefined}
+      leading={
+        <View style={styles.leadingWrap}>
+          <Text style={[styles.position, row.isSelf && styles.positionSelf]}>#{position}</Text>
+          <Avatar url={row.image} name={row.name ?? row.username ?? 'Player'} size={44} />
         </View>
-        <BigStat value={row.firsts} label="1st place" />
+      }
+      trailing={<BigStat value={row.firsts} label="1st place" />}
+    >
+      <View style={styles.rowText}>
+        {row.username ? <Text style={styles.username} ellipsizeMode="tail" numberOfLines={1}>@{row.username}</Text> : null}
+        <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
+          {row.name ?? 'Player'}
+        </Text>
+        <Text style={styles.supporting}>
+          {row.games} game{row.games === 1 ? '' : 's'} played, {winRatePct}% win rate
+        </Text>
       </View>
-    </Card>
+    </ListRow>
   );
 }
 
@@ -124,17 +128,15 @@ const styles = StyleSheet.create({
   loader: { marginTop: spacing.xl },
   emptyCard: { padding: spacing.lg, marginTop: spacing.md },
   emptyText: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
-  rowCard: { marginBottom: spacing.md },
-  rowCardSelf: {
+  rowSelf: {
     backgroundColor: withAlpha(colors.felt, 0.08),
-    borderWidth: 1,
     borderColor: colors.gold,
   },
-  rowMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  leadingWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   position: {
     ...typography.subheading,
     color: colors.textMuted,
-    width: 36,
+    width: 30,
   },
   positionSelf: { color: colors.felt },
   rowText: { flex: 1, minWidth: 0 },

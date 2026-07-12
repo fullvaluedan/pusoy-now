@@ -118,6 +118,71 @@ export function resolveCheckboxTokens(checked: boolean): CheckboxTokens {
     : { backgroundColor: colors.surface, borderColor: colors.overlay, showMark: false };
 }
 
+// ---------------------------------------------------------------------------
+// ListRow (Round 10 U6): chunky Duolingo-style tappable row tokens. Same
+// visual language as resolveButtonTokens - a fill, a darker "edge" rendered
+// as the row's bottom border for the 3D-tactile look, a resting border color
+// for the other three sides, and label text color. Rows share the button
+// system's pressed-state mechanic (resolvePressedTokens: swallow the edge,
+// nudge down by the same distance) rather than defining a second one, so a
+// row and a button feel like the same tactile family.
+// ---------------------------------------------------------------------------
+export type ListRowTone = 'default' | 'danger';
+
+export interface ListRowStateInput {
+  disabled?: boolean;
+  tone?: ListRowTone;
+}
+
+export interface ListRowTokens {
+  fill: string;
+  borderColor: string;
+  edge: string;
+  edgeWidth: number;
+  text: string;
+}
+
+// Resting border/edge thickness for a ListRow. Matches the chunky Button's
+// EDGE_WIDTH (4) so resolvePressedTokens' translateY (also 4) swallows a
+// ListRow's edge by exactly its own thickness, the same as it does for
+// Button - one shared pressed mechanic, no per-component tuning.
+const LISTROW_EDGE_WIDTH = 4;
+
+// Resolves the fill/border/edge/text tokens for a ListRow given its tone and
+// disabled state. Disabled wins over tone, mirroring resolveButtonTokens:
+// every tone collapses to the same pale disabled look rather than a dimmed
+// version of its own palette.
+export function resolveListRowTokens({ disabled, tone = 'default' }: ListRowStateInput = {}): ListRowTokens {
+  if (disabled) {
+    return {
+      fill: colors.disabledFill,
+      borderColor: colors.disabledFill,
+      edge: darken(colors.disabledFill, 0.22),
+      edgeWidth: LISTROW_EDGE_WIDTH,
+      text: colors.disabledText,
+    };
+  }
+
+  if (tone === 'danger') {
+    return {
+      fill: colors.white,
+      borderColor: colors.dangerBright,
+      edge: colors.dangerEdge,
+      edgeWidth: LISTROW_EDGE_WIDTH,
+      text: colors.dangerSoftText,
+    };
+  }
+
+  // default
+  return {
+    fill: colors.white,
+    borderColor: colors.creamEdge,
+    edge: colors.creamEdge,
+    edgeWidth: LISTROW_EDGE_WIDTH,
+    text: colors.textPrimary,
+  };
+}
+
 export type BackTarget = 'back' | 'home';
 
 // CompactHeader's guaranteed-back-chevron decision (R6): when the router has

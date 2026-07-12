@@ -123,18 +123,29 @@ const styles = StyleSheet.create({
   guestLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
   card: { marginBottom: spacing.md },
   cardSubtitle: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
-  label: { ...typography.label, color: colors.felt, fontWeight: '700', marginTop: spacing.sm, marginBottom: spacing.xs },
+  label: {
+    ...typography.label,
+    color: colors.felt,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   hint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.xs },
   optionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  // Chunky chip: 2px resting border + a darker 4px bottom edge, same 3D
+  // language as ListRow/Button/settings' difficulty picker.
   chip: {
     flex: 1,
     paddingVertical: spacing.md,
     borderRadius: radii.lg,
     alignItems: 'center',
     borderWidth: 2,
+    borderBottomWidth: 4,
   },
-  chipUnselected: { backgroundColor: colors.surface, borderColor: colors.border },
-  chipSelected: { backgroundColor: colors.felt, borderColor: colors.gold },
+  chipUnselected: { backgroundColor: colors.surface, borderColor: colors.border, borderBottomColor: colors.creamEdge },
+  chipSelected: { backgroundColor: colors.felt, borderColor: colors.gold, borderBottomColor: colors.goldEdge },
   chipText: { ...typography.bodyBold, color: colors.felt },
   chipTextSelected: { color: colors.textOnFelt },
   errorBanner: {

@@ -24,6 +24,12 @@ const TAB_ICON: Record<string, string> = {
   profile: '\u{1F464}', // bust silhouette
 };
 
+// Round 10 U6: taller bar, bigger icons, bolder active label - the tab bar
+// is the one UI surface visible on every screen, so it carries the most
+// weight in reading as "Duolingo, executed hard" at a glance.
+const TAB_BAR_HEIGHT = 72;
+const TAB_ICON_SIZE = 28;
+
 export default function TabsLayout() {
   return (
     <Tabs
@@ -33,13 +39,14 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
           backgroundColor: colors.cream,
-          borderTopWidth: 2,
+          borderTopWidth: 1,
           borderTopColor: colors.creamEdge,
-          height: 60,
+          height: TAB_BAR_HEIGHT,
+          paddingTop: 8,
         },
-        tabBarLabelStyle: { fontWeight: '700', fontSize: 12 },
+        tabBarLabelStyle: { fontWeight: '800', fontSize: 12 },
         tabBarIcon: ({ focused }) => (
-          <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>{TAB_ICON[route.name]}</Text>
+          <Text style={{ fontSize: TAB_ICON_SIZE, opacity: focused ? 1 : 0.5 }}>{TAB_ICON[route.name]}</Text>
         ),
       })}
     >

@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Avatar } from '../../components/Avatar';
-import { Button, Card, CompactHeader, Field, ScreenContainer } from '../../components/ui';
+import { Button, Card, CompactHeader, Field, ListRow, ScreenContainer } from '../../components/ui';
 import { colors, radii, spacing, typography, withAlpha } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { getLocalGuestName } from '../../lib/guest';
@@ -112,23 +112,21 @@ function FriendsContent() {
               {(data?.incoming.length ?? 0) > 0 ? (
                 <>
                   <Text style={styles.sectionTitle}>Requests</Text>
-                  <Card style={styles.listCard}>
-                    {data!.incoming.map((user, i) => (
-                      <UserRow key={user.userId} user={user} divider={i > 0}>
-                        <IncomingActions user={user} onDone={refresh} />
-                      </UserRow>
-                    ))}
-                  </Card>
+                  {data!.incoming.map((user) => (
+                    <UserRow key={user.userId} user={user}>
+                      <IncomingActions user={user} onDone={refresh} />
+                    </UserRow>
+                  ))}
                 </>
               ) : null}
               {(data?.outgoing.length ?? 0) > 0 ? (
-                <Card style={[styles.listCard, styles.outgoingCard]}>
-                  {data!.outgoing.map((user, i) => (
-                    <UserRow key={user.userId} user={user} divider={i > 0}>
+                <View style={styles.outgoingWrap}>
+                  {data!.outgoing.map((user) => (
+                    <UserRow key={user.userId} user={user}>
                       <OutgoingActions user={user} onDone={refresh} />
                     </UserRow>
                   ))}
-                </Card>
+                </View>
               ) : null}
             </View>
           ) : null}
@@ -250,18 +248,19 @@ function AddFriendSection({ onAdded }: { onAdded: () => void }) {
 
 // --- Shared row shell ---------------------------------------------------------
 
-function UserRow({ user, divider, children }: { user: FriendUser; divider: boolean; children: ReactNode }) {
+function UserRow({ user, children }: { user: FriendUser; children: ReactNode }) {
   return (
-    <View style={[styles.row, divider && styles.rowDivider]}>
-      <Avatar url={user.image} name={user.name ?? user.username ?? 'Player'} size={44} />
+    <ListRow
+      leading={<Avatar url={user.image} name={user.name ?? user.username ?? 'Player'} size={44} />}
+      trailing={children}
+    >
       <View style={styles.rowText}>
         {user.username ? <Text style={styles.username}>@{user.username}</Text> : null}
         <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
           {user.name ?? 'Player'}
         </Text>
       </View>
-      {children}
-    </View>
+    </ListRow>
   );
 }
 
@@ -339,21 +338,25 @@ function FriendsList({ friends, onChanged }: { friends: AcceptedFriend[]; onChan
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Friends</Text>
-      <Card style={styles.listCard}>
-        {friends.map((friend, i) => (
-          <View key={friend.userId} style={[styles.row, i > 0 && styles.rowDivider]}>
-            <Avatar url={friend.image} name={friend.name ?? friend.username ?? 'Player'} size={44} />
-            <View style={styles.rowText}>
-              {friend.username ? <Text style={styles.username}>@{friend.username}</Text> : null}
-              <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
-                {friend.name ?? 'Player'}
-              </Text>
+      {friends.map((friend) => (
+        <ListRow
+          key={friend.userId}
+          leading={<Avatar url={friend.image} name={friend.name ?? friend.username ?? 'Player'} size={44} />}
+          trailing={
+            <View style={styles.friendTrailing}>
+              <H2HChip h2h={friend.h2h} />
+              <FriendActions user={friend} onDone={onChanged} />
             </View>
-            <H2HChip h2h={friend.h2h} />
-            <FriendActions user={friend} onDone={onChanged} />
+          }
+        >
+          <View style={styles.rowText}>
+            {friend.username ? <Text style={styles.username}>@{friend.username}</Text> : null}
+            <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
+              {friend.name ?? 'Player'}
+            </Text>
           </View>
-        ))}
-      </Card>
+        </ListRow>
+      ))}
     </View>
   );
 }
@@ -415,23 +418,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...typography.label,
     color: colors.felt,
-    fontWeight: '700',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: spacing.sm,
   },
-  outgoingCard: { marginTop: spacing.sm },
+  outgoingWrap: { marginTop: spacing.sm },
   emptyCard: { padding: spacing.md },
   emptyText: { ...typography.body, color: colors.textMuted },
-  listCard: { paddingVertical: 0 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
-  },
-  rowDivider: {
-    borderTopWidth: 1,
-    borderTopColor: colors.overlay,
-  },
   rowText: { flex: 1, minWidth: 0 },
   username: { ...typography.bodyBold, color: colors.textPrimary },
   name: { ...typography.caption, color: colors.textMuted },
@@ -439,6 +433,10 @@ const styles = StyleSheet.create({
   // 44 is the floor for a tap target; the previous 40 undercut it.
   actionBtn: { minHeight: 44, paddingVertical: spacing.xs },
   pendingLabel: { ...typography.caption, color: colors.textFaint, marginRight: spacing.xs },
+  // H2H chip stacked above the Remove button in the friend row's trailing
+  // slot (was inline before ListRow; the row is narrower now that it is its
+  // own bordered card, so stacking keeps long usernames from squeezing it).
+  friendTrailing: { alignItems: 'flex-end', gap: spacing.xs },
   h2hChip: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,

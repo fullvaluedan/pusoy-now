@@ -137,12 +137,22 @@ export default function Matchmaking() {
 }
 
 const styles = StyleSheet.create({
-  card: { alignItems: 'center', marginTop: spacing.xl, paddingVertical: spacing.xxl },
+  // Chunkier resting border + darker bottom edge, the same 3D language as
+  // ListRow/Button, so the waiting-room card reads Duolingo-hard rather than
+  // a plain soft-shadow panel.
+  card: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    paddingVertical: spacing.xxl,
+    borderWidth: 2,
+    borderBottomWidth: 4,
+    borderColor: colors.creamEdge,
+  },
   countdown: { fontSize: 64, fontWeight: '800', color: colors.felt },
-  countLine: { ...typography.bodyBold, color: colors.textPrimary, marginTop: spacing.sm },
+  countLine: { ...typography.bodyBold, color: colors.textPrimary, marginTop: spacing.sm, fontWeight: '800' },
   subtleCopy: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
   matchedText: { ...typography.heading, color: colors.felt },
-  statusText: { ...typography.body, color: colors.textPrimary, textAlign: 'center' },
+  statusText: { ...typography.bodyBold, color: colors.textPrimary, textAlign: 'center' },
   retryBtn: { marginTop: spacing.lg, alignSelf: 'stretch' },
   cancelBtn: { marginTop: spacing.xl },
 });

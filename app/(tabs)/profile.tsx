@@ -17,9 +17,9 @@
 // rather than pointed at it.
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
-import { Button, Card, CompactHeader, ScreenContainer } from '../../components/ui';
+import { Button, CompactHeader, ListRow, ScreenContainer } from '../../components/ui';
 import { colors, spacing, typography } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { getLocalGuestName } from '../../lib/guest';
@@ -40,17 +40,19 @@ export default function ProfileTab() {
       <CompactHeader title="Profile" back={false} />
 
       {signedIn ? (
-        <Pressable onPress={() => router.push('/profile')}>
-          <Card style={styles.identityCard}>
-            <Avatar name={profile?.displayName ?? 'Player'} url={profile?.avatarUrl} size={56} />
-            <View style={styles.identityTextGroup}>
-              <Text style={styles.identityTitle}>Signed in</Text>
-              <Text style={styles.identitySubtitle} numberOfLines={1} ellipsizeMode="tail">
-                {profile?.displayName}
-              </Text>
-            </View>
-          </Card>
-        </Pressable>
+        <ListRow
+          leading={<Avatar name={profile?.displayName ?? 'Player'} url={profile?.avatarUrl} size={44} />}
+          chevron
+          onPress={() => router.push('/profile')}
+          style={styles.identityRow}
+        >
+          <View style={styles.identityTextGroup}>
+            <Text style={styles.identityTitle}>Signed in</Text>
+            <Text style={styles.identitySubtitle} numberOfLines={1} ellipsizeMode="tail">
+              {profile?.displayName}
+            </Text>
+          </View>
+        </ListRow>
       ) : (
         <View style={styles.guestWrap}>
           {guestName ? <Text style={styles.guestLine} numberOfLines={1} ellipsizeMode="tail">Playing as {guestName}</Text> : null}
@@ -63,26 +65,23 @@ export default function ProfileTab() {
       )}
 
       <View style={styles.menuSection}>
-        <Button
-          title="Scoreboard"
-          variant="ghost"
-          align="left"
+        <ListRow
+          label="Scoreboard"
+          leading={<Text style={styles.rowEmoji}>📊</Text>}
+          chevron
           onPress={() => router.push('/stats')}
-          style={styles.menuItem}
         />
-        <Button
-          title="Settings"
-          variant="ghost"
-          align="left"
+        <ListRow
+          label="Settings"
+          leading={<Text style={styles.rowEmoji}>⚙️</Text>}
+          chevron
           onPress={() => router.push('/settings')}
-          style={styles.menuItem}
         />
-        <Button
-          title="How to play"
-          variant="ghost"
-          align="left"
+        <ListRow
+          label="How to play"
+          leading={<Text style={styles.rowEmoji}>📖</Text>}
+          chevron
           onPress={() => router.push('/how-to-play')}
-          style={styles.menuItem}
         />
       </View>
     </ScreenContainer>
@@ -90,17 +89,12 @@ export default function ProfileTab() {
 }
 
 const styles = StyleSheet.create({
-  identityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
+  identityRow: { marginBottom: spacing.lg },
   identityTextGroup: { flex: 1, minWidth: 0 },
   identityTitle: { ...typography.bodyBold, color: colors.textPrimary },
   identitySubtitle: { ...typography.caption, color: colors.textMuted, marginTop: 2, flex: 1, minWidth: 0 },
   guestWrap: { marginBottom: spacing.lg, gap: spacing.sm },
   guestLine: { ...typography.caption, color: colors.textMuted, flex: 1, minWidth: 0 },
   menuSection: { marginTop: spacing.sm },
-  menuItem: { marginBottom: spacing.xs },
+  rowEmoji: { fontSize: 22 },
 });

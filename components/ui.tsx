@@ -25,9 +25,11 @@ import {
   resolveBackTarget,
   resolveButtonTokens,
   resolveCheckboxTokens,
+  resolveListRowTokens,
   resolvePressedTokens,
   shouldShowFieldError,
   type ButtonVariant,
+  type ListRowTone,
 } from '../lib/uiState';
 
 // ---------------------------------------------------------------------------
@@ -238,6 +240,130 @@ const buttonStyles = StyleSheet.create({
   subtext: { fontSize: typography.caption.fontSize, marginTop: 2, opacity: 0.75 },
   dotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },
   dot: { width: 8, height: 8, borderRadius: 4 },
+});
+
+// ---------------------------------------------------------------------------
+// ListRow (Round 10 U6, "Duolingo, executed hard"): a full-width tappable
+// row styled as a chunky bordered card, replacing the old thin
+// divider-separated rows on the menu screens. Every row is its own
+// 2px-bordered white card with a darker 4px bottom "edge" (resolveListRowTokens,
+// the same visual language as the chunky Button), a bold label, and three
+// optional slots: `leading` (emoji/icon/avatar), `trailing` (chevron / a
+// Switch / value text / a cluster of action buttons), and `children` (an
+// override for the label/subtitle text block when a row needs richer
+// multi-line content than one label + one subtitle, e.g. a leaderboard row's
+// username + name + stats). Pass `onPress` to make it tappable - it presses
+// down and swallows the edge exactly like Button (resolvePressedTokens);
+// omit it for a static row whose interaction lives in `trailing` instead
+// (e.g. a friend row with its own Accept/Remove buttons), so taps on those
+// buttons never fight a row-level press.
+// ---------------------------------------------------------------------------
+interface ListRowProps {
+  label?: string;
+  subtitle?: string;
+  leading?: ReactNode;
+  trailing?: ReactNode;
+  // Shows the default ">" chevron in the trailing slot when true and no
+  // explicit `trailing` node is passed (nav rows like Settings > Profile).
+  chevron?: boolean;
+  children?: ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+  tone?: ListRowTone;
+  style?: StyleProp<ViewStyle>;
+}
+
+export function ListRow({ label, subtitle, leading, trailing, chevron, children, onPress, disabled, tone, style }: ListRowProps) {
+  const tokens = resolveListRowTokens({ disabled, tone });
+
+  const textBlock = children ?? (
+    <View style={listRowStyles.textGroup}>
+      {label ? (
+        <Text style={[listRowStyles.label, { color: tokens.text }]} numberOfLines={1} ellipsizeMode="tail">
+          {label}
+        </Text>
+      ) : null}
+      {subtitle ? (
+        <Text style={listRowStyles.subtitle} numberOfLines={1} ellipsizeMode="tail">
+          {subtitle}
+        </Text>
+      ) : null}
+    </View>
+  );
+
+  const content = (
+    <>
+      {leading ? <View style={listRowStyles.leading}>{leading}</View> : null}
+      {textBlock}
+      {trailing ? (
+        <View style={listRowStyles.trailing}>{trailing}</View>
+      ) : chevron ? (
+        <View style={listRowStyles.chevron} />
+      ) : null}
+    </>
+  );
+
+  const restingStyle = {
+    backgroundColor: tokens.fill,
+    borderColor: tokens.borderColor,
+    borderBottomWidth: tokens.edgeWidth,
+    borderBottomColor: tokens.edge,
+  };
+
+  if (!onPress) {
+    return <View style={[listRowStyles.row, restingStyle, style]}>{content}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => {
+        const pressedTokens = pressed && !disabled ? resolvePressedTokens() : null;
+        return [
+          listRowStyles.row,
+          restingStyle,
+          pressedTokens
+            ? {
+                borderBottomWidth: pressedTokens.edgeWidth,
+                transform: [{ translateY: pressedTokens.translateY }],
+              }
+            : null,
+          style,
+        ];
+      }}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
+const listRowStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 60,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.lg,
+    borderWidth: 2,
+    marginBottom: spacing.sm,
+  },
+  leading: { marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  textGroup: { flex: 1, minWidth: 0 },
+  label: { fontSize: typography.bodyBold.fontSize, fontWeight: typography.bodyBold.fontWeight },
+  subtitle: { fontSize: typography.caption.fontSize, color: colors.textMuted, marginTop: 2 },
+  trailing: { marginLeft: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  // Bottom-left... top-right corner of a square, rotated 45deg: reads as a
+  // right-pointing ">" chevron (the mirror of CompactHeader's back "<").
+  chevron: {
+    width: 10,
+    height: 10,
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+    borderColor: colors.textMuted,
+    transform: [{ rotate: '45deg' }],
+  },
 });
 
 // ---------------------------------------------------------------------------

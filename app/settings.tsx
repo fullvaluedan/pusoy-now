@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import Constants from 'expo-constants';
-import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
+import { CompactHeader, Card, ListRow, ScreenContainer } from '../components/ui';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { AppSettings, DEFAULT_SETTINGS, loadSettings, saveSettings } from '../lib/settings';
 import type { BotLevel } from '../lib/pusoy/types';
@@ -75,26 +75,39 @@ export default function Settings() {
   return (
     <ScreenContainer scroll>
       <CompactHeader title="Settings" />
+
       {/* Sound & Haptics group */}
-      <Card>
-        <Text style={styles.groupHeading}>Sound & Haptics</Text>
-        <Row
-          label="Sound"
-          type="toggle"
-          value={settings.sound}
-          onToggle={handleSoundToggle}
-        />
-        <Row
-          label="Haptics"
-          type="toggle"
-          value={settings.haptics}
-          onToggle={handleHapticsToggle}
-        />
-      </Card>
+      <Text style={styles.groupHeading}>Sound & Haptics</Text>
+      <ListRow
+        label="Sound"
+        leading={<Text style={styles.rowEmoji}>🔊</Text>}
+        onPress={() => handleSoundToggle(!settings.sound)}
+        trailing={
+          <Switch
+            value={settings.sound}
+            onValueChange={handleSoundToggle}
+            trackColor={{ false: colors.textMuted, true: colors.felt }}
+            thumbColor={colors.white}
+          />
+        }
+      />
+      <ListRow
+        label="Haptics"
+        leading={<Text style={styles.rowEmoji}>📳</Text>}
+        onPress={() => handleHapticsToggle(!settings.haptics)}
+        trailing={
+          <Switch
+            value={settings.haptics}
+            onValueChange={handleHapticsToggle}
+            trackColor={{ false: colors.textMuted, true: colors.felt }}
+            thumbColor={colors.white}
+          />
+        }
+      />
 
       {/* Game group: saved bot difficulty (Round 9 U2) */}
-      <Card style={styles.card}>
-        <Text style={styles.groupHeading}>Game</Text>
+      <Text style={[styles.groupHeading, styles.groupHeadingSpaced]}>Game</Text>
+      <Card style={styles.difficultyCard}>
         <Text style={styles.rowLabel}>Difficulty</Text>
         <View style={styles.difficultyRow}>
           {DIFFICULTY_OPTIONS.map((option) => {
@@ -117,34 +130,20 @@ export default function Settings() {
       </Card>
 
       {/* Account group */}
-      <Card style={styles.card}>
-        <Text style={styles.groupHeading}>Account</Text>
-        <Row
-          label="Profile"
-          type="nav"
-          onPress={() => router.push('/profile')}
-        />
-        <Row
-          label="Delete account"
-          type="nav"
-          onPress={() => router.push('/delete-account')}
-        />
-      </Card>
+      <Text style={[styles.groupHeading, styles.groupHeadingSpaced]}>Account</Text>
+      <ListRow label="Profile" leading={<Text style={styles.rowEmoji}>👤</Text>} chevron onPress={() => router.push('/profile')} />
+      <ListRow
+        label="Delete account"
+        leading={<Text style={styles.rowEmoji}>🗑️</Text>}
+        tone="danger"
+        chevron
+        onPress={() => router.push('/delete-account')}
+      />
 
       {/* Legal group */}
-      <Card style={styles.card}>
-        <Text style={styles.groupHeading}>Legal</Text>
-        <Row
-          label="Privacy Policy"
-          type="nav"
-          onPress={() => router.push('/privacy')}
-        />
-        <Row
-          label="Terms of Service"
-          type="nav"
-          onPress={() => router.push('/terms')}
-        />
-      </Card>
+      <Text style={[styles.groupHeading, styles.groupHeadingSpaced]}>Legal</Text>
+      <ListRow label="Privacy Policy" leading={<Text style={styles.rowEmoji}>📜</Text>} chevron onPress={() => router.push('/privacy')} />
+      <ListRow label="Terms of Service" leading={<Text style={styles.rowEmoji}>📄</Text>} chevron onPress={() => router.push('/terms')} />
 
       {/* Version footer */}
       <Text style={styles.version}>Prends v{appVersion}</Text>
@@ -153,90 +152,49 @@ export default function Settings() {
   );
 }
 
-// Reusable row component for settings: toggle on the right or nav chevron.
-interface RowProps {
-  label: string;
-  type: 'toggle' | 'nav';
-  value?: boolean;
-  onToggle?: (value: boolean) => void;
-  onPress?: () => void;
-}
-
-function Row({ label, type, value, onToggle, onPress }: RowProps) {
-  if (type === 'toggle') {
-    return (
-      <Pressable style={styles.row} onPress={() => onToggle?.(!value)}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        <Switch
-          value={value ?? false}
-          onValueChange={onToggle}
-          trackColor={{ false: colors.textMuted, true: colors.felt }}
-          thumbColor={colors.white}
-        />
-      </Pressable>
-    );
-  }
-
-  // type === 'nav'
-  return (
-    <Pressable style={styles.row} onPress={onPress}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.chevron}>&gt;</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
+  // Bold uppercase section label, Duolingo-style, above each stack of rows.
   groupHeading: {
     ...typography.label,
     color: colors.felt,
-    marginBottom: spacing.md,
-    fontWeight: '700',
+    marginBottom: spacing.sm,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  card: {
-    marginBottom: spacing.md,
-  },
+  groupHeadingSpaced: { marginTop: spacing.lg },
+  difficultyCard: { marginBottom: spacing.sm },
   difficultyRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.xs,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
+  // Chunky chip: 2px resting border + a darker 4px bottom edge, same 3D
+  // language as ListRow/Button, so the difficulty picker reads as part of
+  // the same tactile system as the rows around it.
   difficultyOption: {
     flex: 1,
     paddingVertical: spacing.md,
     borderRadius: radii.lg,
     alignItems: 'center',
     borderWidth: 2,
+    borderBottomWidth: 4,
   },
-  difficultyOptionUnselected: { backgroundColor: colors.surface, borderColor: colors.border },
-  difficultyOptionSelected: { backgroundColor: colors.felt, borderColor: colors.gold },
+  difficultyOptionUnselected: { backgroundColor: colors.surface, borderColor: colors.border, borderBottomColor: colors.creamEdge },
+  difficultyOptionSelected: { backgroundColor: colors.felt, borderColor: colors.gold, borderBottomColor: colors.goldEdge },
   difficultyOptionText: { ...typography.bodyBold, color: colors.felt },
   difficultyOptionTextSelected: { color: colors.textOnFelt },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.overlay,
-  },
   rowLabel: {
-    ...typography.body,
+    ...typography.bodyBold,
     color: colors.textPrimary,
   },
-  chevron: {
-    ...typography.body,
-    color: colors.textMuted,
-  },
+  rowEmoji: { fontSize: 22 },
   version: {
     ...typography.caption,
     color: colors.textFaint,
     textAlign: 'center',
     marginTop: spacing.xl,
-    marginBottom: spacing.lg,
-  },
-  backBtn: {
     marginBottom: spacing.lg,
   },
 });
