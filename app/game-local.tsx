@@ -232,6 +232,20 @@ function TablePanel({ children }: { children: ReactNode }) {
 // this line; at 412x915 it is ~863px and stays in the roomy default layout.
 const COMPACT_PANEL_HEIGHT = 640;
 
+// Protected minimum height for the center pool region. The pool never shrinks
+// (owner requirement): it reserves room for a full-size PlayingCard
+// (CARD_HEIGHT) plus its caption line above and combo-name line below, so the
+// trick display can never clip even on the shortest phone. All the height on a
+// short viewport is reclaimed from the controls, opponent seats, and margins
+// instead -- never from this. Value = CARD_HEIGHT (92) + caption + name + the
+// tight compact margins between them.
+const POOL_MIN_HEIGHT = CARD_HEIGHT + 40;
+
+// Compact PASS/PLAY shrink to a 36px visual height; this hitSlop restores a
+// >=44px effective tap target (36 + 4 top + 4 bottom = 44) so the smaller-
+// looking controls stay just as easy to hit.
+const CENTER_ACTION_HIT_SLOP = { top: 4, bottom: 4, left: 4, right: 4 } as const;
+
 // Usable panel height for a given window height, mirroring TablePanel's
 // reservation (narrow phones have no side margin, so vMargin drops out). Kept
 // as a pure helper so the in-progress screen derives the exact same budget the
@@ -289,31 +303,25 @@ function SeatPlate({
         name={name}
         url={avatarUrl}
         localSource={avatarSource}
-        size={compact ? 36 : 48}
+        size={compact ? 28 : 48}
         framed
         active={isCurrent && !finished}
         style={compact ? styles.oppAvatarMarginCompact : styles.oppAvatarMargin}
       />
-      <View style={styles.oppNameRow}>
-        <Text style={styles.oppName} numberOfLines={1}>{name}</Text>
+      <View style={[styles.oppNameRow, compact && styles.oppNameRowCompact]}>
+        <Text style={[styles.oppName, compact && styles.oppNameCompact]} numberOfLines={1}>{name}</Text>
+        {/* Micro seat (compact): one text line only -- name, the PASS/place
+            status chip (null until it applies), and the card-count chip. The
+            face-down stack art is dropped entirely, reclaiming its ~50px so the
+            full-size pool + controls stay on-screen. */}
+        <SeatChip passed={passed} place={place} />
         {compact ? (
-          // Count moves into the name row (the stack art below is hidden).
           <View style={styles.oppCountChip}>
             <Text style={styles.oppCountChipText}>{count}</Text>
           </View>
-        ) : (
-          <SeatChip passed={passed} place={place} />
-        )}
+        ) : null}
       </View>
-      {compact ? (
-        // With the stack hidden, PASS/place status still needs a home; show it
-        // under the name so the seat never loses that cue.
-        passed || place !== null ? (
-          <View style={styles.oppStatusRow}>
-            <SeatChip passed={passed} place={place} />
-          </View>
-        ) : null
-      ) : (
+      {compact ? null : (
         <View style={styles.oppStackRow}>
           <View style={styles.oppStackWrap}>
             <OpponentCardStack count={count} small />
@@ -354,7 +362,7 @@ function TopBar({
   compact?: boolean;
 }) {
   return (
-    <View style={styles.topBar}>
+    <View style={[styles.topBar, compact && styles.topBarCompact]}>
       <Pressable onPress={onBack} hitSlop={12} style={[styles.topBarSide, styles.topBarLeft]}>
         <Text style={styles.topBarBack}>{'←'}</Text>
       </Pressable>
@@ -367,9 +375,13 @@ function TopBar({
         ) : null}
       </View>
       <View style={[styles.topBarSide, styles.topBarRight]}>
-        {timer ? <Text style={styles.timerText}>{timer}</Text> : null}
+        {timer ? <Text style={[styles.timerText, compact && styles.timerTextCompact]}>{timer}</Text> : null}
         {onSkip ? (
-          <Pressable style={({ pressed }) => [styles.btnSmall, styles.btnSkip, pressed && styles.btnSmallPressed]} onPress={onSkip}>
+          <Pressable
+            style={({ pressed }) => [styles.btnSmall, styles.btnSkip, compact && styles.btnSkipCompact, pressed && styles.btnSmallPressed]}
+            hitSlop={compact ? 7 : undefined}
+            onPress={onSkip}
+          >
             <Text style={styles.btnSmallText} numberOfLines={1}>{compact ? 'Skip' : 'Skip to end'}</Text>
           </Pressable>
         ) : null}
@@ -859,25 +871,26 @@ export default function LocalGameScreen() {
         {/* Center: the played pool is the hero, with the two actions centered
             around it -- Pass above, Play below -- so both sit in the middle of
             the table, equally reachable and never mis-tapped for each other.
-            This is the only flexing region: on short viewports the pool shrinks
-            (tighter overlap + scale) while the controls and hand fan below keep
-            their intrinsic height. */}
+            The center is the flex:1 region that absorbs leftover height, but
+            the POOL inside it never shrinks: trickWrap holds a protected
+            full-size minHeight. On short viewports the controls (compact 36px)
+            and the surrounding chrome give up height instead. */}
         <View style={styles.center}>
           <Pressable
             style={({ pressed }) => [styles.btn, styles.btnPass, styles.centerActionBtn, compact && styles.centerActionBtnCompact, pressed && !(!isMyTurn || lead === null) && styles.btnPressed, (!isMyTurn || lead === null) && styles.btnDisabled]}
+            hitSlop={compact ? CENTER_ACTION_HIT_SLOP : undefined}
             disabled={!isMyTurn || lead === null}
             onPress={onPass}
           >
             <Text style={styles.btnText}>Pass</Text>
           </Pressable>
 
-          {/* Pool wrapper: the ONE flexing region. flexShrink lets it (and only
-              it) give up height when the center box is too short, and overflow
-              hidden clips the pool rather than letting it push Pass/Play out of
-              the center's bounds -- so on any viewport the two controls stay
-              fully visible while the played cards are what shrink. In the roomy
-              layout there is slack, so the pool renders at full size and the
-              group sits centered exactly as before. */}
+          {/* Pool wrapper: the protected region. It reserves POOL_MIN_HEIGHT
+              (a full-size PlayingCard + caption + name) at every viewport, so
+              the played combo always renders full size and never clips. It does
+              NOT shrink -- the controls and chrome around it do -- reversing the
+              rejected R8 design where the pool was the thing that gave up height
+              and ended up a clipped sliver. */}
           <View style={styles.trickWrap}>
             {lastPlay ? (
               <View style={[styles.trickArea, compact && styles.trickAreaCompact]}>
@@ -895,12 +908,14 @@ export default function LocalGameScreen() {
                 </Text>
                 <View style={[styles.trickCards, compact && styles.trickCardsCompact]}>
                   {lastPlay.combo.cards.map((c, i) => (
-                    <View key={c.id} style={{ marginLeft: i === 0 ? 0 : compact ? -14 : -22, zIndex: 10 + i }}>
-                      {/* Compact renders the pool as small cards (54px vs 92px): a
-                          real layout saving -- a transform scale would only shrink
-                          it visually while still reserving full height -- so the
-                          Pass/Play controls below never get pushed off-screen. */}
-                      <PlayingCard card={c} small={compact} />
+                    <View key={c.id} style={{ marginLeft: i === 0 ? 0 : -22, zIndex: 10 + i }}>
+                      {/* The pool is the hero: cards ALWAYS render at full
+                          PlayingCard size (CARD_HEIGHT), at every viewport. On
+                          short phones the height comes from shrinking everything
+                          else (controls, seats, chrome) -- never the pool -- and
+                          trickWrap reserves a full-size minHeight so the played
+                          combo, its caption, and its name never clip. */}
+                      <PlayingCard card={c} />
                     </View>
                   ))}
                 </View>
@@ -919,6 +934,7 @@ export default function LocalGameScreen() {
 
           <Pressable
             style={({ pressed }) => [styles.btn, styles.btnPrimary, styles.centerActionBtn, compact && styles.centerActionBtnCompact, pressed && !(!isMyTurn || !selLegal) && styles.btnPressed, (!isMyTurn || !selLegal) && styles.btnDisabled]}
+            hitSlop={compact ? CENTER_ACTION_HIT_SLOP : undefined}
             disabled={!isMyTurn || !selLegal}
             onPress={onPlay}
           >
@@ -944,14 +960,14 @@ export default function LocalGameScreen() {
             banner renders inside it (centered) instead of absolutely
             overlapping the toolbar/Sort row, so the Sort button never shifts
             between turns -- the strip is always present during play. */}
-        <View style={styles.bannerStrip} pointerEvents="none">
+        <View style={[styles.bannerStrip, compact && styles.bannerStripCompact]} pointerEvents="none">
           {isMyTurn && (
             <View style={styles.turnBanner}>
               <Text style={styles.turnBannerText}>Your turn</Text>
             </View>
           )}
         </View>
-        <View style={styles.handToolbar}>
+        <View style={[styles.handToolbar, compact && styles.handToolbarCompact]}>
           <View style={styles.handToolbarLeft}>
             <Avatar
               name={humanDisplayName}
@@ -1282,6 +1298,12 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
   },
+  // Short-viewport: trim the bar's own vertical padding (the Skip button and
+  // timer shrink alongside) to reclaim height for the full-size pool.
+  topBarCompact: {
+    paddingTop: spacing.xs,
+    paddingBottom: 2,
+  },
   topBarSide: { justifyContent: 'center' },
   // Symmetric side columns (R2): both 96px so the title + turn chip sit at the
   // true optical center of the bar. The back chevron is left-aligned inside
@@ -1343,12 +1365,14 @@ const styles = StyleSheet.create({
   },
   // The middle seat sits higher, arcing the row around the table's far edge.
   oppBoxRaised: { marginTop: 0 },
-  // Short-viewport: a shorter plate (less padding, smaller top offset) to go
-  // with the smaller avatar and hidden stack art.
+  // Short-viewport: a micro seat -- tight padding, a small top offset, and a
+  // narrow min width to go with the 28px avatar, single text line, and dropped
+  // stack art. This is the row the layout compresses first (never the pool) to
+  // free height on the shortest phones.
   oppBoxCompact: {
-    paddingVertical: spacing.xs,
-    marginTop: spacing.xs,
-    minWidth: 84,
+    paddingVertical: 3,
+    marginTop: 2,
+    minWidth: 76,
   },
   // Count chip carried in the name row when the stack art is hidden (compact).
   oppCountChip: {
@@ -1361,9 +1385,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   oppCountChipText: { color: colors.felt, fontSize: 11, fontWeight: '800' },
-  // Holds the PASS/place chip under the name in compact mode (the stack row,
-  // which normally carries status, is hidden).
-  oppStatusRow: { marginTop: spacing.xs, flexDirection: 'row', alignItems: 'center' },
   // The avatar's own turn-ring (see components/Avatar.tsx) now carries most of
   // the "whose turn" signal, so the plate itself only needs a whisper of gold
   // rather than a full wash + border.
@@ -1374,9 +1395,13 @@ const styles = StyleSheet.create({
   },
   oppBoxDone: { opacity: 0.55 },
   oppAvatarMargin: { marginBottom: spacing.sm },
-  oppAvatarMarginCompact: { marginBottom: spacing.xs },
+  oppAvatarMarginCompact: { marginBottom: 2 },
   oppNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  // Micro seat: no bottom margin (single line, nothing below it) and a tighter
+  // gap so name + status + count sit compactly on one row.
+  oppNameRowCompact: { marginBottom: 0, gap: 4 },
   oppName: { color: colors.textOnFelt, fontSize: 15, fontWeight: '700' },
+  oppNameCompact: { fontSize: 13 },
   oppStackRow: { flexDirection: 'row', alignItems: 'center' },
   oppStackWrap: { position: 'relative' },
   cardCountBadge: {
@@ -1408,22 +1433,24 @@ const styles = StyleSheet.create({
 
   // Center pool — the current play is the hero, sitting bare on the felt.
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.md, minHeight: 120 },
-  // The one flexing region between Pass and Play. flexShrink 1 + minHeight 0
-  // let it surrender height first; overflow hidden clips the pool instead of
-  // pushing the controls out of the center's bounds. Roomy viewports leave it
-  // at natural size (no shrink), so nothing changes there.
+  // The center pool region. It is NEVER the flexing/shrinking region anymore
+  // (the rejected R8 design let it shrink + clip to a sliver). Instead it holds
+  // a protected minHeight sized to a full PlayingCard + caption + name, so the
+  // trick display always renders at full size and never clips. On short
+  // viewports the surrounding chrome shrinks to make room; the center box (a
+  // flex:1 parent) donates its slack here first. No overflow:hidden -- the
+  // ghost discard layer below is the only thing that could bleed, and it is
+  // hidden in compact and has slack in the roomy layout.
   trickWrap: {
-    flexShrink: 1,
-    minHeight: 0,
-    overflow: 'hidden',
+    minHeight: POOL_MIN_HEIGHT,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   trickArea: { alignItems: 'center', justifyContent: 'center' },
-  // Short-viewport: nothing to scale (the pool already shrinks by rendering
-  // small cards, which is a real layout saving); kept as a hook for any future
-  // compact-only pool tweaks.
+  // Short-viewport hook. The pool itself never scales (full-size cards at every
+  // viewport); only the caption/name margins tighten (trickCaptionCompact /
+  // trickCardsCompact) so the full-size combo still fits POOL_MIN_HEIGHT.
   trickAreaCompact: {},
   trickCaption: {
     color: colors.textOnFeltMuted,
@@ -1432,7 +1459,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: spacing.sm,
   },
-  trickCaptionCompact: { marginBottom: spacing.xs },
+  trickCaptionCompact: { marginBottom: 2 },
   // The previous play, ghosted beneath the current one like a discard pile.
   trickGhost: {
     position: 'absolute',
@@ -1441,7 +1468,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-5deg' }, { translateY: -10 }],
   },
   trickCards: { flexDirection: 'row', justifyContent: 'center', marginBottom: spacing.sm },
-  trickCardsCompact: { marginBottom: spacing.xs },
+  trickCardsCompact: { marginBottom: 2 },
   trickName: { color: colors.gold, fontSize: typography.label.fontSize, fontWeight: '700' },
   trickEmpty: { color: withAlpha(colors.white, 0.8), fontSize: typography.body.fontSize, paddingVertical: 30 },
   error: { color: colors.danger, marginTop: spacing.sm + 2, fontWeight: '600' },
@@ -1458,8 +1485,8 @@ const styles = StyleSheet.create({
   // region keeps more room for the pool + controls (the hand fan itself keeps
   // its intrinsic height -- only chrome shrinks).
   bottomCompact: {
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.sm,
+    paddingTop: 2,
+    paddingBottom: spacing.xs,
   },
   // Active-turn highlight on the whole hand area: a gold top edge plus a very
   // faint gold wash, matching the seat-plate active state so the two read as
@@ -1491,6 +1518,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Short-viewport: a slimmer headroom strip above the toolbar. The gold "Your
+  // turn" banner still centers in it; a couple px reclaimed for the pool.
+  bannerStripCompact: { height: 14 },
   turnBanner: {
     backgroundColor: colors.gold,
     paddingHorizontal: spacing.md,
@@ -1510,6 +1540,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg - 4,
     marginBottom: spacing.xs + 2,
   },
+  // Short-viewport: pull the hand fan up nearer the Sort/name toolbar.
+  handToolbarCompact: { marginBottom: 2 },
   handToolbarLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   youName: { color: colors.textOnFelt, fontSize: typography.caption.fontSize, fontWeight: '700', maxWidth: 110 },
   selLabel: { color: colors.textOnFeltMuted, fontSize: typography.caption.fontSize },
@@ -1539,11 +1571,16 @@ const styles = StyleSheet.create({
     minWidth: 150,
     marginVertical: spacing.md,
   },
-  // Short-viewport: tighten the vertical margin around Pass/Play so the pool
-  // and controls fit without pushing the hand off-screen. minHeight (44) is
-  // kept so the tap target never shrinks.
+  // Short-viewport: the pool stays full size, so PASS/PLAY give up the height
+  // instead. Visual height drops to 36 (from 44) with tighter padding and a
+  // narrower min width; the buttons keep their bold caps. The tap target is
+  // kept at >=44 via hitSlop on the Pressable (see centerActionHitSlop), so the
+  // control only looks smaller -- it is still as easy to hit.
   centerActionBtnCompact: {
-    marginVertical: 4,
+    minHeight: 36,
+    paddingVertical: 6,
+    minWidth: 96,
+    marginVertical: 3,
   },
   feedbackRow: {
     alignItems: 'center',
@@ -1595,6 +1632,9 @@ const styles = StyleSheet.create({
   // The top-bar Skip button gets tighter horizontal padding so "Skip to end"
   // fits the symmetric right column.
   btnSkip: { paddingHorizontal: spacing.sm },
+  // Short-viewport: shorter Skip (label is just "Skip" here) so the top bar
+  // reclaims height. hitSlop on the Pressable keeps the effective tap >=44.
+  btnSkipCompact: { minHeight: 30, paddingVertical: 2 },
   btnSmallText: { color: colors.textOnFelt, fontWeight: '800', fontSize: typography.caption.fontSize, textTransform: 'uppercase', letterSpacing: 0.3 },
   // Elapsed game clock in the top bar, sitting above the Skip button. Tabular
   // width would be ideal but RN has no cross-platform monospace; the fixed
@@ -1606,6 +1646,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     letterSpacing: 0.5,
   },
+  // Short-viewport: pull the timer nearly flush to the Skip button beneath it,
+  // shaving a few px off the top bar's right column.
+  timerTextCompact: { marginBottom: 1 },
   // The only ghost button sits on the cream finish card, not on the felt, so it
   // takes the dark ink. White-on-cream was effectively invisible.
   btnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.felt },
