@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Platform, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, Header, ScreenContainer } from '../components/ui';
+import { Button, Card, CompactHeader, ScreenContainer } from '../components/ui';
 import { colors, spacing, typography } from '../lib/theme';
 import { useAuth } from '../lib/auth';
 import { authClient, AUTH_BASE_URL } from '../lib/authClient';
@@ -107,13 +107,13 @@ export default function Matchmaking() {
 
   return (
     <ScreenContainer>
-      <Header title="Finding players" />
+      <CompactHeader title="Quick match" onBack={onCancel} />
 
       <Card style={styles.card}>
         {state.status === 'error' ? (
           <>
             <Text style={styles.statusText}>Lost the connection to the queue.</Text>
-            <Button title="Try again" onPress={onRetry} style={styles.retryBtn} />
+            <Button title="Try again" variant="primary" onPress={onRetry} style={styles.retryBtn} />
           </>
         ) : state.status === 'matched' ? (
           <>
@@ -130,7 +130,7 @@ export default function Matchmaking() {
       </Card>
 
       {state.status !== 'matched' ? (
-        <Button title="Cancel" variant="ghost" onPress={onCancel} style={styles.cancelBtn} />
+        <Button title="Cancel" variant="danger" onPress={onCancel} style={styles.cancelBtn} />
       ) : null}
     </ScreenContainer>
   );

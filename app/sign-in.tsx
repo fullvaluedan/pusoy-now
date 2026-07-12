@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
-import { Button, Checkbox, Field, ScreenContainer } from '../components/ui';
+import { Button, Checkbox, CompactHeader, Field, ScreenContainer } from '../components/ui';
 import { colors, providerBrand, radii, spacing, typography } from '../lib/theme';
 import { useAuth, type SocialProvider } from '../lib/auth';
 import { validateResetEmail, validateSignIn, validateSignUp } from '../lib/authForms';
@@ -192,6 +192,7 @@ export default function SignIn() {
   if (loading) {
     return (
       <ScreenContainer>
+        <CompactHeader title="Sign in" />
         <ActivityIndicator color={colors.felt} />
       </ScreenContainer>
     );
@@ -201,6 +202,7 @@ export default function SignIn() {
   if (session) {
     return (
       <ScreenContainer scroll>
+        <CompactHeader title="Sign in" />
         <Text style={styles.title}>Signed in</Text>
         <Text style={styles.subtitle}>
           You are signed in as {profile?.displayName ?? 'Player'}. Your name and picture show at your seat.
@@ -212,7 +214,6 @@ export default function SignIn() {
             router.replace('/');
           }}
         />
-        <Button title="Back" variant="ghost" onPress={() => router.replace('/')} />
       </ScreenContainer>
     );
   }
@@ -221,6 +222,7 @@ export default function SignIn() {
   if (phase === 'pending-verification') {
     return (
       <ScreenContainer scroll>
+        <CompactHeader title="Sign in" />
         <Text style={styles.title}>Check your email</Text>
         <Text style={styles.subtitle}>
           We sent a verification link to {pendingEmail ?? 'your email'}. Open it to finish, then come back and sign in.
@@ -240,16 +242,28 @@ export default function SignIn() {
   }
 
   // Forms -------------------------------------------------------------------
+  // The default sign-in mode must fit one viewport at 360x640 with no scroll
+  // (R7) -- it drops the ScrollView, the duplicate in-screen title (the
+  // CompactHeader above already says "Sign in"), shortens the subtitle,
+  // shrinks every button's height via compactBtnStyle, and hides the dormant
+  // TikTok placeholder. Sign-up and password-reset have more fields and are
+  // allowed to scroll, so they keep the full-size layout.
+  const compact = mode === 'sign-in';
   const title = mode === 'sign-up' ? 'Create account' : mode === 'reset' ? 'Reset password' : 'Sign in';
   const submitLabel = mode === 'sign-up' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in';
+  const compactBtnStyle = compact ? styles.compactBtn : undefined;
 
   return (
-    <ScreenContainer scroll>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.subtitle}>
-        {mode === 'reset'
-          ? 'Enter your email and we will send a reset link.'
-          : 'Use an email and password, or continue with a social account. We only use it for your name, picture, and stats.'}
+    <ScreenContainer scroll={!compact}>
+      <View style={[styles.formGroup, compact ? styles.compactFormGroup : null]}>
+      <CompactHeader title="Sign in" />
+      {!compact ? <Text style={styles.title}>{title}</Text> : null}
+      <Text style={[styles.subtitle, compact ? styles.compactSubtitle : null]}>
+        {compact
+          ? 'Email and password, or continue with a social account.'
+          : mode === 'reset'
+            ? 'Enter your email and we will send a reset link.'
+            : 'Use an email and password, or continue with a social account. We only use it for your name, picture, and stats.'}
       </Text>
 
       {mode === 'sign-up' ? (
@@ -304,7 +318,13 @@ export default function SignIn() {
         />
       ) : null}
 
-      <Button title={submitLabel} onPress={() => void onSubmitEmail()} loading={busy === 'email'} disabled={busy !== null && busy !== 'email'} />
+      <Button
+        title={submitLabel}
+        onPress={() => void onSubmitEmail()}
+        loading={busy === 'email'}
+        disabled={busy !== null && busy !== 'email'}
+        style={compactBtnStyle}
+      />
 
       {error ? (
         <View style={styles.errorBanner}>
@@ -351,9 +371,11 @@ export default function SignIn() {
       {/* Social providers only on the sign-in/up forms, not the reset form.
           Buttons come from GET /api/providers (feature-detected server-side),
           filtered to what can render on this platform. TikTok stays a static
-          coming-soon affordance until its Worker bridge is ported. */}
+          coming-soon affordance until its Worker bridge is ported -- hidden
+          in compact sign-in mode (R7) since it is a disabled placeholder and
+          the tightest screen to fit. */}
       {mode !== 'reset' ? (
-        <View style={styles.providers}>
+        <View style={[styles.providers, compact ? styles.compactProviders : null]}>
           <Text style={styles.orLabel}>or continue with</Text>
           {socialProviders.map((id) => {
             const meta = PROVIDER_META[id];
@@ -365,31 +387,46 @@ export default function SignIn() {
                 disabled={busy !== null && busy !== id}
                 loading={busy === id}
                 onPress={() => void onSocial(id)}
+                style={compactBtnStyle}
               />
             );
           })}
-          <Button
-            title="Continue with TikTok"
-            subtitle="Coming soon"
-            color={providerBrand.tiktok}
-            disabled={!TIKTOK_ENABLED}
-            onPress={() => {}}
-          />
+          {!compact ? (
+            <Button
+              title="Continue with TikTok"
+              subtitle="Coming soon"
+              color={providerBrand.tiktok}
+              disabled={!TIKTOK_ENABLED}
+              onPress={() => {}}
+            />
+          ) : null}
         </View>
       ) : null}
-
-      <Button title="Back" variant="ghost" onPress={() => router.replace('/')} />
+      </View>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  // Sole child of ScreenContainer for the Forms branch (see the component
+  // body): supplies the vertical rhythm between the header/fields/buttons
+  // itself, since ScreenContainer's own automatic gap between its direct
+  // children (columnScroll) only applies in scroll mode -- compact mode
+  // (scroll={false}) has no such gap, so this View must own it instead.
+  formGroup: { gap: spacing.sm + 4 },
+  compactFormGroup: { gap: spacing.xs + 2 },
   title: { ...typography.heading, color: colors.felt, marginTop: spacing.sm },
   subtitle: { ...typography.label, color: colors.textMuted, marginBottom: spacing.md },
+  // Compact sign-in mode (R7, one viewport at 360x640): tighter subtitle
+  // margin and shorter copy (set at the call site), smaller buttons via
+  // compactBtn, and a tighter providers gap.
+  compactSubtitle: { marginBottom: spacing.sm },
+  compactBtn: { minHeight: 44, paddingVertical: spacing.sm },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   guestNotice: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.xs },
   consentCheckbox: { marginTop: spacing.xs, marginBottom: spacing.xs },
   providers: { marginTop: spacing.md, gap: spacing.sm + 4 },
+  compactProviders: { marginTop: spacing.xs, gap: spacing.xs + 2 },
   orLabel: { ...typography.caption, color: colors.textFaint, textAlign: 'center' },
   // Form-level (server) errors: same soft-red validation look as Field's
   // inline banner, since these are not tied to one specific input.
