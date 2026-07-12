@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["TEAMID.app.prends"],
+        "components": [
+          { "/": "/join/*" }
+        ]
+      },
+      {
+        "appID": "TEAMID.app.prends",
+        "paths": ["/join/*"]
+      }
+    ]
+  }
+}

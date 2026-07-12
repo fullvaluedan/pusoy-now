@@ -1,4 +1,4 @@
-# Pusoy Now
+# Prends
 
 A 4-player Pusoy Dos card game for iOS and Android. Built with React Native + Expo.
 
@@ -20,6 +20,42 @@ npm run ios              # native iOS (macOS only, or use Expo Go)
 npm test                 # runs the engine + game tests (38/38)
 npm run typecheck        # tsc --noEmit
 ```
+
+## Auth server (Cloudflare Worker)
+
+Accounts run on a self-contained Worker in `server/` (better-auth on Hono +
+D1). It is a separate npm package on purpose: `@better-auth/expo` must never
+drag Expo peer deps into the Worker build, and the Worker must never enter the
+Metro bundle. Deployed at `https://pusoy-now-auth.fullvaluedan.workers.dev`.
+
+```bash
+cd server
+npm install
+npm run dev              # wrangler dev on http://127.0.0.1:8787
+npm test                 # config assertions (trustedOrigins, rate limit)
+npm run typecheck
+npm run deploy           # wrangler deploy
+```
+
+First-time / redeploy setup:
+
+```bash
+# 1. D1 database (already created as `pusoy-now`; id is in wrangler.toml)
+wrangler d1 create pusoy-now
+
+# 2. Apply the schema to remote and to the local dev mirror
+wrangler d1 execute pusoy-now --remote --file migrations/0001_better_auth.sql
+wrangler d1 execute pusoy-now --local  --file migrations/0001_better_auth.sql
+
+# 3. Signing secret (generate a strong value; never commit it)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" \
+  | wrangler secret put BETTER_AUTH_SECRET
+```
+
+Secrets (set with `wrangler secret put`, never in `wrangler.toml`):
+`BETTER_AUTH_SECRET` (required); `RESEND_API_KEY` + `EMAIL_FROM` (verification
+emails; until set, the Worker logs the verify URL — dev-mailbox mode);
+`TURNSTILE_SECRET_KEY` (captcha); provider and Stripe keys as those units land.
 
 ## Project layout
 

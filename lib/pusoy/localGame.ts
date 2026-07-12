@@ -4,18 +4,17 @@
 
 import { buildDeck, dealFour, shuffle, RANK_VALUE } from './deck';
 import { detectCombo, detectFiveCard, compareCombos, canPlay } from './combo';
-import { applyAction, applyTimeout, handFinishOrder, isHandOver, newHand } from './engine';
-import { botChoose } from './bot';
+import { applyAction, handFinishOrder, isHandOver, newHand } from './engine';
+import { botChoose, findLegalPlays } from './bot';
+import { BOT_MIN_DELAY_MS, BOT_MAX_DELAY_MS, BOT_FORCED_PASS_MS } from './pacing';
 import type {
+  BotLevel,
   Card,
   HandState,
   PlayedCombo,
   PublicGameView,
   RoundAction,
 } from './types';
-
-const BOT_MIN_DELAY_MS = 900;
-const BOT_MAX_DELAY_MS = 2_400;
 
 export type LocalPlayer = 'human' | 'bot';
 
@@ -40,6 +39,16 @@ export interface LocalGame {
   dealOrder: DealStep[];
   hands: Card[][]; // 4 hands in seat order
   handState: HandState;
+  // Difficulty of every bot at the table.
+  level: BotLevel;
+  // True when the player ended the hand early with the manual "Skip to end"
+  // button while still holding cards. Such a result is a bail-out, not a real
+  // finish, so it must not be recorded on the scoreboard. The auto-skip that
+  // fires after the player legitimately empties their hand leaves this false.
+  abandonedByUser: boolean;
+  // Every card played face-up so far, in play order. The expert bot counts
+  // these to work out when one of its cards has become the live maximum.
+  playedCards: Card[];
   phase: Phase;
   startedAt: number;
   finishedAt: number | null;
@@ -69,7 +78,11 @@ function buildDealOrder(): DealStep[] {
   return out;
 }
 
-export function createLocalGame(botCount: number, displayName: string): LocalGame {
+export function createLocalGame(
+  botCount: number,
+  displayName: string,
+  level: BotLevel = 'normal',
+): LocalGame {
   if (botCount < 1 || botCount > 3) {
     throw new Error('botCount must be 1, 2, or 3');
   }
@@ -108,6 +121,9 @@ export function createLocalGame(botCount: number, displayName: string): LocalGam
     dealOrder: buildDealOrder(),
     hands,
     handState,
+    level,
+    abandonedByUser: false,
+    playedCards: [],
     phase: 'dealing',
     startedAt: Date.now(),
     finishedAt: null,
@@ -168,6 +184,7 @@ export function humanAct(
   game.handState = next;
   if (action.kind === 'play' && cards) {
     game.trickHistory = [{ playerIndex: humanSeat, combo: action.combo }, ...game.trickHistory].slice(0, 8);
+    game.playedCards.push(...action.combo.cards);
     game.hands[humanSeat] = hand.filter(
       (c) => !cards.find((pc) => pc.id === c.id),
     );
@@ -198,28 +215,32 @@ export type SortMode = 'rank' | 'suit' | 'hands';
 // Display order for grouping suits in the hand (not strength order).
 const SUIT_DISPLAY: Record<Card['suit'], number> = { C: 1, D: 2, H: 3, S: 4 };
 
-// Auto-sort the human's hand.
+// Pure hand-sort, shared by the bot table (sortHumanHand below) and the online
+// table (app/room/[code].tsx), so both order a hand identically:
 //   rank  — rank ascending, suit tiebreak
 //   suit  — group by suit, rank ascending within each
 //   hands — group into playable combos: singles, pairs, trips, 5-card hands
-export function sortHumanHand(game: LocalGame, mode: SortMode = 'rank'): void {
-  const seat = findHumanSeat(game);
-  const hand = game.hands[seat];
-  if (mode === 'hands') {
-    game.hands[seat] = arrangeByCombos(hand);
-  } else if (mode === 'suit') {
-    game.hands[seat] = hand.slice().sort((a, b) => {
+// Returns a new array; never mutates the input.
+export function sortHand(hand: Card[], mode: SortMode = 'rank'): Card[] {
+  if (mode === 'hands') return arrangeByCombos(hand);
+  if (mode === 'suit') {
+    return hand.slice().sort((a, b) => {
       const s = SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit];
       if (s !== 0) return s;
       return RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
     });
-  } else {
-    game.hands[seat] = hand.slice().sort((a, b) => {
-      const r = RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
-      if (r !== 0) return r;
-      return SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit];
-    });
   }
+  return hand.slice().sort((a, b) => {
+    const r = RANK_VALUE[a.rank] - RANK_VALUE[b.rank];
+    if (r !== 0) return r;
+    return SUIT_DISPLAY[a.suit] - SUIT_DISPLAY[b.suit];
+  });
+}
+
+// Auto-sort the human's hand in place, then notify subscribers.
+export function sortHumanHand(game: LocalGame, mode: SortMode = 'rank'): void {
+  const seat = findHumanSeat(game);
+  game.hands[seat] = sortHand(game.hands[seat], mode);
   emit(game);
 }
 
@@ -292,12 +313,11 @@ function finalizeHand(game: LocalGame) {
   game.finishOrder = order;
   game.finishedAt = Date.now();
   game.phase = 'finished';
-  for (const t of game.botTimers) clearTimeout(game.botTimers.pop() as any);
+  // Clear every timer, then drop the array. The old form popped from the array
+  // it was iterating, so it cleared only half of them, and any survivor would
+  // fire against an already-finished hand.
+  for (const t of game.botTimers) clearTimeout(t);
   game.botTimers = [];
-  // Tally stats
-  for (let i = 0; i < order.length - 1; i++) {
-    // order[0] won, order[last] lost
-  }
   // The "first to empty" is the winner; the last is the loser. Everyone in
   // between tied on position. We record wins/losses against the player who
   // came last (the "loser of the hand").
@@ -324,6 +344,47 @@ export function publicView(game: LocalGame, _viewingSeat: number): PublicGameVie
   };
 }
 
+// Advance one seat by a single action, mutating the game in place. The bot AI
+// chooses the move; when this runs for the human seat (only during skipToEnd)
+// the AI finishes their hand for them. Does NOT reschedule or finalize — the
+// caller decides what happens next.
+function advanceSeat(game: LocalGame, seat: number): void {
+  const hand = game.hands[seat];
+  const lead = game.handState.leadCombo;
+  const choice = botChoose(hand, lead, {
+    level: game.level,
+    context: {
+      seat,
+      playedCards: game.playedCards,
+      handSizes: game.hands.map((h) => h.length),
+    },
+  });
+  if (choice) {
+    game.handState = applyAction(game.handState, seat, hand, { kind: 'play', combo: choice });
+    game.trickHistory = [{ playerIndex: seat, combo: choice }, ...game.trickHistory].slice(0, 8);
+    game.playedCards.push(...choice.cards);
+    game.hands[seat] = hand.filter((c) => !choice.cards.find((pc) => pc.id === c.id));
+  } else {
+    game.handState = applyAction(game.handState, seat, hand, { kind: 'pass' });
+  }
+}
+
+// Fast-forward the rest of the hand with no per-move delay and jump to the
+// finish. Used when the human has emptied their hand (auto) or taps "Skip to
+// end" mid-hand (their remaining cards are then played by the AI). The finish
+// order is produced by the same engine as real-time play.
+export function skipToEnd(game: LocalGame): void {
+  if (game.phase !== 'playing') return;
+  for (const t of game.botTimers) clearTimeout(t);
+  game.botTimers = [];
+  let guard = 0;
+  while (!isHandOver(game.handState) && guard++ < 10_000) {
+    advanceSeat(game, game.handState.currentPlayerIndex);
+  }
+  finalizeHand(game);
+  emit(game);
+}
+
 function scheduleBots(game: LocalGame) {
   for (const t of game.botTimers) clearTimeout(t);
   game.botTimers = [];
@@ -332,35 +393,18 @@ function scheduleBots(game: LocalGame) {
     if (game.playerKinds[seat] !== 'bot') continue;
     if (game.handState.finishedOrder.includes(seat)) continue;
     if (game.handState.currentPlayerIndex === seat) {
-      const delay =
-        BOT_MIN_DELAY_MS +
-        Math.random() * (BOT_MAX_DELAY_MS - BOT_MIN_DELAY_MS);
+      // A bot with no legal play can only pass; do it near-instantly so the
+      // table doesn't wait on a foregone conclusion (2 of diamonds bomb, a
+      // 5-card lead against a short hand, etc.).
+      const mustPass =
+        game.handState.leadCombo !== null &&
+        findLegalPlays(game.hands[seat], game.handState.leadCombo).length === 0;
+      const delay = mustPass
+        ? BOT_FORCED_PASS_MS
+        : BOT_MIN_DELAY_MS + Math.random() * (BOT_MAX_DELAY_MS - BOT_MIN_DELAY_MS);
       const t = setTimeout(() => {
-        const hand = game.hands[seat];
-        const lead = game.handState.leadCombo;
-        const choice = botChoose(hand, lead);
         try {
-          if (choice) {
-            const next = applyAction(
-              game.handState,
-              seat,
-              hand,
-              { kind: 'play', combo: choice },
-            );
-            game.handState = next;
-            game.trickHistory = [{ playerIndex: seat, combo: choice }, ...game.trickHistory].slice(0, 8);
-            game.hands[seat] = hand.filter(
-              (c) => !choice.cards.find((pc) => pc.id === c.id),
-            );
-          } else {
-            const next = applyAction(
-              game.handState,
-              seat,
-              hand,
-              { kind: 'pass' },
-            );
-            game.handState = next;
-          }
+          advanceSeat(game, seat);
           if (isHandOver(game.handState)) {
             finalizeHand(game);
           } else {

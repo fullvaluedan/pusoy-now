@@ -45,12 +45,14 @@ export type PlayerStatus = 'playing' | 'passed' | 'finished';
 export interface HandState {
   handId: string;
   roundNumber: number;            // 1..N within a game
+  playerCount: number;            // seats in play, 2-4 (leftover cards dead)
   currentPlayerIndex: number;     // whose turn
   leadPlayerIndex: number;        // who led the current trick
   leadCombo: PlayedCombo | null;  // null = opening play
   lastPlay: { playerIndex: number; combo: PlayedCombo } | null;
   passed: number[];               // indexes that passed this trick
   finishedOrder: number[];        // indexes in the order they emptied
+  turnMs: number | null;          // per-turn duration; null = untimed (bot mode)
   turnDeadline: number | null;    // epoch ms
   turnStartedAt: number | null;
 }
@@ -78,6 +80,30 @@ export interface PublicGameView {
   finishOrder: number[];
   finishedAt: number | null;
   startedAt: number;
+}
+
+// --- Bots ---------------------------------------------------------------
+
+export type BotLevel = 'easy' | 'normal' | 'expert';
+
+// Uniform in [0, 1). Injected so every bot decision is reproducible.
+export type Rng = () => number;
+
+// What the bot is allowed to know beyond its own hand. Everything here is
+// public information a human player at the table could also track.
+export interface BotContext {
+  // Every card played face-up so far this hand, by anyone.
+  playedCards?: Card[];
+  // Cards remaining in each seat's hand, indexed by seat.
+  handSizes?: number[];
+  // The seat the bot is sitting in, so it can ignore itself in `handSizes`.
+  seat?: number;
+}
+
+export interface BotOptions {
+  level?: BotLevel;
+  rng?: Rng;
+  context?: BotContext;
 }
 
 export interface PlayerPublicStats {

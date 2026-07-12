@@ -1,6 +1,6 @@
 // Deck + dealing for Pusoy Dos. Standard 52-card deck, 13 cards to each of 4 players.
 
-import type { Card, Rank, Suit } from './types';
+import type { Card, Rank, Rng, Suit } from './types';
 
 const SUITS: Suit[] = ['C', 'D', 'H', 'S'];
 const RANKS: Rank[] = [
@@ -15,16 +15,14 @@ export const RANK_VALUE: Record<Rank, number> = RANKS.reduce(
   {} as Record<Rank, number>,
 );
 
-// Suit strength for tiebreaks. In the standard variant, 2♦ is the highest
-// single (the "bomb" — unbeatable as a lead). So diamonds outrank the
-// other suits at the 2 rank; for all other ranks, spades > hearts > clubs
-// is the conventional order. To keep comparison simple and match Pusoy
-// Dos rules used in the wild, we order: D > S > H > C.
+// Suit strength for tiebreaks. Standard Pusoy Dos order, lowest to highest:
+// clubs < spades < hearts < diamonds. That makes 2♦ the single highest card
+// in the deck (the "bomb", unbeatable as a lead).
 export const SUIT_VALUE: Record<Suit, number> = {
   C: 1,
-  D: 4, // 2♦ is the bomb; diamonds rank above the others.
-  H: 2,
-  S: 3,
+  D: 4,
+  H: 3,
+  S: 2,
 };
 
 export function buildDeck(): Card[] {
@@ -37,14 +35,58 @@ export function buildDeck(): Card[] {
   return deck;
 }
 
-// Fisher-Yates. Returns a NEW shuffled deck.
-export function shuffle<T>(arr: T[]): T[] {
+// Fisher-Yates. Returns a NEW shuffled deck. Pass a seeded `rng` to make the
+// deal reproducible (the win-rate harness deals the same 200 games to every
+// difficulty level so the comparison is fair).
+export function shuffle<T>(arr: T[], rng: Rng = Math.random): T[] {
   const out = arr.slice();
   for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;
+}
+
+// Deal 13 cards to each of `n` players (2-4). Any leftover cards are dead
+// (unused) — short-handed Pusoy Dos still deals full 13-card hands, so a 2p
+// deal leaves 26 cards in the pile and a 3p deal leaves 13. Like dealFour,
+// this deals round-robin and does NOT pre-sort (deal order is preserved).
+export function dealN(deck: Card[], n: number): Card[][] {
+  if (deck.length !== 52) {
+    throw new Error(`dealN expected 52, got ${deck.length}`);
+  }
+  if (n < 2 || n > 4) {
+    throw new Error(`dealN supports 2-4 players, got ${n}`);
+  }
+  const hands: Card[][] = Array.from({ length: n }, () => []);
+  const total = 13 * n;
+  for (let i = 0; i < total; i++) {
+    hands[i % n].push(deck[i]);
+  }
+  return hands;
+}
+
+// Index of the hand holding the single lowest card (rank first, suit as
+// tiebreak). Used to pick the opener when the 3 of clubs is not in play (it
+// landed in the dead pile of a short-handed deal). The 3 of clubs is the
+// globally lowest card, so when it is dealt this agrees with the 3-of-clubs
+// opener rule.
+export function lowestCardHolder(hands: Card[][]): number {
+  let bestHand = 0;
+  let bestRank = Infinity;
+  let bestSuit = Infinity;
+  for (let h = 0; h < hands.length; h++) {
+    for (const card of hands[h]) {
+      const r = RANK_VALUE[card.rank];
+      const s = SUIT_VALUE[card.suit];
+      if (r < bestRank || (r === bestRank && s < bestSuit)) {
+        bestRank = r;
+        bestSuit = s;
+        bestHand = h;
+      }
+    }
+  }
+  return bestHand;
 }
 
 export function dealFour(deck: Card[]): Card[][] {

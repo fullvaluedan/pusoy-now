@@ -1,34 +1,55 @@
 {
   "expo": {
-    "name": "Pusoy Now",
-    "slug": "pusoy-now",
+    "name": "Prends",
+    "slug": "prends",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/art/app-icon.png",
     "userInterfaceStyle": "light",
-    "scheme": "pusoynow",
+    "splash": {
+      "image": "./assets/art/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#0e4a3a"
+    },
+    "scheme": "prends",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pusoynow.app"
+      "bundleIdentifier": "app.prends",
+      "associatedDomains": ["applinks:prends.app"],
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0e4a3a",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/art/app-icon.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.pusoynow.app"
+      "package": "app.prends",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "prends.app",
+              "pathPrefix": "/join"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/art/app-icon.png",
       "bundler": "metro"
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-apple-authentication"
     ]
   }
 }

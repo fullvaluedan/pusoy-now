@@ -9,6 +9,7 @@ import type {
   RoundAction,
 } from './types';
 import { canPlay, detectCombo } from './combo';
+import { lowestCardHolder } from './deck';
 
 export const TURN_MS = 15_000;
 // Sentinel: when a HandState is created with turnMs=null, the UI should not
@@ -23,22 +24,25 @@ export function newHand(
   handId: string,
   opts: { turnMs?: number | null; openerIndex?: number } = {},
 ): HandState {
-  if (playerIds.length !== 4) {
-    throw new Error('Pusoy Dos is 4 players');
+  const n = playerIds.length;
+  if (n < 2 || n > 4) {
+    throw new Error('Pusoy Dos is 2 to 4 players');
   }
-  if (hands.length !== 4) {
-    throw new Error('need 4 hands');
+  if (hands.length !== n) {
+    throw new Error(`need ${n} hands`);
   }
   // Determine the opener. If caller supplied openerIndex use that; otherwise
-  // find the player who holds the 3 of clubs. The 3 of clubs is the
-  // mandatory opener in Pusoy Dos (per the canonical Filipino rules).
+  // find the player who holds the 3 of clubs (the mandatory opener in the
+  // canonical Filipino rules). Short-handed the 3 of clubs can land in the
+  // dead pile — when no one holds it, the holder of the lowest dealt card
+  // opens instead.
   let opener = opts.openerIndex;
   if (opener === undefined) {
     opener = hands.findIndex((h) =>
       h.some((c) => c.rank === '3' && c.suit === 'C'),
     );
     if (opener < 0) {
-      throw new Error('no 3 of clubs in any hand — bad deal');
+      opener = lowestCardHolder(hands);
     }
   }
   const turnMs = opts.turnMs === undefined ? TURN_MS : opts.turnMs;
@@ -46,12 +50,14 @@ export function newHand(
   return {
     handId,
     roundNumber,
+    playerCount: n,
     currentPlayerIndex: opener,
     leadPlayerIndex: opener,
     leadCombo: null,
     lastPlay: null,
     passed: [],
     finishedOrder: [],
+    turnMs,
     turnDeadline: turnMs === null ? null : now + turnMs,
     turnStartedAt: now,
   };
@@ -108,7 +114,9 @@ export function applyAction(
   }
 
   // advance turn
-  const aliveIndexes = [0, 1, 2, 3].filter(
+  const n = state.playerCount;
+  const seats = Array.from({ length: n }, (_, i) => i);
+  const aliveIndexes = seats.filter(
     (i) => !next.finishedOrder.includes(i) && !next.passed.includes(i),
   );
 
@@ -117,7 +125,7 @@ export function applyAction(
     // player who played the winning card (lastPlay.playerIndex) — unless they
     // themselves just finished, in which case pick the next alive (i.e. with
     // cards) player.
-    if (next.finishedOrder.length === 4) {
+    if (next.finishedOrder.length === n) {
       // whole hand is done — caller should detect this via isHandOver.
       next.leadCombo = null;
       next.lastPlay = null;
@@ -130,7 +138,7 @@ export function applyAction(
       next.lastPlay = null;
       next.passed = [];
       // pick the lowest-index player still holding cards
-      const holders = [0, 1, 2, 3].filter((i) => !next.finishedOrder.includes(i));
+      const holders = seats.filter((i) => !next.finishedOrder.includes(i));
       next.leadPlayerIndex = holders[0];
       next.currentPlayerIndex = holders[0];
     }
@@ -144,14 +152,14 @@ export function applyAction(
     next.currentPlayerIndex = aliveIndexes[0];
   } else {
     // 2+ alive. If the current player just played, rotate to next alive.
-    let i = (next.currentPlayerIndex + 1) % 4;
-    while (aliveIndexes.indexOf(i) < 0) i = (i + 1) % 4;
+    let i = (next.currentPlayerIndex + 1) % n;
+    while (aliveIndexes.indexOf(i) < 0) i = (i + 1) % n;
     next.currentPlayerIndex = i;
   }
 
   const now = Date.now();
   next.turnStartedAt = now;
-  next.turnDeadline = state.turnDeadline === null ? null : now + TURN_MS;
+  next.turnDeadline = next.turnMs == null ? null : now + next.turnMs;
   return next;
 }
 
@@ -161,12 +169,14 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
   const passed = state.passed.slice();
   if (!passed.includes(playerIndex)) passed.push(playerIndex);
 
-  const alive = [0, 1, 2, 3].filter(
+  const n = state.playerCount;
+  const seats = Array.from({ length: n }, (_, i) => i);
+  const alive = seats.filter(
     (i) => !state.finishedOrder.includes(i) && !passed.includes(i),
   );
   if (alive.length === 0) {
     // everyone finished or passed.
-    const holders = [0, 1, 2, 3].filter((i) => !state.finishedOrder.includes(i));
+    const holders = seats.filter((i) => !state.finishedOrder.includes(i));
     const next: HandState = {
       ...state,
       passed,
@@ -183,7 +193,7 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
     }
     const now = Date.now();
     next.turnStartedAt = now;
-    next.turnDeadline = state.turnDeadline === null ? null : now + TURN_MS;
+    next.turnDeadline = state.turnMs == null ? null : now + state.turnMs;
     return next;
   }
   if (alive.length === 1) {
@@ -197,18 +207,18 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
     next.currentPlayerIndex = alive[0];
     const now = Date.now();
     next.turnStartedAt = now;
-    next.turnDeadline = state.turnDeadline === null ? null : now + TURN_MS;
+    next.turnDeadline = state.turnMs == null ? null : now + state.turnMs;
     return next;
   }
-  let i = (playerIndex + 1) % 4;
-  while (alive.indexOf(i) < 0) i = (i + 1) % 4;
+  let i = (playerIndex + 1) % n;
+  while (alive.indexOf(i) < 0) i = (i + 1) % n;
   const now = Date.now();
   return {
     ...state,
     passed,
     currentPlayerIndex: i,
     turnStartedAt: now,
-    turnDeadline: state.turnDeadline === null ? null : now + TURN_MS,
+    turnDeadline: state.turnMs == null ? null : now + state.turnMs,
   };
 }
 
@@ -217,13 +227,17 @@ export function applyTimeout(state: HandState, playerIndex: number): HandState {
 // finishers; the last player's leftover cards are ignored for ranking but they
 // are still appended to finishOrder for completeness).
 export function isHandOver(state: HandState): boolean {
-  if (state.finishedOrder.length === 4) return true;
-  // alternative: 3 finished, 1 leftover
-  return state.finishedOrder.length >= 3;
+  const n = state.playerCount;
+  if (state.finishedOrder.length === n) return true;
+  // the hand ends once all but one player is out; the last player's leftover
+  // cards are ignored for ranking but appended to the finish order.
+  return state.finishedOrder.length >= n - 1;
 }
 
 export function handFinishOrder(state: HandState): number[] {
-  if (state.finishedOrder.length === 4) return state.finishedOrder;
-  const remaining = [0, 1, 2, 3].filter((i) => !state.finishedOrder.includes(i));
+  const n = state.playerCount;
+  if (state.finishedOrder.length === n) return state.finishedOrder;
+  const seats = Array.from({ length: n }, (_, i) => i);
+  const remaining = seats.filter((i) => !state.finishedOrder.includes(i));
   return [...state.finishedOrder, ...remaining];
 }

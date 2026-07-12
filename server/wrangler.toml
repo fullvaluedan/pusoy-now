@@ -1,0 +1,61 @@
+name = "pusoy-now-auth"
+main = "src/index.ts"
+compatibility_date = "2025-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+# U5: production custom domain. The Worker keeps its original name
+# (pusoy-now-auth) — renaming would orphan its secrets and Durable Object
+# storage — but now answers at api.prends.app instead of the workers.dev
+# subdomain. No pre-existing DNS record may sit on api.prends.app or custom
+# domain creation fails; see docs/DEPLOY.md.
+routes = [{ pattern = "api.prends.app", custom_domain = true }]
+# Keep the legacy workers.dev URL answering during the domain transition (the
+# previously exported web bundle still points at it). Flip to false once the
+# pages.dev origin is retired.
+workers_dev = true
+
+# Auth database. Binding is `env.DB` in the Worker; the physical database is the
+# one created with `wrangler d1 create pusoy-now`.
+[[d1_databases]]
+binding = "DB"
+database_name = "pusoy-now"
+database_id = "350f2bdd-a4b0-4aae-af3c-0307ed80360e"
+
+# Non-secret vars. Secrets (BETTER_AUTH_SECRET, RESEND_API_KEY,
+# TURNSTILE_SECRET_KEY, provider + Stripe keys) are set with
+# `wrangler secret put` and never committed.
+[vars]
+BETTER_AUTH_URL = "https://api.prends.app"
+# Comma-separated web origins allowed to call the auth API, in addition to the
+# built-in localhost dev origins and the prends:// app scheme. Includes both
+# the new prends.app web origin and the legacy pages.dev origin during the
+# domain transition (see docs/DEPLOY.md); drop pages.dev once it is retired.
+# trustedOriginsFor() and the CORS layer already reflect this var, so only the
+# value needs setting.
+TRUSTED_ORIGINS = "https://prends.app,https://pusoy-now.pages.dev"
+
+# Live game rooms (U7). One Durable Object instance per room code, addressed
+# with getByName(code). SQLite-backed so the WebSocket Hibernation API keeps
+# idle rooms free and room state survives eviction/reconnect.
+[[durable_objects.bindings]]
+name = "GAME_ROOM"
+class_name = "GameRoom"
+
+# Singleton quick-match queue (U3). One instance for the whole app via
+# getByName('global'); hibernating WebSockets keep an idle queue free.
+[[durable_objects.bindings]]
+name = "MATCHMAKER"
+class_name = "Matchmaker"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
+
+# Additive DO migration for the Matchmaker class (U3). Tags are additive and
+# irreversible - never edit or reuse v1.
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Matchmaker"]
+
+[observability]
+enabled = true

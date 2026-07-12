@@ -1,0 +1,53 @@
+// The better-auth client, talking to the Cloudflare auth Worker.
+//
+// Platform split (the plan's session decision):
+//   native  the @better-auth/expo plugin keeps the session in a SecureStore
+//           cookie-jar (Keychain / encrypted prefs) and drives the OAuth
+//           browser hop back through the prends:// scheme.
+//   web     ordinary browser cookies. The Expo plugin is undocumented on
+//           react-native-web, so it is left off and requests just send
+//           credentials; web flows are verified manually.
+//
+// expo-secure-store exposes synchronous getItem/setItem, which is exactly the
+// storage shape the Expo plugin requires (it cannot await).
+
+import { Platform } from 'react-native';
+import { createAuthClient } from 'better-auth/react';
+import { anonymousClient } from 'better-auth/client/plugins';
+import { expoClient } from '@better-auth/expo/client';
+import * as SecureStore from 'expo-secure-store';
+
+// The deployed auth Worker. Overridable via env so a local `wrangler dev` or a
+// staging Worker can be pointed at without touching code.
+export const AUTH_BASE_URL = process.env.EXPO_PUBLIC_AUTH_URL ?? 'https://api.prends.app';
+
+const isWeb = Platform.OS === 'web';
+
+// Absolute URL for a custom (non-auth) Worker route. authClient.$fetch joins
+// RELATIVE paths onto its basePath (/api/auth), so $fetch('/api/consent')
+// silently becomes /api/auth/api/consent and 404s -- a bug that only shows in
+// real browsers (curl checks hit the Worker directly and never caught it).
+// Absolute URLs skip the join while keeping $fetch's cookie handling, so every
+// custom-route call site must wrap its path with apiUrl().
+export function apiUrl(path: string): string {
+  return `${AUTH_BASE_URL}${path}`;
+}
+
+export const authClient = createAuthClient({
+  baseURL: AUTH_BASE_URL,
+  // Cross-site session cookies must ride along on every request.
+  fetchOptions: { credentials: 'include' },
+  // anonymousClient() is on both paths: guest sessions (R1-R5) are core, not
+  // platform-specific. The Expo plugin (native only) drives the SecureStore
+  // cookie-jar; web just uses ordinary browser cookies.
+  plugins: isWeb
+    ? [anonymousClient()]
+    : [
+        expoClient({
+          scheme: 'prends',
+          storagePrefix: 'prends',
+          storage: SecureStore,
+        }),
+        anonymousClient(),
+      ],
+});

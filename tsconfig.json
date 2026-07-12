@@ -7,5 +7,16 @@
   "include": [
     "**/*.ts",
     "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    // The auth Worker is a separate package with its own tsconfig and
+    // Cloudflare Workers types. It must never enter the Expo/Metro typecheck
+    // or bundle. Typecheck it with `npm --prefix server run typecheck`.
+    "server",
+    // Deno runtime entry for the tiktok-auth Edge Function: it imports over
+    // https and uses Deno globals, so it is checked by `deno check`, not by the
+    // app's tsc. Its logic lives in handler.ts, which IS checked and tested.
+    "supabase/functions/**/index.ts"
   ]
 }
