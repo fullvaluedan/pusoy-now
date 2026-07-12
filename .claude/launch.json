@@ -12,6 +12,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["expo", "start", "--web", "--port", "8131"],
       "port": 8131
+    },
+    {
+      "name": "prends-u2",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["expo", "start", "--web", "--port", "8139"],
+      "port": 8139
     }
   ]
 }

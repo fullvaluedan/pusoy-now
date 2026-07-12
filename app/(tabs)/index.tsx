@@ -1,8 +1,15 @@
-// Home tab (U4): compact Duolingo-style hub that fits 360x640 alongside the
-// 60px tab bar (R7) -- top to bottom: a slim identity row (logo + wordmark,
-// Players Online chip), an optional hero strip on tall screens only, stat
-// tiles (hidden until the player has played a game), a giant PLAY button,
-// QUICK MATCH, and a compact PLAY WITH FRIENDS / HOW TO PLAY row.
+// Home tab (Round 9 U2): compact Duolingo-style hub that fits 360x640
+// alongside the 60px tab bar (R7) -- top to bottom: a slim identity row
+// (logo + wordmark, Players Online chip), an optional hero strip on tall
+// screens only, stat tiles (hidden until the player has played a game), the
+// one-line PLAY | QUICK MATCH | PRIVATE action row, and a slim HOW TO PLAY
+// chip.
+//
+// PLAY reads the saved bot difficulty (lib/settingsRules.ts botLevel): the
+// first-ever tap swaps the action row inline to an EASY | NORMAL | EXPERT
+// picker (no navigation, no new route -- decideOnPlay in settingsRules.ts is
+// the pure decision behind this); picking saves it and starts the game.
+// Every later tap starts instantly with the saved level.
 //
 // The guest "Playing as X" line + sign-in nudge that used to live here moved
 // to the Profile tab (U3) -- that is now the one place identity/settings
@@ -11,7 +18,7 @@
 // where it shows.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { PresenceChip } from '../../components/PresenceChip';
 import { Button, Card, ScreenContainer } from '../../components/ui';
 import { colors, radii, spacing, typography } from '../../lib/theme';
@@ -20,6 +27,15 @@ import { apiUrl, authClient } from '../../lib/authClient';
 import { usePresence } from '../../lib/presence';
 import { loadStats } from '../../lib/stats';
 import { resolveHomeStatTiles, type HomeStatTiles } from '../../lib/homeStats';
+import { loadSettings, saveSettings } from '../../lib/settings';
+import { decideOnPlay } from '../../lib/settingsRules';
+import type { BotLevel } from '../../lib/pusoy/types';
+
+const DIFFICULTY_OPTIONS: { level: BotLevel; label: string; color: string }[] = [
+  { level: 'easy', label: 'Easy', color: colors.successBright },
+  { level: 'normal', label: 'Normal', color: colors.felt },
+  { level: 'expert', label: 'Expert', color: colors.dangerBright },
+];
 
 const LOGO_IMG = require('../../assets/art/logo.png');
 const HERO_IMG = require('../../assets/art/hero.png');
@@ -89,6 +105,42 @@ export default function Home() {
     void authClient.$fetch(apiUrl('/api/consent'), { method: 'POST', body: { optIn, source: 'prompt' } });
   }
 
+  // Saved bot difficulty (Round 9 U2), reloaded on every focus so a change
+  // made on the Settings screen is picked up the next time Home is shown --
+  // same pattern as the stat tiles above.
+  const [botLevel, setBotLevel] = useState<BotLevel | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void loadSettings().then((s) => {
+        if (!cancelled) setBotLevel(s.botLevel);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
+  function startBotGame(level: BotLevel) {
+    router.push(`/game-local?bots=3&level=${level}`);
+  }
+
+  function onPressPlay() {
+    if (decideOnPlay(botLevel) === 'pick') {
+      setPickerOpen(true);
+      return;
+    }
+    startBotGame(botLevel as BotLevel);
+  }
+
+  function onPickDifficulty(level: BotLevel) {
+    setPickerOpen(false);
+    setBotLevel(level);
+    void loadSettings().then((s) => void saveSettings({ ...s, botLevel: level }));
+    startBotGame(level);
+  }
+
   return (
     <ScreenContainer>
       <View style={[styles.content, { width: contentWidth }]}>
@@ -121,38 +173,62 @@ export default function Home() {
           </View>
         ) : null}
 
-        <Button
-          title="Play"
-          subtitle="Jump into a game vs smart bots"
-          variant="primary"
-          align="left"
-          onPress={() => router.push('/bot-select')}
-          style={styles.playBtn}
-        />
+        {pickerOpen ? (
+          <View style={styles.pickerBlock}>
+            <View style={styles.pickerHeaderRow}>
+              <Text style={styles.pickerCaption}>Pick your difficulty</Text>
+              <Pressable
+                onPress={() => setPickerOpen(false)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                style={styles.pickerBack}
+              >
+                <Text style={styles.pickerBackText}>x</Text>
+              </Pressable>
+            </View>
+            <View style={styles.actionRow}>
+              {DIFFICULTY_OPTIONS.map((option) => (
+                <Button
+                  key={option.level}
+                  title={option.label}
+                  variant="primary"
+                  color={option.color}
+                  onPress={() => onPickDifficulty(option.level)}
+                  style={styles.actionBtn}
+                  textStyle={styles.actionBtnText}
+                />
+              ))}
+            </View>
+          </View>
+        ) : (
+          <View style={styles.actionRow}>
+            <Button title="Play" variant="primary" onPress={onPressPlay} style={styles.actionBtn} textStyle={styles.actionBtnText} />
+            <Button
+              title="Quick match"
+              variant="secondary"
+              color={colors.skyBlue}
+              onPress={() => router.push('/matchmaking')}
+              style={styles.actionBtn}
+              textStyle={styles.actionBtnText}
+            />
+            <Button
+              title="Private"
+              variant="secondary"
+              onPress={() => router.push('/play-online')}
+              style={styles.actionBtn}
+              textStyle={styles.actionBtnText}
+            />
+          </View>
+        )}
 
-        <Button
-          title="Quick match"
-          subtitle="Play against people online"
-          variant="secondary"
-          align="left"
-          onPress={() => router.push('/matchmaking')}
-          style={styles.menuItem}
-        />
-
-        <View style={styles.compactRow}>
-          <Button
-            title="Play with friends"
-            variant="secondary"
-            onPress={() => router.push('/play-online')}
-            style={styles.compactBtn}
-          />
-          <Button
-            title="How to play"
-            variant="secondary"
-            onPress={() => router.push('/how-to-play')}
-            style={styles.compactBtn}
-          />
-        </View>
+        <Pressable
+          onPress={() => router.push('/how-to-play')}
+          style={styles.howToPlayChip}
+          accessibilityRole="button"
+        >
+          <Text style={styles.howToPlayText}>How to play</Text>
+        </Pressable>
 
         {showConsentPrompt ? (
           <Card style={styles.consentCard}>
@@ -206,10 +282,33 @@ const styles = StyleSheet.create({
   statTile: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm },
   statValue: { ...typography.heading, color: colors.felt },
   statLabel: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
-  playBtn: { minHeight: 64, marginBottom: spacing.sm },
-  menuItem: { marginBottom: spacing.sm },
-  compactRow: { flexDirection: 'row', gap: spacing.sm },
-  compactBtn: { flex: 1 },
+  // One-line PLAY | QUICK MATCH | PRIVATE action row (Round 9 U2) -- three
+  // equal buttons, no subtitles, tight padding so all three labels fit on
+  // one line down to 360px. The EASY | NORMAL | EXPERT picker reuses this
+  // exact row geometry so swapping in/out never reflows anything below it.
+  actionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  actionBtn: { flex: 1, minHeight: 56, paddingHorizontal: spacing.xs, paddingVertical: spacing.sm },
+  // Down a notch from the shared Button 16px + letterSpacing 0.5 caps style
+  // so the longest label (QUICK MATCH) fits on one line in an equal-thirds
+  // slot at 360px width, per the R1 one-line guarantee.
+  actionBtnText: { fontSize: 13, letterSpacing: 0 },
+  pickerBlock: { marginBottom: spacing.sm },
+  pickerHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  pickerCaption: { ...typography.caption, color: colors.textMuted },
+  pickerBack: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  pickerBackText: { ...typography.bodyBold, color: colors.textMuted },
+  howToPlayChip: {
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  howToPlayText: { ...typography.label, color: colors.felt, fontWeight: '600', textDecorationLine: 'underline' },
   consentCard: { marginTop: spacing.md, gap: spacing.sm },
   consentText: { ...typography.bodyBold, color: colors.textPrimary },
   consentRow: { flexDirection: 'row', gap: spacing.sm },
