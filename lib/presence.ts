@@ -12,7 +12,8 @@
 // lib/presenceTest.ts exercises. This file wires that pure logic to real
 // storage, the network, and React.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
 import { apiUrl, authClient } from './authClient';
@@ -61,62 +62,72 @@ export async function getDeviceId(): Promise<string> {
 
 const BEAT_INTERVAL_MS = 45_000;
 
-// Sends a beat immediately when mounted (and whenever the app returns to the
-// foreground), then every 45s while active. The interval is cleared on
-// background/unmount so a backgrounded app stops pinging. Exposes the live
-// count, null until the first successful beat.
+// Sends a beat immediately when the Home tab gains focus (and whenever the
+// app returns to the foreground while focused), then every 45s while both
+// conditions hold. The interval is cleared on blur/background/unmount so a
+// backgrounded app -- or a Home tab the user has switched away from --
+// stops pinging. Exposes the live count, null until the first successful
+// beat.
+//
+// Focus-gated via useFocusEffect (not a plain mount useEffect): the bottom
+// tab bar (U3) keeps every tab's screen mounted when you switch tabs, so a
+// mount-based interval would beat forever from a blurred Home tab. Whenever
+// Home is not the focused tab, this hook's cleanup runs and the beat stops;
+// switching back to Home re-runs the effect and beats again immediately.
 export function usePresence(): { count: number | null } {
   const [count, setCount] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-    async function sendBeat() {
-      try {
-        const deviceId = await getDeviceId();
-        const { data } = await authClient.$fetch<{ count: number }>(apiUrl('/api/presence/beat'), {
-          method: 'POST',
-          body: { deviceId },
-        });
-        if (!cancelled && data && typeof data.count === 'number') setCount(data.count);
-      } catch {
-        // best-effort; the chip just stays at its last known count
+      async function sendBeat() {
+        try {
+          const deviceId = await getDeviceId();
+          const { data } = await authClient.$fetch<{ count: number }>(apiUrl('/api/presence/beat'), {
+            method: 'POST',
+            body: { deviceId },
+          });
+          if (!cancelled && data && typeof data.count === 'number') setCount(data.count);
+        } catch {
+          // best-effort; the chip just stays at its last known count
+        }
       }
-    }
 
-    function startInterval() {
-      stopInterval();
-      intervalRef.current = setInterval(() => void sendBeat(), BEAT_INTERVAL_MS);
-    }
-
-    function stopInterval() {
-      if (intervalRef.current != null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-
-    void sendBeat();
-    startInterval();
-
-    function onAppStateChange(next: AppStateStatus) {
-      if (isForegroundState(next)) {
-        void sendBeat();
-        startInterval();
-      } else {
+      function startInterval() {
         stopInterval();
+        intervalRef.current = setInterval(() => void sendBeat(), BEAT_INTERVAL_MS);
       }
-    }
 
-    const sub = AppState.addEventListener('change', onAppStateChange);
+      function stopInterval() {
+        if (intervalRef.current != null) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+      }
 
-    return () => {
-      cancelled = true;
-      stopInterval();
-      sub.remove();
-    };
-  }, []);
+      void sendBeat();
+      startInterval();
+
+      function onAppStateChange(next: AppStateStatus) {
+        if (isForegroundState(next)) {
+          void sendBeat();
+          startInterval();
+        } else {
+          stopInterval();
+        }
+      }
+
+      const sub = AppState.addEventListener('change', onAppStateChange);
+
+      return () => {
+        cancelled = true;
+        stopInterval();
+        sub.remove();
+      };
+    }, []),
+  );
 
   return { count };
 }

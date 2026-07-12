@@ -96,7 +96,7 @@ function FriendsContent() {
         subtitle="See how you rank against friends"
         variant="secondary"
         align="left"
-        onPress={() => router.push('/friends-rank')}
+        onPress={() => router.push('/leaderboard')}
         style={styles.rankingBtn}
       />
 

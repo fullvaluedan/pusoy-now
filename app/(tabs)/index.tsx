@@ -8,17 +8,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { Avatar } from '../components/Avatar';
-import { PresenceChip } from '../components/PresenceChip';
-import { Button, Card, ScreenContainer } from '../components/ui';
-import { colors, radii, spacing, typography } from '../lib/theme';
-import { useAuth } from '../lib/auth';
-import { apiUrl, authClient } from '../lib/authClient';
-import { usePresence } from '../lib/presence';
-import { getLocalGuestName } from '../lib/guest';
+import { Avatar } from '../../components/Avatar';
+import { PresenceChip } from '../../components/PresenceChip';
+import { Button, Card, ScreenContainer } from '../../components/ui';
+import { colors, radii, spacing, typography } from '../../lib/theme';
+import { useAuth } from '../../lib/auth';
+import { apiUrl, authClient } from '../../lib/authClient';
+import { usePresence } from '../../lib/presence';
+import { getLocalGuestName } from '../../lib/guest';
 
-const LOGO_IMG = require('../assets/art/logo.png');
-const HERO_IMG = require('../assets/art/hero.png');
+const LOGO_IMG = require('../../assets/art/logo.png');
+const HERO_IMG = require('../../assets/art/hero.png');
 
 // Content is centered and capped at this width so the hero/logo don't
 // stretch to absurd sizes on a wide desktop browser.
@@ -129,7 +129,7 @@ export default function Home() {
             title="Leaderboard"
             variant="ghost"
             align="left"
-            onPress={() => router.push('/friends-rank')}
+            onPress={() => router.push('/leaderboard')}
             style={styles.quietItem}
           />
           <Button
