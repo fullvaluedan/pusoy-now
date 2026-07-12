@@ -1,8 +1,7 @@
 // How to Play: Pusoy Dos rules plus app-specific tips (Round 7 U6).
 // Copy is checked against the engine's actual rules (lib/pusoy/deck.ts
-// SUIT_VALUE, lib/pusoy/engine.ts newHand, lib/pusoy/combo.ts) rather than
-// the "conventional" club/spade/heart/diamond ordering people often quote --
-// this app's engine ranks suits club < heart < spade < diamond.
+// SUIT_VALUE, lib/pusoy/engine.ts newHand, lib/pusoy/combo.ts):
+// suits rank club < spade < heart < diamond (standard Pusoy Dos).
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { CompactHeader, Card, ScreenContainer } from '../components/ui';
@@ -35,7 +34,7 @@ export default function HowToPlay() {
           Ranks run low to high: 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K, A, 2. The 3 is the lowest card in the game and the 2 is the highest.
         </Text>
         <Text style={styles.body}>
-          When two cards share a rank, suit breaks the tie. From lowest to highest: clubs, hearts, spades, diamonds. That makes the 2 of diamonds the single highest card in the deck.
+          When two cards share a rank, suit breaks the tie. From lowest to highest: clubs, spades, hearts, diamonds. That makes the 2 of diamonds the single highest card in the deck.
         </Text>
       </Card>
 

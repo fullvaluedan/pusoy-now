@@ -313,10 +313,11 @@ ok(
   botChoose(urgentHand, leadFive, expert({ seat: 0, handSizes: [3, 6, 5, 5] }))?.cards[0].rank === '7',
 );
 
-// (b) card counting: once every card that could beat S-A has been played, S-A is
-//     the live maximum, so expert leads it instead of dumping a low card.
+// (b) card counting: once every card that could beat S-A has been played
+//     (H-A and D-A outrank it on suit, plus all four 2s), S-A is the live
+//     maximum, so expert leads it instead of dumping a low card.
 const countingHand = [c5('S', 'A'), c5('C', '3'), c5('D', '4')];
-const allHigherGone = [c5('D', 'A'), c5('C', '2'), c5('D', '2'), c5('H', '2'), c5('S', '2')];
+const allHigherGone = [c5('H', 'A'), c5('D', 'A'), c5('C', '2'), c5('D', '2'), c5('H', '2'), c5('S', '2')];
 ok(
   'expert leads an unbeatable single once all higher cards are accounted for',
   botChoose(countingHand, null, expert({ seat: 0, playedCards: allHigherGone }))?.cards[0].rank === 'A',

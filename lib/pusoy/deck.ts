@@ -15,16 +15,14 @@ export const RANK_VALUE: Record<Rank, number> = RANKS.reduce(
   {} as Record<Rank, number>,
 );
 
-// Suit strength for tiebreaks. In the standard variant, 2♦ is the highest
-// single (the "bomb" — unbeatable as a lead). So diamonds outrank the
-// other suits at the 2 rank; for all other ranks, spades > hearts > clubs
-// is the conventional order. To keep comparison simple and match Pusoy
-// Dos rules used in the wild, we order: D > S > H > C.
+// Suit strength for tiebreaks. Standard Pusoy Dos order, lowest to highest:
+// clubs < spades < hearts < diamonds. That makes 2♦ the single highest card
+// in the deck (the "bomb", unbeatable as a lead).
 export const SUIT_VALUE: Record<Suit, number> = {
   C: 1,
-  D: 4, // 2♦ is the bomb; diamonds rank above the others.
-  H: 2,
-  S: 3,
+  D: 4,
+  H: 3,
+  S: 2,
 };
 
 export function buildDeck(): Card[] {
