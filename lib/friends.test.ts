@@ -8,7 +8,7 @@
 // Run: tsx lib/friends.test.ts (or via npm test)
 
 import { aggregateTotals } from './statsAgg';
-import { addOutcomeMessage, mapAddStatus } from './friendsMap';
+import { addOutcomeMessage, formatH2h, mapAddStatus } from './friendsMap';
 import type { BotStats } from './stats';
 
 let pass = 0;
@@ -60,6 +60,12 @@ function main() {
   ok('a sent outcome has no error banner', addOutcomeMessage('sent') === null);
   ok('not-found names the missing username', addOutcomeMessage('not-found') === 'No player with that username.');
   ok('self is called out', addOutcomeMessage('self') === 'You cannot add yourself.');
+
+  // --- formatH2h --------------------------------------------------------
+  ok('renders a W-L string', formatH2h({ wins: 3, losses: 1 }) === 'You 3 - 1');
+  ok('a shared-nothing record renders 0 - 0', formatH2h({ wins: 0, losses: 0 }) === 'You 0 - 0');
+  ok('missing h2h defaults to 0 - 0', formatH2h(undefined) === 'You 0 - 0');
+  ok('null h2h defaults to 0 - 0', formatH2h(null) === 'You 0 - 0');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);

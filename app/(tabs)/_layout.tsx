@@ -1,4 +1,4 @@
-// Bottom tab bar (U3): Home / Leaderboard / Profile. This is the only place
+// Bottom tab bar (U3, +U4 Friends): Home / Leaderboard / Friends / Profile. This is the only place
 // in the app with a persistent bottom bar -- every other screen (game
 // table, matchmaking, sign-in, how-to-play, legal, room/[code]...) is a root
 // Stack sibling that pushes full-screen over this group automatically, no
@@ -20,6 +20,7 @@ import { colors } from '../../lib/theme';
 const TAB_ICON: Record<string, string> = {
   index: '\u{1F3E0}', // house
   leaderboard: '\u{1F3C6}', // trophy
+  friends: '\u{1F465}', // busts in silhouette (group)
   profile: '\u{1F464}', // bust silhouette
 };
 
@@ -44,6 +45,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="leaderboard" options={{ title: 'Leaderboard' }} />
+      <Tabs.Screen name="friends" options={{ title: 'Friends' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
   );

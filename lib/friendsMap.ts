@@ -37,3 +37,13 @@ export function addOutcomeMessage(outcome: AddOutcome): string | null {
       return 'Something went wrong. Try again.';
   }
 }
+
+// Format a friend's head-to-head record as the row chip text ("You 3 - 1").
+// Missing/undefined h2h (older cached payload, defensive client-side default)
+// renders as "You 0 - 0" -- the same neutral shape the server sends for a
+// friend with no shared finished games.
+export function formatH2h(h2h: { wins: number; losses: number } | null | undefined): string {
+  const wins = h2h?.wins ?? 0;
+  const losses = h2h?.losses ?? 0;
+  return `You ${wins} - ${losses}`;
+}

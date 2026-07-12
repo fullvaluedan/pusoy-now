@@ -35,7 +35,6 @@ export default function RootLayout() {
             <Stack.Screen name="privacy" />
             <Stack.Screen name="terms" />
             <Stack.Screen name="profile" />
-            <Stack.Screen name="friends" />
             <Stack.Screen name="friends-rank" />
             <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
           </Stack>

@@ -11,8 +11,10 @@
 // session").
 //
 // Below identity: a ghost-button list to the other hub screens that used to
-// live directly on Home (Friends, Scoreboard, Settings, How to play) --
-// Home sheds these in U4, this tab is where they land instead.
+// live directly on Home (Scoreboard, Settings, How to play) -- Home sheds
+// these in U4, this tab is where they land instead. Friends got its own
+// bottom tab in U4 (app/(tabs)/friends.tsx), so the row here was removed
+// rather than pointed at it.
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -61,13 +63,6 @@ export default function ProfileTab() {
       )}
 
       <View style={styles.menuSection}>
-        <Button
-          title="Friends"
-          variant="ghost"
-          align="left"
-          onPress={() => router.push('/friends')}
-          style={styles.menuItem}
-        />
         <Button
           title="Scoreboard"
           variant="ghost"

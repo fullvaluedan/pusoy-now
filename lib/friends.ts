@@ -6,7 +6,7 @@
 import { apiUrl, authClient } from './authClient';
 import { mapAddStatus, type AddOutcome } from './friendsMap';
 
-export { addOutcomeMessage, mapAddStatus, type AddOutcome } from './friendsMap';
+export { addOutcomeMessage, formatH2h, mapAddStatus, type AddOutcome } from './friendsMap';
 
 // A friend or request row: the other player's id plus their display fields.
 export interface FriendUser {
@@ -16,8 +16,22 @@ export interface FriendUser {
   image: string | null;
 }
 
+// The caller's head-to-head record vs one friend, from shared finished
+// online games (a win = the caller placed ahead of the friend).
+export interface H2H {
+  wins: number;
+  losses: number;
+}
+
+// Accepted rows additionally carry the head-to-head record vs the caller
+// (server/src/index.ts's GET /api/friends, U3) -- always present, {0,0}
+// when there are no shared finished games.
+export interface AcceptedFriend extends FriendUser {
+  h2h: H2H;
+}
+
 export interface FriendsData {
-  accepted: FriendUser[];
+  accepted: AcceptedFriend[];
   incoming: FriendUser[];
   outgoing: FriendUser[];
 }
