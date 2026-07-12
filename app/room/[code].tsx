@@ -12,7 +12,7 @@
 // specifics stay local here: the turn countdown, the LEFT TABLE state, and the
 // server-authoritative play/pass sends. The lobby and finished phases keep the
 // design-system card layout.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 import { Button, Card, Header, ScreenContainer } from '../../components/ui';
 import { Avatar } from '../../components/Avatar';
+import { DealingAnimation } from '../../components/DealingAnimation';
 import {
   BannerStrip,
   CENTER_ACTION_HIT_SLOP,
@@ -43,6 +44,8 @@ import { canPlay, detectCombo } from '../../lib/pusoy/combo';
 import { findLegalPlays } from '../../lib/pusoy/bot';
 import { SUIT_VALUE } from '../../lib/pusoy/deck';
 import { sortHand, type SortMode } from '../../lib/pusoy/localGame';
+import { shouldAutoPass, autoPassTurnKey } from '../../lib/onlineAutoPass';
+import { formatTime } from '../../lib/stats';
 import { colors, layout, radii, spacing, typography, withAlpha } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { useOnlineRoom, type OnlineRoomView } from '../../lib/onlineGame';
@@ -211,7 +214,7 @@ export default function RoomScreen() {
       ) : null}
 
       {view.phase === 'finished' ? (
-        <FinishedSection view={view} onHome={() => router.replace('/')} />
+        <FinishedSection view={view} profile={profile} onHome={() => router.replace('/')} />
       ) : null}
     </ScreenContainer>
   );
@@ -253,6 +256,12 @@ function LiveTable({
   const [sortMode, setSortMode] = useState<SortMode | null>(null);
   const [handOrder, setHandOrder] = useState<CardT[]>(() => view.yourHand ?? []);
   const [now, setNow] = useState(() => Date.now());
+  // Instant local play-validation feedback ("Pick cards to play", etc.), shown
+  // in the same red pill the server errors use. The server stays authoritative;
+  // this is a client-only nicety mirroring the bot table.
+  const [localError, setLocalError] = useState<string | null>(null);
+  // Auto-pass banner ("No playable hand, passing…"), driven by the effect below.
+  const [autoPassing, setAutoPassing] = useState(false);
 
   // Keep the local hand order reconciled against the server's authoritative
   // hand every state update.
@@ -270,10 +279,11 @@ function LiveTable({
     return () => clearInterval(id);
   }, [isMyTurn, turnDeadline]);
 
-  // Selection (and any stale server error) reset once the turn moves on --
-  // either your play landed or the turn passed while you were deciding.
+  // Selection (and any stale error, local or server) reset once the turn moves
+  // on -- either your play landed or the turn passed while you were deciding.
   useEffect(() => {
     setSelected([]);
+    setLocalError(null);
     clearError();
     // clearError identity changes each render; only the turn index should
     // trigger this reset.
@@ -282,6 +292,43 @@ function LiveTable({
 
   const seconds =
     isMyTurn && turnDeadline ? Math.max(0, Math.ceil((turnDeadline - now) / 1000)) : null;
+
+  // Elapsed game clock, shown in the TopBar like the bot table. Start counting
+  // when this client first mounts into the playing phase (LiveTable is only
+  // rendered while phase === 'playing'). On a mid-game reconnect the component
+  // may remount and restart this from zero -- acceptable, since the client has
+  // no server-provided game start time to anchor to.
+  const playStartRef = useRef<number>(Date.now());
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setClockNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const elapsedMs = clockNow - playStartRef.current;
+
+  // Deal animation on a FRESH game start. The online client never receives the
+  // deck (redacted), so it synthesizes the deal from its own hand + seat counts.
+  // "Fresh" == just entered play with a full untouched hand and an empty trick
+  // history and no lead. A mid-game reconnect lands in playing with a shorter
+  // hand / non-empty history, so it never deals. The decision latches once, so
+  // later server updates during/after the deal can't re-trigger it.
+  const freshStart =
+    view.trickHistory.length === 0 &&
+    (view.yourHand?.length ?? 0) === 13 &&
+    hs != null &&
+    hs.leadCombo == null &&
+    hs.lastPlay == null;
+  const [dealing, setDealing] = useState(false);
+  const dealDecidedRef = useRef(false);
+  useEffect(() => {
+    if (dealDecidedRef.current) return;
+    // First observation of the playing phase decides it: a fresh start deals,
+    // anything else (reconnect mid-hand) skips straight to the table forever.
+    dealDecidedRef.current = true;
+    if (freshStart) setDealing(true);
+    // Only the first render's verdict matters; deliberately not reactive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Every legal play available right now, or null when it is not our turn.
   // Computed from the server hand (same set as handOrder, canonical order).
@@ -308,6 +355,44 @@ function LiveTable({
     for (const p of legalPlays) for (const c of p.cards) eligibleIds.add(c.id);
   }
 
+  // Auto-pass (the headline multiplayer fix). When it is your turn, a lead is on
+  // the table, and nothing in your hand can beat it, show a brief banner and
+  // pass automatically -- the same courtesy the bot table gives. Never fires
+  // while leading (lead null), and never while the socket is down.
+  const connected = status !== 'reconnecting' && status !== 'closed';
+  const wantAutoPass = shouldAutoPass({
+    isMyTurn,
+    lead,
+    legalPlayCount: legalPlays ? legalPlays.length : null,
+    connected,
+  });
+  // Turn identity: the auto-pass fires at most once per turn instance, so a slow
+  // server ack (which re-renders with the same view) cannot double-send.
+  const turnKey = autoPassTurnKey(currentSeat, view.trickHistory.length);
+  const autoPassFiredRef = useRef<string | null>(null);
+  // `onPass` is a fresh closure each render; keep it in a ref so the effect's
+  // deps stay [wantAutoPass, turnKey] and an unrelated re-render never clears
+  // the pending 1400ms timer.
+  const onPassRef = useRef(onPass);
+  onPassRef.current = onPass;
+  useEffect(() => {
+    if (!wantAutoPass) {
+      setAutoPassing(false);
+      return;
+    }
+    if (autoPassFiredRef.current === turnKey) return; // already handled this turn
+    autoPassFiredRef.current = turnKey;
+    setAutoPassing(true);
+    const t = setTimeout(() => {
+      setAutoPassing(false);
+      onPassRef.current();
+    }, 1400);
+    return () => {
+      clearTimeout(t);
+      setAutoPassing(false);
+    };
+  }, [wantAutoPass, turnKey]);
+
   const selCombo = selected.length ? detectCombo(selected) : null;
   const selLegal = !!selCombo && canPlay(selCombo, lead);
   const handCount = handOrder.length;
@@ -333,13 +418,31 @@ function LiveTable({
     setSelected([]);
   };
 
+  // Instant local validation feedback before the play ever reaches the server,
+  // mirroring the bot table's messages (app/game-local.tsx). The server stays
+  // authoritative; these only surface the obvious client-side mistakes early.
   const onPlayPress = () => {
-    if (selected.length === 0 || !selLegal) return;
-    doPlay(selected);
+    setLocalError(null);
+    if (selected.length === 0) {
+      setLocalError('Pick cards to play');
+      return;
+    }
+    const combo = detectCombo(selected);
+    if (!combo) {
+      setLocalError('Not a legal combo');
+      return;
+    }
+    if (!canPlay(combo, lead)) {
+      setLocalError('That combo does not beat the lead');
+      return;
+    }
+    onPlay({ ...combo, cards: selected } as PlayedCombo);
+    setSelected([]);
   };
 
   const onPassPress = () => {
     if (!isMyTurn || lead === null) return;
+    setLocalError(null);
     onPass();
   };
 
@@ -466,12 +569,39 @@ function LiveTable({
 
   const canPass = isMyTurn && lead !== null;
 
+  // Fresh-start deal overlay. Rendered ALONE inside the panel (the live table is
+  // hidden underneath, exactly as the bot table hides its table during dealing),
+  // synthesizing the deal from the viewer's own hand + per-seat counts. Tap to
+  // skip; onDone reveals the live table. All hooks above have already run, so
+  // this early return never trips the rules of hooks.
+  if (dealing && yourSeat != null) {
+    const seatCounts = Array.from({ length: view.seats }, (_, s) =>
+      s === yourSeat
+        ? view.yourHand?.length ?? 13
+        : view.players.find((p) => p.seat === s)?.handCount ?? 13,
+    );
+    const dealNames = Array.from({ length: view.seats }, (_, s) => playerLabel(view, s));
+    return (
+      <TablePanel>
+        <DealingAnimation
+          mode="online"
+          yourSeat={yourSeat}
+          yourCards={view.yourHand ?? []}
+          seatCounts={seatCounts}
+          playerNames={dealNames}
+          onDone={() => setDealing(false)}
+        />
+      </TablePanel>
+    );
+  }
+
   return (
     <TablePanel>
       <View style={styles.tableColumn}>
         <TopBar
           title={`${LEVEL_LABEL[view.botLevel]} online`}
           turnLabel={turnLabel}
+          timer={formatTime(elapsedMs)}
           onBack={onExit}
           compact={compact}
         />
@@ -565,11 +695,12 @@ function LiveTable({
               errors, render INSIDE it so nothing below ever shifts as the
               countdown ticks or a message appears. */}
           <BannerStrip
-            autoPassing={false}
-            error={error}
+            autoPassing={autoPassing}
+            error={localError ?? error}
             isMyTurn={isMyTurn}
             compact={compact}
             turnText={seconds !== null ? `Your turn - ${seconds}s` : 'Your turn'}
+            reconnecting={status === 'reconnecting'}
           />
           <View style={[styles.handToolbar, compact && styles.handToolbarCompact]}>
             <View style={styles.handToolbarLeft}>
@@ -666,19 +797,49 @@ function LobbySection({
 
 // --- Finished ------------------------------------------------------------------
 
-function FinishedSection({ view, onHome }: { view: OnlineRoomView; onHome: () => void }) {
+function FinishedSection({
+  view,
+  profile,
+  onHome,
+}: {
+  view: OnlineRoomView;
+  profile: { displayName: string; avatarUrl: string | null } | null;
+  onHome: () => void;
+}) {
+  // Headline based on the viewer's placement, mirroring the bot table: 1st is a
+  // win, dead last is a loss, anything in between is a neutral "Hand over".
+  const yourSeat = view.yourSeat;
+  const order = view.finishOrder;
+  const youWon = yourSeat != null && order[0] === yourSeat;
+  const youLast = yourSeat != null && order[order.length - 1] === yourSeat;
+  const headline = youWon ? 'You won!' : youLast ? 'You lost' : 'Hand over';
+
   return (
     <>
       <Card style={styles.section}>
+        <Text style={styles.finishHeadline}>{headline}</Text>
         <Text style={styles.sectionTitle}>Finish order</Text>
-        {view.finishOrder.map((seat, i) => (
-          <View key={seat} style={styles.playerRow}>
-            <Text style={styles.finishPlace}>{i + 1}.</Text>
-            <Text style={styles.playerName} numberOfLines={1} ellipsizeMode="tail">
-              {playerLabel(view, seat)}
-            </Text>
-          </View>
-        ))}
+        {order.map((seat, i) => {
+          const p = view.players.find((pl) => pl.seat === seat);
+          const isYou = yourSeat != null && seat === yourSeat;
+          const isBot = p?.kind === 'bot';
+          const name = playerLabel(view, seat);
+          return (
+            <View key={seat} style={styles.finishRow}>
+              <Text style={styles.finishPlace}>{i + 1}.</Text>
+              <Avatar
+                name={name}
+                url={isYou ? profile?.avatarUrl ?? null : null}
+                localSource={isBot ? BOT_AVATAR_IMG : undefined}
+                size={24}
+                style={styles.finishAvatar}
+              />
+              <Text style={styles.playerName} numberOfLines={1} ellipsizeMode="tail">
+                {name}
+              </Text>
+            </View>
+          );
+        })}
       </Card>
       <Button title="Back to home" onPress={onHome} />
     </>
@@ -723,6 +884,9 @@ const styles = StyleSheet.create({
   shareBtn: { alignSelf: 'stretch' },
   waitingHost: { ...typography.body, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
 
+  finishHeadline: { fontSize: 28, fontWeight: '800', color: colors.felt, marginBottom: spacing.sm },
+  finishRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs + 2 },
+  finishAvatar: { marginHorizontal: spacing.sm },
   finishPlace: { ...typography.subheading, color: colors.felt, width: 32 },
 
   // --- Live table (mirrors app/game-local.tsx's playing layout) ---------------

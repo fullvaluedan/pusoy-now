@@ -10,7 +10,7 @@
 // height content-dependent or conditionally unmount it; that reintroduces the
 // layout shift this strip exists to prevent.
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, typography } from '../../lib/theme';
+import { colors, spacing, typography, withAlpha } from '../../lib/theme';
 
 export function BannerStrip({
   autoPassing,
@@ -18,6 +18,7 @@ export function BannerStrip({
   isMyTurn,
   compact,
   turnText,
+  reconnecting,
 }: {
   autoPassing: boolean;
   error: string | null;
@@ -28,10 +29,19 @@ export function BannerStrip({
   // height strip (never shifting the toolbar/hand below). Omitted by the bot
   // table, which keeps the plain "Your turn".
   turnText?: string;
+  // Online only: a mid-game socket drop. Shown as a distinct (non-gold) pill
+  // that takes precedence over everything else so a disconnect is impossible to
+  // miss, and -- like every other state here -- lives inside the fixed-height
+  // strip so it never shifts the toolbar/hand below. Omitted by the bot table.
+  reconnecting?: boolean;
 }) {
   return (
     <View style={[styles.bannerStrip, compact && styles.bannerStripCompact]} pointerEvents="none">
-      {autoPassing ? (
+      {reconnecting ? (
+        <View style={[styles.turnBanner, styles.reconnectBanner]}>
+          <Text style={[styles.turnBannerText, styles.reconnectText]} numberOfLines={1}>Reconnecting…</Text>
+        </View>
+      ) : autoPassing ? (
         <View style={styles.turnBanner}>
           <Text style={styles.turnBannerText}>No playable hand, passing…</Text>
         </View>
@@ -74,4 +84,13 @@ const styles = StyleSheet.create({
   },
   errorBanner: { backgroundColor: colors.danger },
   errorBannerText: { color: colors.white },
+  // Reconnecting: a distinct dark pill with a gold hairline, deliberately unlike
+  // the gold "Your turn" and red error pills so a live disconnect reads as its
+  // own state at a glance.
+  reconnectBanner: {
+    backgroundColor: withAlpha(colors.ink, 0.85),
+    borderWidth: 1,
+    borderColor: colors.gold,
+  },
+  reconnectText: { color: colors.gold },
 });
