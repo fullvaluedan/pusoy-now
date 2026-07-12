@@ -39,7 +39,7 @@ export default function BluetoothInfo() {
         </Text>
       </Card>
 
-      <Button title="Play vs bots" variant="primary" onPress={() => router.replace('/bot-select')} style={styles.action} />
+      <Button title="Play vs bots" variant="primary" onPress={() => router.replace('/')} style={styles.action} />
     </ScreenContainer>
   );
 }

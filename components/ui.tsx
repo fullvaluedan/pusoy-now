@@ -14,6 +14,7 @@ import {
   View,
   type StyleProp,
   type TextInputProps,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -128,9 +129,13 @@ interface ButtonProps {
   disabled?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
+  // Overrides the label Text style (e.g. a smaller fontSize/letterSpacing so
+  // a longer label fits a tight equal-width slot, like Home's one-line
+  // PLAY | QUICK MATCH | PRIVATE row on a 360px screen -- Round 9 U2).
+  textStyle?: StyleProp<TextStyle>;
 }
 
-export function Button({ title, subtitle, onPress, variant = 'primary', align = 'center', color, disabled, loading, style }: ButtonProps) {
+export function Button({ title, subtitle, onPress, variant = 'primary', align = 'center', color, disabled, loading, style, textStyle }: ButtonProps) {
   const inert = isButtonInert({ disabled, loading });
   const tokens = resolveButtonTokens({ variant, disabled, loading, color });
 
@@ -158,7 +163,9 @@ export function Button({ title, subtitle, onPress, variant = 'primary', align = 
         <LoadingDots color={tokens.text} />
       ) : (
         <>
-          <Text style={[buttonStyles.text, { color: tokens.text }, tokens.caps ? buttonStyles.textCaps : null]}>{title}</Text>
+          <Text style={[buttonStyles.text, { color: tokens.text }, tokens.caps ? buttonStyles.textCaps : null, textStyle]}>
+            {title}
+          </Text>
           {subtitle ? <Text style={[buttonStyles.subtext, { color: tokens.text }]}>{subtitle}</Text> : null}
         </>
       )}

@@ -2,7 +2,7 @@
 // so the node harness never imports react-native or expo-secure-store. Same
 // minimal ok() harness as the other tests. Run: tsx lib/settingsTest.ts (or via npm test)
 
-import { mergeSettings, DEFAULT_SETTINGS } from './settingsRules';
+import { mergeSettings, DEFAULT_SETTINGS, decideOnPlay } from './settingsRules';
 
 let pass = 0;
 let fail = 0;
@@ -44,6 +44,32 @@ function main() {
   ok('undefined returns defaults', mergeSettings(undefined).sound === DEFAULT_SETTINGS.sound);
   ok('string returns defaults', mergeSettings('garbage').sound === DEFAULT_SETTINGS.sound);
   ok('number returns defaults', mergeSettings(42).sound === DEFAULT_SETTINGS.sound);
+
+  // --- mergeSettings: botLevel back-compat + round-trip + coercion (Round 9 U2) -----
+  const storedBeforeBotLevel = { sound: true, haptics: true };
+  ok(
+    'stored payload without botLevel loads as null (back-compat)',
+    mergeSettings(storedBeforeBotLevel).botLevel === null,
+  );
+
+  for (const level of ['easy', 'normal', 'expert'] as const) {
+    const roundTripped = mergeSettings({ sound: true, haptics: true, botLevel: level });
+    ok(`botLevel '${level}' round-trips`, roundTripped.botLevel === level);
+  }
+
+  const invalidBotLevel = { sound: true, haptics: true, botLevel: 'nightmare' };
+  ok('invalid botLevel coerces to null', mergeSettings(invalidBotLevel).botLevel === null);
+
+  const numericBotLevel = { sound: true, haptics: true, botLevel: 3 };
+  ok('non-string botLevel coerces to null', mergeSettings(numericBotLevel).botLevel === null);
+
+  ok('empty object botLevel defaults to null', mergedEmpty.botLevel === null);
+
+  // --- decideOnPlay: Home's PLAY-tap decision (Round 9 U2) -----
+  ok('null botLevel -> pick', decideOnPlay(null) === 'pick');
+  ok('easy botLevel -> start', decideOnPlay('easy') === 'start');
+  ok('normal botLevel -> start', decideOnPlay('normal') === 'start');
+  ok('expert botLevel -> start', decideOnPlay('expert') === 'start');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);

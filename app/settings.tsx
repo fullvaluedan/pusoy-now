@@ -1,11 +1,20 @@
-// Settings screen: toggles for sound/haptics, navigation to account/legal, version footer.
+// Settings screen: toggles for sound/haptics, the saved bot Difficulty
+// (Round 9 U2 -- also settable inline from Home's first-ever PLAY tap),
+// navigation to account/legal, version footer.
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { CompactHeader, Button, Card, ScreenContainer } from '../components/ui';
-import { colors, spacing, typography } from '../lib/theme';
+import { colors, radii, spacing, typography } from '../lib/theme';
 import { AppSettings, DEFAULT_SETTINGS, loadSettings, saveSettings } from '../lib/settings';
+import type { BotLevel } from '../lib/pusoy/types';
+
+const DIFFICULTY_OPTIONS: { level: BotLevel; label: string }[] = [
+  { level: 'easy', label: 'Easy' },
+  { level: 'normal', label: 'Normal' },
+  { level: 'expert', label: 'Expert' },
+];
 
 export default function Settings() {
   const router = useRouter();
@@ -44,6 +53,15 @@ export default function Settings() {
     [settings],
   );
 
+  const handleDifficultyPick = useCallback(
+    (level: BotLevel) => {
+      const updated = { ...settings, botLevel: level };
+      setSettings(updated);
+      void saveSettings(updated);
+    },
+    [settings],
+  );
+
   if (loading) {
     return (
       <ScreenContainer>
@@ -72,6 +90,30 @@ export default function Settings() {
           value={settings.haptics}
           onToggle={handleHapticsToggle}
         />
+      </Card>
+
+      {/* Game group: saved bot difficulty (Round 9 U2) */}
+      <Card style={styles.card}>
+        <Text style={styles.groupHeading}>Game</Text>
+        <Text style={styles.rowLabel}>Difficulty</Text>
+        <View style={styles.difficultyRow}>
+          {DIFFICULTY_OPTIONS.map((option) => {
+            const selected = settings.botLevel === option.level;
+            return (
+              <Pressable
+                key={option.level}
+                onPress={() => handleDifficultyPick(option.level)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                style={[styles.difficultyOption, selected ? styles.difficultyOptionSelected : styles.difficultyOptionUnselected]}
+              >
+                <Text style={[styles.difficultyOptionText, selected && styles.difficultyOptionTextSelected]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </Card>
 
       {/* Account group */}
@@ -154,6 +196,23 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: spacing.md,
   },
+  difficultyRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  difficultyOption: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: radii.lg,
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  difficultyOptionUnselected: { backgroundColor: colors.surface, borderColor: colors.border },
+  difficultyOptionSelected: { backgroundColor: colors.felt, borderColor: colors.gold },
+  difficultyOptionText: { ...typography.bodyBold, color: colors.felt },
+  difficultyOptionTextSelected: { color: colors.textOnFelt },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
