@@ -16,7 +16,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.prends",
-      "associatedDomains": ["applinks:prends.app"],
+      "associatedDomains": [
+        "applinks:prends.app"
+      ],
       "usesAppleSignIn": true
     },
     "android": {
@@ -37,7 +39,10 @@
               "pathPrefix": "/join"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -50,6 +55,13 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-apple-authentication"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5978af40-b62c-42c0-ba9b-e4ccfe9e45a3"
+      }
+    },
+    "owner": "fullvaluedan"
   }
 }
