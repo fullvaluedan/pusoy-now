@@ -3,7 +3,7 @@
 Paste-ready. No em dashes. Adjust to taste.
 
 ## Short description (Google Play, max 80 chars)
-Pusoy Dos card game. Play vs smart bots or friends online. Fast, free, no ads.
+Pusoy Dos card game. Play vs smart bots or friends online.
 
 ## Subtitle (Apple, max 30 chars)
 Pusoy Dos, bots and friends
@@ -23,10 +23,10 @@ WHAT YOU GET
 - Clean, chunky, easy-to-read table designed for one-handed phone play.
 
 WHY PRENDS
-- No ads.
+
+- Free to play.
 - No real-money gambling.
-- No tracking.
-- Free.
+- Guest play with no sign-up.
 
 Sign in with Apple, Google, Facebook, or email to save your stats, pick a username, and keep your progress across devices. Your guest progress carries over when you sign in.
 
@@ -36,7 +36,7 @@ Prends is Pusoy Dos made simple. Deal in.
 pusoy dos,card game,big two,filipino,cards,multiplayer,online cards,bots,dos,shark
 
 ## Release notes (version 1.0.0)
-First release of Prends. Play Pusoy Dos against smart bots or real people online. Add friends, track your record, no ads.
+First release of Prends. Play Pusoy Dos against smart bots or real people online. Add friends, track your record.
 
 ## Promotional text (Apple, optional, max 170 chars)
-Play Pusoy Dos anywhere. Beat the bots, challenge friends in private rooms, or jump into Quick Match. Free, no ads, no gambling.
+Play Pusoy Dos anywhere. Beat the bots, challenge friends in private rooms, or jump into Quick Match. Free and no real-money gambling.

@@ -36,7 +36,9 @@ Collected:
 - Game activity (games played, finishing places, best win time) - app functionality, linked to user.
 - Optional marketing email opt-in (unchecked by default) - the ONLY optional data use.
 
-NOT collected / NOT present: no ads SDK, no analytics, no tracking pixels, no advertising ID (IDFA/GAID), no location, no contacts, no device fingerprinting, no data sold or shared with third parties. Account deletion is available in-app and at the web URL above.
+NOT collected / NOT present IN THE v1 BUILD BEING SUBMITTED: no ads SDK, no analytics, no tracking pixels, no advertising ID (IDFA/GAID), no location, no contacts, no device fingerprinting, no data sold or shared. Account deletion is in-app and at the web URL above.
+
+ADS ARE PLANNED (not in v1). The moment an ad SDK ships in a build, BOTH privacy forms must be updated BEFORE that build goes live: Google Data Safety must declare the advertising ID + any data shared with the ad network; Apple App Privacy must declare "Data used to track you" + the ad identifier + App Tracking Transparency (ATT) prompt if tracking across apps. Do NOT claim "no ads" in the store listing (already removed from STORE-LISTING.md). The v1 declarations below are accurate only while no ad SDK is present.
 
 ---
 
