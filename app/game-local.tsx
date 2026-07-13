@@ -290,11 +290,63 @@ export default function LocalGameScreen() {
   const humanSeat = findHumanSeat(game);
   const myHand = game.hands[humanSeat];
 
-  // 1) Dealing animation overlay
+  // 1) Dealing animation. Rendered as a TRANSPARENT overlay ON TOP OF the real
+  // table composition (the same TopBar + SeatPlate arc the `playing` branch
+  // renders below), so the felt panel, gold border, and opponent seats are all
+  // present and in their FINAL positions from the very first frame. Nothing
+  // jumps or restyles when the deal ends and the live table takes over: the
+  // seats are already the live seats. The overlay's own accumulating hand fan
+  // stands in for the live HandRow (which is not rendered during the deal).
   if (game.phase === 'dealing') {
     const playerNames = [0, 1, 2, 3].map((s) => seatName(game, s, humanDisplayName));
+    // Same opponent order + raised-middle arc the live `playing` branch uses.
+    const dealOpponentOrder = [1, 2, 3].map((o) => (humanSeat + o) % 4);
     return (
       <TablePanel>
+        <View style={styles.tableColumn}>
+          {/* Identical TopBar to the playing branch (same height-determining
+              props: turnLabel + timer + onSkip) so the seat arc below sits at
+              the exact same Y before and after the deal. The Skip button is
+              visually present but unreachable -- the transparent overlay's
+              tap-anywhere Pressable sits on top and intercepts every tap. */}
+          <TopBar
+            title={`${LEVEL_LABEL[game.level]} table`}
+            turnLabel="Dealing…"
+            timer={formatTime(0)}
+            onBack={() => router.replace('/')}
+            onSkip={() => {}}
+            compact={compact}
+          />
+
+          {/* The identical SeatPlate arc: same wrapper, same per-seat props as
+              the live table, but in the static pre-game state (13 cards each,
+              nobody's turn, nobody passed or finished). Because the markup and
+              props match, each plate lands at the pixel-identical position it
+              will hold once play begins. */}
+          <View style={[styles.oppRow, compact && styles.oppRowCompact]}>
+            {dealOpponentOrder.map((seat, i) => (
+              <SeatPlate
+                key={seat}
+                name={seatName(game, seat, humanDisplayName)}
+                avatarSource={BOT_AVATAR_IMG}
+                isCurrent={false}
+                place={null}
+                passed={false}
+                count={game.hands[seat].length}
+                raised={i === 1}
+                compact={compact}
+              />
+            ))}
+          </View>
+
+          {/* Filler so the column occupies the full panel height, matching the
+              live layout's flex fill. The pool/hand chrome is deliberately
+              omitted -- the deal overlay's own accumulating fan represents the
+              hand -- but it sits BELOW the seat arc, so it can never shift the
+              seats. */}
+          <View style={styles.dealFiller} />
+        </View>
+
         <DealingAnimation
           dealOrder={game.dealOrder}
           deck={game.deck}
@@ -738,6 +790,11 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+
+  // Fills the panel below the seat arc during the deal so the column occupies
+  // the full height (matching the live layout's flex fill). Content-free: the
+  // deal overlay paints the hand fan on top.
+  dealFiller: { flex: 1 },
 
   // Opponents — the row wrapper around the three shared SeatPlates.
   oppRow: {

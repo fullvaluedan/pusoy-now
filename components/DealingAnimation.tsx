@@ -29,7 +29,6 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import {
-  OpponentCardStack,
   PlayingCard,
   CARD_WIDTH,
   CARD_HEIGHT,
@@ -258,20 +257,6 @@ export function DealingAnimation({
     );
   }
 
-  // Opponent seats to render a face-down stack for: every seat except the human.
-  const oppSeats: number[] = [];
-  for (let s = 0; s < seatTotal; s++) if (s !== humanSeat) oppSeats.push(s);
-
-  // Cards dealt to a seat so far (up to but not including the in-flight step).
-  // Bot mode keeps the original 4-seat round-robin approximation so its visuals
-  // are byte-identical; online mode counts exactly (seat counts can be uneven).
-  const dealtCountForSeat = (seat: number): number => {
-    if (!isOnline) return Math.min(13, Math.floor((step + 3) / 4));
-    let n = 0;
-    for (let i = 0; i < step && i < steps.length; i++) if (steps[i].seat === seat) n++;
-    return n;
-  };
-
   const currentStep = steps[step];
   const currentCard = currentStep ? currentStep.card : null;
   const isHumanCard = currentStep?.seat === humanSeat;
@@ -297,14 +282,6 @@ export function DealingAnimation({
   // "Tap to skip" text below is only a hint, not the hit box.
   return (
     <Pressable style={styles.overlay} onPress={finish} onLayout={onLayout}>
-      <View style={styles.oppRow}>
-        {oppSeats.map((s) => (
-          <View key={s} style={styles.oppSlot}>
-            <Text style={styles.oppName}>{playerNames[s]}</Text>
-            <OpponentCardStack count={dealtCountForSeat(s)} />
-          </View>
-        ))}
-      </View>
       <Text style={styles.dealingLabel}>Dealing…</Text>
 
       <View
@@ -347,10 +324,14 @@ export function DealingAnimation({
 }
 
 const styles = StyleSheet.create({
+  // Transparent absolute-fill overlay: it sits ON TOP OF the real table
+  // composition (felt panel, gold border, opponent SeatPlates) so all of that
+  // is present and in its FINAL position from the first frame -- nothing moves
+  // when the deal ends. Only the shuffle deck, the flying card, the accumulating
+  // human hand fan, and the labels paint here; the seats and felt show through.
   overlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: colors.felt,
     zIndex: 100,
   },
   shuffleBox: {
@@ -397,16 +378,6 @@ const styles = StyleSheet.create({
     color: withAlpha(colors.white, 0.45),
     fontSize: 13,
   },
-  oppRow: {
-    position: 'absolute',
-    top: 40,
-    left: 0, right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 16,
-  },
-  oppSlot: { alignItems: 'center' },
-  oppName: { color: withAlpha(colors.white, 0.85), fontSize: 13, marginBottom: 4 },
   dealingLabel: {
     position: 'absolute',
     top: '50%',

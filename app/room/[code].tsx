@@ -576,11 +576,15 @@ function LiveTable({
 
   const canPass = isMyTurn && lead !== null;
 
-  // Fresh-start deal overlay. Rendered ALONE inside the panel (the live table is
-  // hidden underneath, exactly as the bot table hides its table during dealing),
-  // synthesizing the deal from the viewer's own hand + per-seat counts. Tap to
-  // skip; onDone reveals the live table. All hooks above have already run, so
-  // this early return never trips the rules of hooks.
+  // Fresh-start deal animation. Rendered as a TRANSPARENT overlay ON TOP OF the
+  // real online table composition (the same TopBar + SeatPlate arc the live
+  // branch below renders), so the felt panel, gold border, and opponent seats
+  // are present and in their FINAL positions from the first frame -- nothing
+  // jumps or restyles when the deal ends and the live table takes over. The
+  // deal is still synthesized from the viewer's own hand + per-seat counts
+  // (the client never receives the deck). Tap to skip; onDone reveals the live
+  // table. All hooks above have already run, so this early return never trips
+  // the rules of hooks.
   if (dealing && yourSeat != null) {
     const seatCounts = Array.from({ length: view.seats }, (_, s) =>
       s === yourSeat
@@ -590,6 +594,53 @@ function LiveTable({
     const dealNames = Array.from({ length: view.seats }, (_, s) => playerLabel(view, s));
     return (
       <TablePanel>
+        <View style={styles.tableColumn}>
+          {/* Identical TopBar to the live branch (same height-determining props:
+              turnLabel + timer, no onSkip) so the seat arc below sits at the
+              exact same Y before and after the deal. */}
+          <TopBar
+            title={`${LEVEL_LABEL[view.botLevel]} online`}
+            turnLabel="Dealing…"
+            timer={formatTime(0)}
+            onBack={onExit}
+            compact={compact}
+          />
+
+          {/* The identical SeatPlate arc: same wrapper + per-seat props as the
+              live table, in the static pre-game state (full hands, nobody's
+              turn). Because the markup and props match, each plate lands at the
+              pixel-identical position it will hold once play begins. */}
+          <View
+            style={[
+              styles.oppRow,
+              compact && styles.oppRowCompact,
+              singleOpponent && styles.oppRowSingle,
+            ]}
+          >
+            {slots.map((slot) => {
+              const p = view.players.find((pl) => pl.seat === slot.seat);
+              if (!p) return null;
+              return (
+                <SeatPlate
+                  key={slot.seat}
+                  name={p.username ?? (p.kind === 'bot' ? `Bot ${slot.seat + 1}` : 'Player')}
+                  avatarSource={p.kind === 'bot' ? BOT_AVATAR_IMG : undefined}
+                  isCurrent={false}
+                  place={null}
+                  passed={false}
+                  count={p.handCount}
+                  raised={slot.raised}
+                  compact={compact}
+                />
+              );
+            })}
+          </View>
+
+          {/* Filler so the column fills the panel below the seat arc; the deal
+              overlay paints the accumulating hand fan on top. */}
+          <View style={styles.dealFiller} />
+        </View>
+
         <DealingAnimation
           mode="online"
           yourSeat={yourSeat}
@@ -899,6 +950,10 @@ const styles = StyleSheet.create({
 
   // --- Live table (mirrors app/game-local.tsx's playing layout) ---------------
   tableColumn: { flex: 1, width: '100%' },
+
+  // Fills the panel below the seat arc during the deal so the column occupies
+  // the full height. The deal overlay paints the accumulating hand fan on top.
+  dealFiller: { flex: 1 },
 
   oppRow: {
     flexDirection: 'row',

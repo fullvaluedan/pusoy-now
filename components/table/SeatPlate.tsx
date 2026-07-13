@@ -147,6 +147,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md - 2,
     borderRadius: radii.md,
+    // A permanent 1px transparent border so the active-turn state (oppBoxActive
+    // recolors this border) never changes the box's outer size. Without it, a
+    // seat gaining a border when it becomes the current player would grow ~2px
+    // and shift horizontally -- which would break the deal->play seat-position
+    // match (the deal renders every seat isCurrent=false / borderless).
+    borderWidth: 1,
+    borderColor: 'transparent',
     alignItems: 'center',
     // 3 boxes across oppRow's content width (347px at 375, after its own
     // paddingHorizontal) leaves ~115px per box; 120 (the old value) made 3
@@ -180,9 +187,11 @@ const styles = StyleSheet.create({
   // The avatar's own turn-ring (see components/Avatar.tsx) now carries most of
   // the "whose turn" signal, so the plate itself only needs a whisper of gold
   // rather than a full wash + border.
+  // Active-turn plate: only recolors the always-present 1px border (see oppBox)
+  // plus a whisper of gold fill, so gaining/losing the turn never resizes the
+  // box. The avatar's own turn-ring carries most of the "whose turn" signal.
   oppBoxActive: {
     backgroundColor: withAlpha(colors.gold, 0.08),
-    borderWidth: 1,
     borderColor: withAlpha(colors.gold, 0.6),
   },
   oppBoxDone: { opacity: 0.55 },
