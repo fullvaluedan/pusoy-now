@@ -3,13 +3,13 @@
     "apps": [],
     "details": [
       {
-        "appIDs": ["TEAMID.app.prends"],
+        "appIDs": ["AR885BVBSK.app.prends"],
         "components": [
           { "/": "/join/*" }
         ]
       },
       {
-        "appID": "TEAMID.app.prends",
+        "appID": "AR885BVBSK.app.prends",
         "paths": ["/join/*"]
       }
     ]
