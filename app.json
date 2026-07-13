@@ -14,6 +14,9 @@
     "scheme": "prends",
     "newArchEnabled": true,
     "ios": {
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
       "supportsTablet": true,
       "bundleIdentifier": "app.prends",
       "associatedDomains": [
