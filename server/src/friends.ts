@@ -247,6 +247,10 @@ export interface DisplayInfo {
   username: string | null;
   name: string | null;
   image: string | null;
+  // The user's avatar-source preference (player_profile.avatar_pref), so lists
+  // that render other players' avatars honor a 'letter' choice instead of
+  // always showing the social photo. null for users with no explicit choice.
+  avatarPref: string | null;
 }
 
 // Resolve display fields (username from player_profile, name/avatar from the
@@ -257,7 +261,8 @@ export async function fetchDisplayInfo(db: D1Database, ids: string[]): Promise<M
   const placeholders = ids.map(() => '?').join(',');
   const { results } = await db
     .prepare(
-      `SELECT u.id AS userId, pp.username AS username, u.name AS name, u.image AS image
+      `SELECT u.id AS userId, pp.username AS username, u.name AS name, u.image AS image,
+              pp.avatar_pref AS avatarPref
        FROM user u LEFT JOIN player_profile pp ON pp.user_id = u.id
        WHERE u.id IN (${placeholders})`,
     )

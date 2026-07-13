@@ -11,6 +11,8 @@
 // rejected" - is unit-testable against an in-memory store with no D1. The route
 // (session gating, live D1) is wired in index.ts.
 
+import { containsBlockedWord } from './usernameBlocklist';
+
 export const USERNAME_MIN = 3;
 export const USERNAME_MAX = 20;
 
@@ -22,14 +24,17 @@ export const RESERVED_USERNAMES = new Set([
   'me', 'you', 'null', 'undefined',
 ]);
 
-export type UsernameError = 'length' | 'charset' | 'reserved';
+export type UsernameError = 'length' | 'charset' | 'reserved' | 'inappropriate';
 
 export type UsernameCheck =
   | { ok: true; username: string }
   | { ok: false; reason: UsernameError };
 
 // Normalize (trim + lowercase, since usernames are case-insensitive) then
-// validate. Returns the canonical stored form on success.
+// validate. Returns the canonical stored form on success. The moderation check
+// (a local leetspeak-aware blocklist, see usernameBlocklist.ts) runs last, so a
+// handle that is otherwise well-formed but offensive is rejected as
+// 'inappropriate' rather than passing.
 export function validateUsername(raw: string): UsernameCheck {
   const username = raw.trim().toLowerCase();
   if (username.length < USERNAME_MIN || username.length > USERNAME_MAX) {
@@ -40,6 +45,9 @@ export function validateUsername(raw: string): UsernameCheck {
   }
   if (RESERVED_USERNAMES.has(username)) {
     return { ok: false, reason: 'reserved' };
+  }
+  if (containsBlockedWord(username)) {
+    return { ok: false, reason: 'inappropriate' };
   }
   return { ok: true, username };
 }
@@ -54,14 +62,32 @@ export function usernameErrorMessage(reason: UsernameError): string {
       return 'Use only lowercase letters, numbers, and underscores.';
     case 'reserved':
       return 'That username is not available.';
+    case 'inappropriate':
+      return 'That username is not allowed.';
   }
 }
+
+// The avatar source a user prefers. Stored on the profile row as avatar_pref.
+// 'social' uses the linked account photo, 'letter' forces the initial disc, and
+// 'preset:<id>' names a chosen preset (art deferred). null means "no explicit
+// choice": the client falls through to the default precedence (social, letter).
+export type AvatarPref = 'social' | 'letter' | (string & {}) | null;
 
 // Storage seam. Tests pass an in-memory fake; the route wires d1ProfileStore.
 export interface ProfileRow {
   userId: string;
   username: string;
+  // How many renames the user has spent. First claim inserts at 0; the one free
+  // rename bumps it to 1, after which renames are refused. Older rows created
+  // before migration 0009 read back as 0 (the column default).
+  usernameChanges: number;
+  avatarPref: AvatarPref;
 }
+
+// Outcome of the atomic rename UPDATE. 'rename-limit' means the row exists but
+// the single free change was already spent; 'taken' means the new handle
+// collided on the unique index; 'not-found' means there was no row to rename.
+export type RenameStatus = 'ok' | 'rename-limit' | 'taken' | 'not-found';
 
 export interface ProfileStore {
   getByUserId(userId: string): Promise<ProfileRow | null>;
@@ -69,6 +95,18 @@ export interface ProfileStore {
   // Insert a new profile row. Returns false if the username was already taken
   // (lost the race on the unique index), true on success.
   insert(userId: string, username: string, now: number): Promise<boolean>;
+  // Rename in place, enforcing the one-free-change limit atomically (the UPDATE
+  // is guarded by username_changes < 1 and increments it), and mapping a unique
+  // collision to 'taken'.
+  renameUsername(userId: string, newUsername: string, now: number): Promise<RenameStatus>;
+  // Set (or clear, with null) the avatar-source preference. Returns false when
+  // there is no profile row yet (the user has not claimed a username).
+  setAvatarPref(userId: string, pref: AvatarPref, now: number): Promise<boolean>;
+}
+
+// Whether a loaded profile row is still allowed its one free rename.
+export function canRename(row: ProfileRow | null): boolean {
+  return Boolean(row) && (row!.usernameChanges ?? 0) < 1;
 }
 
 export type ClaimResult =
@@ -100,6 +138,46 @@ export async function claimUsername(
   return { status: 'claimed', username: valid.username };
 }
 
+export type RenameResult =
+  | { status: 'renamed'; username: string }
+  | { status: 'invalid'; reason: UsernameError }
+  | { status: 'taken' }
+  | { status: 'rename-limit' }
+  | { status: 'no-username' }
+  | { status: 'unchanged'; username: string };
+
+// Rename a signed-in user's handle. Signed-in users get exactly ONE free change
+// (the first claim is separate and already spent to create the row): validation
+// and moderation run first, then a taken-by-someone-else check, then the atomic
+// store rename which is the true limit-enforcement point. A user with no row yet
+// must claim, not rename ('no-username'); re-submitting their current handle is a
+// no-op that does not burn the change ('unchanged').
+export async function renameUsername(
+  store: ProfileStore,
+  userId: string,
+  raw: string,
+  now: number,
+): Promise<RenameResult> {
+  const existing = await store.getByUserId(userId);
+  if (!existing) return { status: 'no-username' };
+
+  const valid = validateUsername(raw);
+  if (!valid.ok) return { status: 'invalid', reason: valid.reason };
+
+  if (valid.username === existing.username.toLowerCase()) {
+    return { status: 'unchanged', username: existing.username };
+  }
+  if (!canRename(existing)) return { status: 'rename-limit' };
+
+  const taken = await store.getByUsername(valid.username);
+  if (taken) return { status: 'taken' };
+
+  const res = await store.renameUsername(userId, valid.username, now);
+  if (res === 'ok') return { status: 'renamed', username: valid.username };
+  if (res === 'rename-limit') return { status: 'rename-limit' };
+  return { status: 'taken' }; // lost the unique-index race, or vanished row
+}
+
 export type AvailabilityResult =
   | { status: 'available' }
   | { status: 'invalid'; reason: UsernameError }
@@ -117,17 +195,19 @@ export async function checkUsername(store: ProfileStore, raw: string): Promise<A
 // --- D1-backed store -------------------------------------------------------
 
 export function d1ProfileStore(db: D1Database): ProfileStore {
+  const SELECT_COLS =
+    'user_id as userId, username, username_changes as usernameChanges, avatar_pref as avatarPref';
   return {
     async getByUserId(userId) {
       const row = await db
-        .prepare('SELECT user_id as userId, username FROM player_profile WHERE user_id = ?')
+        .prepare(`SELECT ${SELECT_COLS} FROM player_profile WHERE user_id = ?`)
         .bind(userId)
         .first<ProfileRow>();
       return row ?? null;
     },
     async getByUsername(username) {
       const row = await db
-        .prepare('SELECT user_id as userId, username FROM player_profile WHERE username = ? COLLATE NOCASE')
+        .prepare(`SELECT ${SELECT_COLS} FROM player_profile WHERE username = ? COLLATE NOCASE`)
         .bind(username)
         .first<ProfileRow>();
       return row ?? null;
@@ -135,12 +215,40 @@ export function d1ProfileStore(db: D1Database): ProfileStore {
     async insert(userId, username, now) {
       // INSERT OR IGNORE + the changes count is an atomic "did this win the
       // unique index?" check, so two concurrent claims of the same handle
-      // cannot both succeed.
+      // cannot both succeed. username_changes defaults to 0 (the first claim
+      // is not a rename).
       const res = await db
         .prepare(
           'INSERT OR IGNORE INTO player_profile (user_id, username, created_at, updated_at) VALUES (?, ?, ?, ?)',
         )
         .bind(userId, username, now, now)
+        .run();
+      return (res.meta?.changes ?? 0) > 0;
+    },
+    async renameUsername(userId, newUsername, now) {
+      // The WHERE username_changes < 1 guard makes the one-free-change limit
+      // atomic: a second rename matches no row and reports 0 changes. A unique
+      // collision on the new handle throws, which we map to 'taken'.
+      try {
+        const res = await db
+          .prepare(
+            'UPDATE player_profile SET username = ?, username_changes = username_changes + 1, updated_at = ? WHERE user_id = ? AND username_changes < 1',
+          )
+          .bind(newUsername, now, userId)
+          .run();
+        if ((res.meta?.changes ?? 0) > 0) return 'ok';
+        // No row updated: either the user has no profile, or the limit is spent.
+        const still = await this.getByUserId(userId);
+        if (!still) return 'not-found';
+        return 'rename-limit';
+      } catch {
+        return 'taken';
+      }
+    },
+    async setAvatarPref(userId, pref, now) {
+      const res = await db
+        .prepare('UPDATE player_profile SET avatar_pref = ?, updated_at = ? WHERE user_id = ?')
+        .bind(pref ?? null, now, userId)
         .run();
       return (res.meta?.changes ?? 0) > 0;
     },

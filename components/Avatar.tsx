@@ -16,6 +16,12 @@ interface AvatarProps {
   // A bundled fallback image (e.g. the bot dealer art) shown when there is no
   // remote url. Initials remain the last resort if this also fails to load.
   localSource?: ImageSourcePropType;
+  // The user's avatar-source preference. 'letter' forces the initial disc even
+  // when a photo (url) exists; 'social' and 'preset:<id>' (art deferred) keep
+  // the default precedence of photo, then letter. Undefined/null = default. This
+  // is the single place the preference is honored, so every seat, list, and
+  // ranking Avatar respects it without each caller reimplementing precedence.
+  avatarPref?: string | null;
   size?: number;
   active?: boolean;
   // Wrap the avatar in the decorative gold seat-frame ring.
@@ -29,6 +35,7 @@ export const Avatar = memo(function Avatar({
   name,
   url,
   localSource,
+  avatarPref,
   size = 40,
   active = false,
   framed = false,
@@ -60,7 +67,11 @@ export const Avatar = memo(function Avatar({
   const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
   const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
 
-  const source = url ? { uri: url } : localSource;
+  // 'letter' forces the initial disc; any other pref keeps the default
+  // photo-then-letter precedence. The bundled localSource (bot art) is unaffected
+  // since bots never carry a preference.
+  const forceLetter = avatarPref === 'letter';
+  const source = forceLetter ? undefined : url ? { uri: url } : localSource;
   const showImage = source && !imageError;
 
   const circle = (

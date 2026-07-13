@@ -47,7 +47,10 @@ export function pickAvatarUrl(user: AuthUser): string | null {
 export const USERNAME_MIN = 3;
 export const USERNAME_MAX = 20;
 
-export type UsernameError = 'length' | 'charset' | 'reserved';
+// 'inappropriate' is server-authoritative (the Worker runs a local moderation
+// blocklist that the client does not mirror), but it is a valid reason the check
+// and rename endpoints can return, so the type and its message live here too.
+export type UsernameError = 'length' | 'charset' | 'reserved' | 'inappropriate';
 
 const RESERVED_USERNAMES = new Set([
   'admin', 'administrator', 'root', 'system', 'support', 'help', 'api',
@@ -82,5 +85,7 @@ export function usernameErrorMessage(reason: UsernameError): string {
       return 'Use only lowercase letters, numbers, and underscores.';
     case 'reserved':
       return 'That username is not available.';
+    case 'inappropriate':
+      return 'That username is not allowed.';
   }
 }

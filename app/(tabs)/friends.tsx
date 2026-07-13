@@ -251,7 +251,7 @@ function AddFriendSection({ onAdded }: { onAdded: () => void }) {
 function UserRow({ user, children }: { user: FriendUser; children: ReactNode }) {
   return (
     <ListRow
-      leading={<Avatar url={user.image} name={user.name ?? user.username ?? 'Player'} size={44} />}
+      leading={<Avatar url={user.image} avatarPref={user.avatarPref} name={user.name ?? user.username ?? 'Player'} size={44} />}
       trailing={children}
     >
       <View style={styles.rowText}>
@@ -342,7 +342,7 @@ function FriendsList({ friends, onChanged }: { friends: AcceptedFriend[]; onChan
       {friends.map((friend) => (
         <ListRow
           key={friend.userId}
-          leading={<Avatar url={friend.image} name={friend.name ?? friend.username ?? 'Player'} size={44} />}
+          leading={<Avatar url={friend.image} avatarPref={friend.avatarPref} name={friend.name ?? friend.username ?? 'Player'} size={44} />}
           trailing={
             <View style={styles.friendTrailing}>
               <H2HChip h2h={friend.h2h} />

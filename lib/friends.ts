@@ -14,6 +14,9 @@ export interface FriendUser {
   username: string | null;
   name: string | null;
   image: string | null;
+  // The player's avatar-source preference, so a 'letter' choice is honored in
+  // friend lists instead of always showing their social photo. May be absent.
+  avatarPref?: string | null;
 }
 
 // The caller's head-to-head record vs one friend, from shared finished
@@ -41,6 +44,7 @@ export interface RankRow {
   username: string | null;
   name: string | null;
   image: string | null;
+  avatarPref?: string | null;
   firsts: number;
   games: number;
   winRate: number;

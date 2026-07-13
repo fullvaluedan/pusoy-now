@@ -10,8 +10,10 @@
 // Run: tsx src/profile.test.ts (or via npm test)
 
 import {
+  canRename,
   checkUsername,
   claimUsername,
+  renameUsername,
   validateUsername,
   type ProfileRow,
   type ProfileStore,
@@ -44,9 +46,26 @@ function memStore() {
     },
     async insert(userId, username, _now) {
       if (byName.has(username.toLowerCase())) return false;
-      const row: ProfileRow = { userId, username };
+      const row: ProfileRow = { userId, username, usernameChanges: 0, avatarPref: null };
       byUser.set(userId, row);
       byName.set(username.toLowerCase(), row);
+      return true;
+    },
+    async renameUsername(userId, newUsername, _now) {
+      const row = byUser.get(userId);
+      if (!row) return 'not-found';
+      if (row.usernameChanges >= 1) return 'rename-limit';
+      if (byName.has(newUsername.toLowerCase())) return 'taken';
+      byName.delete(row.username.toLowerCase());
+      row.username = newUsername;
+      row.usernameChanges += 1;
+      byName.set(newUsername.toLowerCase(), row);
+      return 'ok';
+    },
+    async setAvatarPref(userId, pref, _now) {
+      const row = byUser.get(userId);
+      if (!row) return false;
+      row.avatarPref = pref;
       return true;
     },
   };
@@ -88,6 +107,15 @@ async function main() {
     const r = validateUsername('ADMIN');
     return !r.ok && r.reason === 'reserved';
   })());
+  ok('an offensive handle is rejected as inappropriate', (() => {
+    const r = validateUsername('shithead');
+    return !r.ok && r.reason === 'inappropriate';
+  })());
+  ok('a leetspeak-evaded slur is caught', (() => {
+    const r = validateUsername('f4gg0t');
+    return !r.ok && r.reason === 'inappropriate';
+  })());
+  ok('a clean handle that merely contains letters passes moderation', validateUsername('assistant_ada').ok === true);
 
   // --- claim: happy path ----------------------------------------------------
   {
@@ -130,6 +158,54 @@ async function main() {
     ok('a held handle is taken', (await checkUsername(store, 'taken_one')).status === 'taken');
     ok('a held handle is taken case-insensitively', (await checkUsername(store, 'TAKEN_ONE')).status === 'taken');
     ok('an invalid handle is flagged invalid on check', (await checkUsername(store, 'x')).status === 'invalid');
+  }
+
+  // --- rename: one free change ----------------------------------------------
+  {
+    const { store } = memStore();
+    await claimUsername(store, 'user-1', 'first', now);
+    ok('a fresh profile can rename', canRename(await store.getByUserId('user-1')) === true);
+    const r1 = await renameUsername(store, 'user-1', 'second', now);
+    ok('the first rename succeeds', r1.status === 'renamed' && r1.username === 'second');
+    ok('the handle is now the new one', (await store.getByUserId('user-1'))?.username === 'second');
+    ok('the spent profile can no longer rename', canRename(await store.getByUserId('user-1')) === false);
+    const r2 = await renameUsername(store, 'user-1', 'third', now);
+    ok('a second rename is refused at the limit', r2.status === 'rename-limit');
+    ok('the handle is unchanged after a refused rename', (await store.getByUserId('user-1'))?.username === 'second');
+    ok('the refused handle never got stored', (await store.getByUsername('third')) === null);
+  }
+
+  // --- rename: validation, moderation, collisions ---------------------------
+  {
+    const { store } = memStore();
+    await claimUsername(store, 'user-1', 'alpha', now);
+    await claimUsername(store, 'user-2', 'beta', now);
+    ok('renaming to a taken handle is rejected', (await renameUsername(store, 'user-1', 'beta', now)).status === 'taken');
+    ok('renaming to an invalid handle is rejected', (await renameUsername(store, 'user-1', 'no spaces', now)).status === 'invalid');
+    const modr = await renameUsername(store, 'user-1', 'cuntface', now);
+    ok('renaming to an offensive handle reports inappropriate', modr.status === 'invalid' && modr.reason === 'inappropriate');
+    ok('a rejected rename did not spend the change', canRename(await store.getByUserId('user-1')) === true);
+    const same = await renameUsername(store, 'user-1', 'alpha', now);
+    ok('renaming to the current handle is a no-op that keeps the change', same.status === 'unchanged');
+    ok('the no-op rename did not spend the change', canRename(await store.getByUserId('user-1')) === true);
+  }
+
+  // --- rename: needs an existing profile ------------------------------------
+  {
+    const { store } = memStore();
+    ok('renaming with no profile yet says no-username', (await renameUsername(store, 'ghost', 'anything', now)).status === 'no-username');
+  }
+
+  // --- avatar preference -----------------------------------------------------
+  {
+    const { store } = memStore();
+    await claimUsername(store, 'user-1', 'picky', now);
+    ok('avatar pref starts null', (await store.getByUserId('user-1'))?.avatarPref === null);
+    ok('setting a pref succeeds for a claimed user', (await store.setAvatarPref('user-1', 'letter', now)) === true);
+    ok('the pref is persisted', (await store.getByUserId('user-1'))?.avatarPref === 'letter');
+    ok('clearing the pref back to null works', (await store.setAvatarPref('user-1', null, now)) === true);
+    ok('the pref is null again', (await store.getByUserId('user-1'))?.avatarPref === null);
+    ok('setting a pref for a user with no profile fails', (await store.setAvatarPref('ghost', 'social', now)) === false);
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

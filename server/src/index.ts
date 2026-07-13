@@ -12,7 +12,15 @@ import { makeAuth, trustedOriginsFor, type Env } from './auth';
 import { d1Store, isPremium, processStripeEvent, requireUserId } from './entitlements';
 import { constructEvent, createCheckout, stripeConfigured } from './stripe';
 import { configuredProviderIds } from './social';
-import { checkUsername, claimUsername, d1ProfileStore, usernameErrorMessage } from './profile';
+import {
+  canRename,
+  checkUsername,
+  claimUsername,
+  d1ProfileStore,
+  renameUsername,
+  usernameErrorMessage,
+  type AvatarPref,
+} from './profile';
 import { d1ConsentStore, getConsent, recordConsent } from './consent';
 import { appleRevocationHook, d1DeletionStore, deleteAccount, type AppleRevocationEnv } from './deletion';
 import {
@@ -37,6 +45,16 @@ import { Matchmaker } from './matchmaker';
 export { GameRoom, Matchmaker };
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Validate an incoming avatar-preference value. Accepts 'social', 'letter', a
+// 'preset:<id>' string (art deferred, but the id is stored now), or null to
+// clear the choice. Returns undefined for anything else so the route can 400.
+function normalizeAvatarPref(v: unknown): AvatarPref | undefined {
+  if (v === null || v === undefined) return null;
+  if (v === 'social' || v === 'letter') return v;
+  if (typeof v === 'string' && /^preset:[a-z0-9_-]{1,32}$/.test(v)) return v;
+  return undefined;
+}
 
 // The web origin to send a checkout return to: the request's Origin if it is
 // trusted, else the first configured web origin, else the Worker's own URL.
@@ -129,13 +147,59 @@ app.post('/api/stripe/webhook', async (c) => {
 
 // --- Usernames (U3) --------------------------------------------------------
 
-// The caller's own profile: their claimed username, or null if unclaimed (the
-// app then prompts them to claim one on the Profile screen). Session-gated.
+// The caller's own profile: their claimed username (or null if unclaimed),
+// whether they still have their one free rename, and their avatar-source
+// preference. The client prompts an unclaimed user to claim, offers a rename
+// when canRename, and drives the Avatar preview from avatarPref. Session-gated.
 app.get('/api/profile', async (c) => {
   const userId = await requireUserId(c.env, c.req.raw.headers);
   if (!userId) return c.json({ error: 'unauthorized' }, 401);
   const row = await d1ProfileStore(c.env.DB).getByUserId(userId);
-  return c.json({ username: row?.username ?? null });
+  return c.json({
+    username: row?.username ?? null,
+    canRename: canRename(row),
+    avatarPref: row?.avatarPref ?? null,
+  });
+});
+
+// Rename a claimed handle (signed-in users get exactly one free change). Runs
+// the same validation + local moderation as claim, then enforces the limit at
+// the store. 409 on taken or limit-reached; 400 on invalid/inappropriate.
+// Session-gated (guests cannot claim, so they can never reach a rename).
+app.post('/api/username/rename', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { username?: unknown };
+  const raw = typeof body.username === 'string' ? body.username : '';
+  const res = await renameUsername(d1ProfileStore(c.env.DB), userId, raw, Date.now());
+  if (res.status === 'invalid') {
+    return c.json({ error: 'invalid', reason: res.reason, message: usernameErrorMessage(res.reason) }, 400);
+  }
+  if (res.status === 'no-username') {
+    return c.json({ error: 'no-username', message: 'Claim a username first.' }, 409);
+  }
+  if (res.status === 'taken') {
+    return c.json({ error: 'taken', message: 'That username is taken.' }, 409);
+  }
+  if (res.status === 'rename-limit') {
+    return c.json({ error: 'rename-limit', message: 'You have used your one username change.' }, 409);
+  }
+  // 'renamed' or 'unchanged': report the current handle and the (now used) allowance.
+  return c.json({ username: res.username, canRename: res.status === 'unchanged' ? canRename(await d1ProfileStore(c.env.DB).getByUserId(userId)) : false });
+});
+
+// Set the caller's avatar-source preference ('social' | 'letter' | 'preset:<id>'
+// | null). Stored on the profile row, so it requires a claimed username; a user
+// with no row gets 409 need-username. Session-gated.
+app.post('/api/profile/avatar-pref', async (c) => {
+  const userId = await requireUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { pref?: unknown };
+  const pref = normalizeAvatarPref(body.pref);
+  if (pref === undefined) return c.json({ error: 'invalid', message: 'Unknown avatar preference.' }, 400);
+  const updated = await d1ProfileStore(c.env.DB).setAvatarPref(userId, pref, Date.now());
+  if (!updated) return c.json({ error: 'need-username', message: 'Claim a username first.' }, 409);
+  return c.json({ avatarPref: pref });
 });
 
 // Inline availability check for the claim field. Session-gated so username
@@ -223,7 +287,13 @@ async function withDisplay(env: Env, ids: string[]) {
   const info = await fetchDisplayInfo(env.DB, ids);
   return ids.map((userId) => {
     const d = info.get(userId);
-    return { userId, username: d?.username ?? null, name: d?.name ?? null, image: d?.image ?? null };
+    return {
+      userId,
+      username: d?.username ?? null,
+      name: d?.name ?? null,
+      image: d?.image ?? null,
+      avatarPref: d?.avatarPref ?? null,
+    };
   });
 }
 
@@ -310,6 +380,7 @@ app.get('/api/friends/ranking', async (c) => {
       username: d?.username ?? null,
       name: d?.name ?? null,
       image: d?.image ?? null,
+      avatarPref: d?.avatarPref ?? null,
       firsts: e.firsts,
       games: e.games,
       winRate: e.winRate,

@@ -133,7 +133,7 @@ function PodiumSpot({ row, place }: { row: RankRow; place: 1 | 2 | 3 }) {
     >
       <Text style={first ? styles.podiumMedalBig : styles.podiumMedal}>{MEDALS[place - 1]}</Text>
       <View style={first ? avatarRingStyles.gold : styles.plainRing}>
-        <Avatar url={row.image} name={name} size={first ? 64 : 48} />
+        <Avatar url={row.image} avatarPref={row.avatarPref} name={name} size={first ? 64 : 48} />
       </View>
       <Text style={styles.podiumName} numberOfLines={1} ellipsizeMode="tail">
         {name}
@@ -153,7 +153,7 @@ function RankRowItem({ row, position }: { row: RankRow; position: number }) {
       leading={
         <View style={styles.leadingWrap}>
           <Text style={[styles.position, row.isSelf && styles.positionSelf]}>{position}</Text>
-          <Avatar url={row.image} name={name} size={44} />
+          <Avatar url={row.image} avatarPref={row.avatarPref} name={name} size={44} />
         </View>
       }
       trailing={
