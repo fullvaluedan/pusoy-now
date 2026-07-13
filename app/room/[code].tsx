@@ -256,7 +256,6 @@ function LiveTable({
   const [selected, setSelected] = useState<CardT[]>([]);
   const [sortMode, setSortMode] = useState<SortMode | null>(null);
   const [handOrder, setHandOrder] = useState<CardT[]>(() => view.yourHand ?? []);
-  const [now, setNow] = useState(() => Date.now());
   // Instant local play-validation feedback ("Pick cards to play", etc.), shown
   // in the same red pill the server errors use. The server stays authoritative;
   // this is a client-only nicety mirroring the bot table.
@@ -271,15 +270,13 @@ function LiveTable({
     setHandOrder((prev) => reconcileHand(prev, serverHand ?? []));
   }, [serverHand]);
 
-  // Turn countdown: ticks for EVERY seat's turn (yours in the banner pill,
-  // everyone else's in the top-bar turn label), cleared on turn change /
-  // unmount so it never runs in the background.
+  // Turn countdown deadline (server-set fresh every turn). The 250ms ticker no
+  // longer lives here: it was re-rendering the whole LiveTable 4x/sec all game.
+  // The countdown now ticks INSIDE the two leaf components that actually show it
+  // -- BannerStrip (your-turn pill) and TopBar (another seat's turn label) --
+  // each running its own interval only while it is on screen, so a tick repaints
+  // just that pill, not the felt/hand/pool.
   const turnDeadline = view.turnDeadline;
-  useEffect(() => {
-    if (!turnDeadline) return;
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, [turnDeadline]);
 
   // Selection (and any stale error, local or server) reset once the turn moves
   // on -- either your play landed or the turn passed while you were deciding.
@@ -291,9 +288,6 @@ function LiveTable({
     // trigger this reset.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSeat]);
-
-  const seconds =
-    turnDeadline ? Math.max(0, Math.ceil((turnDeadline - now) / 1000)) : null;
 
   // Elapsed game clock, shown in the TopBar like the bot table. Start counting
   // when this client first mounts into the playing phase (LiveTable is only
@@ -361,8 +355,11 @@ function LiveTable({
     connected,
   });
   // Turn identity: the auto-pass fires at most once per turn instance, so a slow
-  // server ack (which re-renders with the same view) cannot double-send.
-  const turnKey = autoPassTurnKey(currentSeat, view.trickHistory.length);
+  // server ack (which re-renders with the same view) cannot double-send. Keyed
+  // on the server's turnDeadline (unique per turn), NOT trickHistory length,
+  // which the server caps at 8 -- past that a length-based key collides across
+  // later turns and wedges the latch so no further forced pass fires.
+  const turnKey = autoPassTurnKey(currentSeat, turnDeadline);
   const autoPassFiredRef = useRef<string | null>(null);
   // `onPass` is a fresh closure each render; keep it in a ref so the effect's
   // deps stay [wantAutoPass, turnKey] and an unrelated re-render never clears
@@ -374,14 +371,21 @@ function LiveTable({
       setAutoPassing(false);
       return;
     }
-    if (autoPassFiredRef.current === turnKey) return; // already handled this turn
-    autoPassFiredRef.current = turnKey;
+    if (autoPassFiredRef.current === turnKey) return; // already passed this turn
     setAutoPassing(true);
     const t = setTimeout(() => {
+      // Latch ONLY at the instant we actually send. Setting it when the timer
+      // STARTS meant a socket blip that cancelled the timer (cleanup below) left
+      // the turn permanently latched, silently suppressing the pass. Latching at
+      // send time means a cancelled-before-fire timer leaves the turn un-latched,
+      // so the effect re-schedules and still passes after the blip clears.
+      autoPassFiredRef.current = turnKey;
       setAutoPassing(false);
       onPassRef.current();
     }, 1400);
     return () => {
+      // Nothing to unlatch here: if we get here before the timeout fired, the
+      // latch was never set, so the next scheduling re-arms the pass.
       clearTimeout(t);
       setAutoPassing(false);
     };
@@ -553,15 +557,22 @@ function LiveTable({
   const humanPlace = yourSeat != null ? placeOf(yourSeat) : null;
 
   // Everyone's turn shows the shared 30s countdown: yours lives in the banner
-  // pill; another seat's ticks here in the top-bar label.
+  // pill (BannerStrip), another seat's in the top-bar label (TopBar). Both leaves
+  // append the live "- Ns" internally from the deadline we hand them, so this
+  // label stays static and the countdown never re-renders the whole table.
   const turnLabel =
     status === 'reconnecting'
       ? 'Reconnecting...'
       : isMyTurn
         ? 'Your turn'
         : currentSeat != null
-          ? `${playerLabel(view, currentSeat)}'s turn${seconds !== null ? ` - ${seconds}s` : ''}`
+          ? `${playerLabel(view, currentSeat)}'s turn`
           : '';
+  // Only the top bar (another seat's turn) gets the deadline; on your own turn
+  // the countdown lives in the banner pill instead, and reconnecting shows no
+  // countdown at all.
+  const topBarDeadline =
+    status !== 'reconnecting' && !isMyTurn && currentSeat != null ? turnDeadline : null;
 
   const canPass = isMyTurn && lead !== null;
 
@@ -597,6 +608,7 @@ function LiveTable({
         <TopBar
           title={`${LEVEL_LABEL[view.botLevel]} online`}
           turnLabel={turnLabel}
+          turnDeadline={topBarDeadline}
           timer={formatTime(elapsedMs)}
           onBack={onExit}
           compact={compact}
@@ -695,7 +707,7 @@ function LiveTable({
             error={localError ?? error}
             isMyTurn={isMyTurn}
             compact={compact}
-            turnText={seconds !== null ? `Your turn - ${seconds}s` : 'Your turn'}
+            deadline={isMyTurn ? turnDeadline : null}
             reconnecting={status === 'reconnecting'}
           />
           <View style={[styles.handToolbar, compact && styles.handToolbarCompact]}>
@@ -880,7 +892,7 @@ const styles = StyleSheet.create({
   shareBtn: { alignSelf: 'stretch' },
   waitingHost: { ...typography.body, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
 
-  finishHeadline: { fontSize: 28, fontWeight: '800', color: colors.felt, marginBottom: spacing.sm },
+  finishHeadline: { ...typography.heading, color: colors.felt, marginBottom: spacing.sm },
   finishRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs + 2 },
   finishAvatar: { marginHorizontal: spacing.sm },
   finishPlace: { ...typography.subheading, color: colors.felt, width: 32 },

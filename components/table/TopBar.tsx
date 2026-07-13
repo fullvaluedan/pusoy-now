@@ -2,12 +2,29 @@
 // skip control. Extracted from app/game-local.tsx unchanged. Replaces the stock
 // navigation header, which clashed with the felt and wasted a full bar of
 // vertical space.
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radii, spacing, typography, withAlpha } from '../../lib/theme';
+
+// Local 250ms countdown ticker, live only while a deadline is set. Null deadline
+// (the bot table, or the viewer's own turn) never arms the interval, so only the
+// top bar re-renders as another seat's countdown ticks -- not the whole table.
+function useCountdownSeconds(deadline: number | null | undefined): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (deadline == null) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [deadline]);
+  if (deadline == null) return null;
+  return Math.max(0, Math.ceil((deadline - now) / 1000));
+}
 
 export function TopBar({
   title,
   turnLabel,
+  turnDeadline,
   timer,
   onBack,
   onSkip,
@@ -17,6 +34,11 @@ export function TopBar({
   // Compact, persistent turn/round status chip under the title. Optional so
   // the finished/loading screens (which reuse TopBar without it) stay as-is.
   turnLabel?: string;
+  // Online only: the current (non-viewer) seat's turn deadline (epoch ms). When
+  // set, this bar runs its own 250ms ticker and appends "- Ns" to turnLabel
+  // internally, so the countdown re-renders only this bar. Omitted by the bot
+  // table, which shows a static turnLabel.
+  turnDeadline?: number | null;
   // Elapsed game clock ("M:SS"), shown during play only.
   timer?: string;
   onBack: () => void;
@@ -25,6 +47,9 @@ export function TopBar({
   // now-symmetric right column.
   compact?: boolean;
 }) {
+  const seconds = useCountdownSeconds(turnDeadline);
+  const turnLabelText =
+    turnLabel && seconds !== null ? `${turnLabel} - ${seconds}s` : turnLabel;
   return (
     <View style={[styles.topBar, compact && styles.topBarCompact]}>
       <Pressable onPress={onBack} hitSlop={12} style={[styles.topBarSide, styles.topBarLeft]}>
@@ -32,9 +57,9 @@ export function TopBar({
       </Pressable>
       <View style={styles.topBarCenter}>
         <Text style={styles.topBarTitle} numberOfLines={1}>{title}</Text>
-        {turnLabel ? (
+        {turnLabelText ? (
           <View style={styles.turnChip}>
-            <Text style={styles.turnChipText} numberOfLines={1}>{turnLabel}</Text>
+            <Text style={styles.turnChipText} numberOfLines={1}>{turnLabelText}</Text>
           </View>
         ) : null}
       </View>

@@ -162,6 +162,21 @@ export function IconTile({ emoji, tint, size = 28, style }: IconTileProps) {
 }
 
 // ---------------------------------------------------------------------------
+// avatarRingGold: the gold circle ring drawn around an avatar (the Profile
+// tab's identity avatar and the leaderboard podium's 1st-place avatar). One
+// shared definition so the two screens can't drift apart -- both import this
+// entry instead of each declaring an identical local `goldRing` style.
+// ---------------------------------------------------------------------------
+export const avatarRingStyles = StyleSheet.create({
+  gold: {
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: 3,
+    borderColor: colors.gold,
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Button: themed Pressable with title + optional subtitle line. Renders as a
 // v3 chunky full-width rounded-rect (radii.xl): a solid fill plus a darker
 // bottom "edge" border that reads as the button's 3D side. Pressing it

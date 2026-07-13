@@ -1,7 +1,8 @@
 // Profile tab (U3): identity + navigation hub. This is the tab-bar landing
 // screen -- it is intentionally lightweight, not the full profile UI (that
-// stays at app/profile.tsx, pushed from here, and keeps the username-claim
-// flow etc. working unchanged).
+// lives at app/account.tsx, pushed from here as /account, and keeps the
+// username-claim flow etc. working unchanged). The full screen was renamed off
+// /profile so it no longer collides with this tab's own /profile route.
 //
 // Signed-in real accounts get an avatar + display-name card that pushes into
 // the existing app/profile.tsx screen. A guest sees their local device name
@@ -19,7 +20,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
-import { Button, CompactHeader, FeltHero, IconTile, ListRow, ScreenContainer } from '../../components/ui';
+import { avatarRingStyles, Button, CompactHeader, FeltHero, IconTile, ListRow, ScreenContainer } from '../../components/ui';
 import { colors, spacing, typography } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { getLocalGuestName } from '../../lib/guest';
@@ -46,7 +47,7 @@ export default function ProfileTab() {
       <FeltHero style={styles.hero}>
         {signedIn ? (
           <Pressable
-            onPress={() => router.push('/profile')}
+            onPress={() => router.push('/account')}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Open full profile"
@@ -97,7 +98,7 @@ export default function ProfileTab() {
 function HeroIdentity({ name, subtitle, url }: { name: string; subtitle: string; url?: string | null }) {
   return (
     <View style={styles.heroIdentity}>
-      <View style={styles.goldRing}>
+      <View style={avatarRingStyles.gold}>
         <Avatar name={name} url={url} size={72} />
       </View>
       <View style={styles.heroTextGroup}>
@@ -116,12 +117,6 @@ const styles = StyleSheet.create({
   hero: { marginBottom: spacing.lg, padding: spacing.lg },
   heroTap: { gap: spacing.md },
   heroIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  goldRing: {
-    padding: 3,
-    borderRadius: 999,
-    borderWidth: 3,
-    borderColor: colors.gold,
-  },
   heroTextGroup: { flex: 1, minWidth: 0 },
   heroName: { ...typography.heading, color: colors.textOnFelt },
   heroSubtitle: { ...typography.caption, color: colors.textOnFeltMuted, marginTop: 2 },

@@ -16,7 +16,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
-import { Button, Card, CompactHeader, ListRow, ScreenContainer } from '../../components/ui';
+import { avatarRingStyles, Button, Card, CompactHeader, ListRow, ScreenContainer } from '../../components/ui';
 import { colors, radii, spacing, typography, withAlpha } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { fetchRanking, type RankRow } from '../../lib/friends';
@@ -132,7 +132,7 @@ function PodiumSpot({ row, place }: { row: RankRow; place: 1 | 2 | 3 }) {
       ]}
     >
       <Text style={first ? styles.podiumMedalBig : styles.podiumMedal}>{MEDALS[place - 1]}</Text>
-      <View style={first ? styles.goldRing : styles.plainRing}>
+      <View style={first ? avatarRingStyles.gold : styles.plainRing}>
         <Avatar url={row.image} name={name} size={first ? 64 : 48} />
       </View>
       <Text style={styles.podiumName} numberOfLines={1} ellipsizeMode="tail">
@@ -224,12 +224,6 @@ const styles = StyleSheet.create({
   podiumSelf: { borderWidth: 2, borderColor: colors.gold },
   podiumMedal: { fontSize: 22 },
   podiumMedalBig: { fontSize: 30 },
-  goldRing: {
-    padding: 3,
-    borderRadius: 999,
-    borderWidth: 3,
-    borderColor: colors.gold,
-  },
   plainRing: {
     padding: 3,
     borderRadius: 999,

@@ -162,7 +162,6 @@ export class GameRoom extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (!this.room) return;
-    await this.catchUpAuto();
     const meta = ws.deserializeAttachment() as SocketMeta | null;
     if (!meta) return;
     let msg: { type?: string; action?: RoundAction };
@@ -171,6 +170,14 @@ export class GameRoom extends DurableObject<Env> {
     } catch {
       return;
     }
+
+    // Self-heal a stalled auto turn before NON-action messages only. Running
+    // catchUpAuto ahead of an action could advance the turn out from under a
+    // legitimately in-flight play and bounce it as not-your-turn. Actions are
+    // processed against the current state as-is; the heal runs after a rejected
+    // action instead (below), so a wedged table still revives without ever
+    // eating a valid play.
+    if (msg.type !== 'action') await this.catchUpAuto();
 
     if (msg.type === 'start') {
       const check = canStart(this.room, meta.userId);
@@ -185,8 +192,12 @@ export class GameRoom extends DurableObject<Env> {
     if (msg.type === 'action' && msg.action) {
       const res = applySeatAction(this.room, meta.seat, msg.action);
       if (res.status === 'error') {
-        // Non-fatal: only the acting client hears it.
+        // Non-fatal: only the acting client hears it. Then run the stall heal:
+        // a rejected action is often the symptom of a wedged auto turn (the
+        // alarm that should have consumed autoActAt was lost), so catching up
+        // here revives the table without having pre-empted a valid play.
         ws.send(JSON.stringify({ type: 'error', message: res.message }));
+        await this.catchUpAuto();
         return;
       }
       // The turn just advanced, so any pending auto schedule belonged to the

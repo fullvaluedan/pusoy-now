@@ -38,10 +38,17 @@ export function shouldAutoPass(params: {
 // this so a single turn fires at most one pass, even across the re-renders a
 // slow server ack causes: while the view is unchanged the key is unchanged, so
 // the already-fired latch holds. It only changes when the turn genuinely moves
-// on -- a different seat is to act, or another play has landed in the trick.
+// on -- a different seat is to act, or a fresh turn instance began.
+//
+// Keyed on the server's `turnDeadline`, NOT on trickHistory length: the server
+// caps trickHistory at 8 entries, so past 8 plays in a hand the length stops
+// changing and a length-based key would collide across later turns, wedging the
+// once-per-turn latch so no further forced pass ever fires. turnDeadline is set
+// fresh by the server on every turn, so it is unique per turn instance and never
+// degenerates.
 export function autoPassTurnKey(
-  currentPlayerIndex: number | null,
-  trickHistoryLength: number,
+  seat: number | null,
+  turnDeadline: number | null,
 ): string {
-  return `${currentPlayerIndex ?? 'none'}:${trickHistoryLength}`;
+  return `${seat ?? 'none'}:${turnDeadline ?? 'none'}`;
 }

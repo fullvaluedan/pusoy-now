@@ -1,4 +1,8 @@
-// Profile screen: shows signed-in user or guest mode. Displays stats and sign-in/out actions.
+// Full profile / account screen (registered as `account`, reached via /account).
+// Shows signed-in user or guest mode: identity, the username-claim flow, stats,
+// and sign-in/out actions. Renamed off /profile (was app/profile.tsx) so it no
+// longer collided with the Profile TAB (app/(tabs)/profile.tsx), which owns the
+// /profile route; the tab pushes here as /account.
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';

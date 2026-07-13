@@ -9,8 +9,25 @@
 // it -- the toolbar, hand fan, and controls stay put. Do not make the strip's
 // height content-dependent or conditionally unmount it; that reintroduces the
 // layout shift this strip exists to prevent.
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, spacing, typography, withAlpha } from '../../lib/theme';
+
+// Local 250ms countdown ticker, live only while a deadline is set. When the
+// deadline is null (the bot table) the interval never arms, so this component
+// stays a zero-cost leaf there -- the online table alone drives the countdown,
+// and only THIS pill re-renders as it ticks, not the whole felt table.
+function useCountdownSeconds(deadline: number | null | undefined): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (deadline == null) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [deadline]);
+  if (deadline == null) return null;
+  return Math.max(0, Math.ceil((deadline - now) / 1000));
+}
 
 export function BannerStrip({
   autoPassing,
@@ -18,23 +35,30 @@ export function BannerStrip({
   isMyTurn,
   compact,
   turnText,
+  deadline,
   reconnecting,
 }: {
   autoPassing: boolean;
   error: string | null;
   isMyTurn: boolean;
   compact?: boolean;
-  // Optional override for the gold "Your turn" pill's text. The online table
-  // passes "Your turn - 12s" so the live countdown ticks INSIDE this fixed-
-  // height strip (never shifting the toolbar/hand below). Omitted by the bot
-  // table, which keeps the plain "Your turn".
+  // Optional override for the gold "Your turn" pill's text, used only when no
+  // live countdown is running. The bot table omits it (plain "Your turn"); the
+  // online table drives the countdown via `deadline` below instead.
   turnText?: string;
+  // Online only: the viewer's turn deadline (epoch ms). When set on the viewer's
+  // OWN turn, this pill runs its own 250ms ticker and renders "Your turn - Ns"
+  // internally, so the countdown never re-renders anything outside this leaf.
+  // Omitted (or null) by the bot table, which shows a static pill.
+  deadline?: number | null;
   // Online only: a mid-game socket drop. Shown as a distinct (non-gold) pill
   // that takes precedence over everything else so a disconnect is impossible to
   // miss, and -- like every other state here -- lives inside the fixed-height
   // strip so it never shifts the toolbar/hand below. Omitted by the bot table.
   reconnecting?: boolean;
 }) {
+  const seconds = useCountdownSeconds(isMyTurn ? deadline : null);
+  const yourTurnText = seconds !== null ? `Your turn - ${seconds}s` : turnText ?? 'Your turn';
   return (
     <View style={[styles.bannerStrip, compact && styles.bannerStripCompact]} pointerEvents="none">
       {reconnecting ? (
@@ -51,7 +75,7 @@ export function BannerStrip({
         </View>
       ) : isMyTurn ? (
         <View style={styles.turnBanner}>
-          <Text style={styles.turnBannerText} numberOfLines={1}>{turnText ?? 'Your turn'}</Text>
+          <Text style={styles.turnBannerText} numberOfLines={1}>{yourTurnText}</Text>
         </View>
       ) : null}
     </View>

@@ -53,7 +53,7 @@ const LOGO_SIZE = 44;
 export default function Home() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { session, isAnonymous, profile } = useAuth();
+  const { session, isAnonymous, profile, user } = useAuth();
   const { count: onlineCount } = usePresence();
 
   const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
@@ -72,7 +72,12 @@ export default function Home() {
       cancelled = true;
     };
   }, []);
-  const identityName = profile?.displayName ?? guestName;
+  // Precedence: the resolved profile display name, then the signed-in account's
+  // own name (useAuth exposes the better-auth user row as `user`), then the
+  // on-device guest name. The account-name middle step keeps a signed-in user
+  // from briefly showing the device guest name before their profile resolves,
+  // or when they have no displayName of their own.
+  const identityName = profile?.displayName ?? user?.name ?? guestName;
 
   // Local bot-game stat tiles (R11), reloaded on every focus rather than
   // only on mount: the bottom tab bar (U3) keeps this screen mounted when
@@ -181,7 +186,7 @@ export default function Home() {
           />
           {identityName ? (
             <Pressable
-              onPress={() => router.push('/profile')}
+              onPress={() => router.push('/account')}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel={`Playing as ${identityName}. Open profile.`}

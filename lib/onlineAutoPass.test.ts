@@ -59,10 +59,19 @@ function main() {
   );
 
   // --- turn key: stable within a turn, changes across turns -----------------
-  ok('turn key is stable for the same turn', autoPassTurnKey(2, 5) === autoPassTurnKey(2, 5));
-  ok('turn key changes when the acting seat changes', autoPassTurnKey(2, 5) !== autoPassTurnKey(3, 5));
-  ok('turn key changes when a play lands (trick length)', autoPassTurnKey(2, 5) !== autoPassTurnKey(2, 6));
-  ok('turn key tolerates a null seat', autoPassTurnKey(null, 0) === 'none:0');
+  // Keyed on seat + turnDeadline (server-set fresh every turn), never on
+  // trickHistory length (server caps it at 8, so it degenerates late in a hand).
+  ok('turn key is stable for the same turn', autoPassTurnKey(2, 1000) === autoPassTurnKey(2, 1000));
+  ok('turn key changes when the acting seat changes', autoPassTurnKey(2, 1000) !== autoPassTurnKey(3, 1000));
+  // The headline fix: two DIFFERENT turns for the same seat with the SAME trick
+  // length (trickHistory capped at 8) still produce different keys, because the
+  // server issues a fresh deadline for each turn instance.
+  ok(
+    'turn key differs for two turns with same seat + same trick length but different deadlines',
+    autoPassTurnKey(2, 1000) !== autoPassTurnKey(2, 2000),
+  );
+  ok('turn key tolerates a null seat', autoPassTurnKey(null, 1000) === 'none:1000');
+  ok('turn key tolerates a null deadline', autoPassTurnKey(2, null) === '2:none');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);

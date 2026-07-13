@@ -131,7 +131,7 @@ export default function Settings() {
 
       {/* Account group */}
       <Text style={[styles.groupHeading, styles.groupHeadingSpaced]}>Account</Text>
-      <ListRow label="Profile" leading={<Text style={styles.rowEmoji}>👤</Text>} chevron onPress={() => router.push('/profile')} />
+      <ListRow label="Profile" leading={<Text style={styles.rowEmoji}>👤</Text>} chevron onPress={() => router.push('/account')} />
       <ListRow
         label="Delete account"
         leading={<Text style={styles.rowEmoji}>🗑️</Text>}
