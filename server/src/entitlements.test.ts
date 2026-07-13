@@ -9,6 +9,7 @@
 // Run: tsx src/entitlements.test.ts (or via npm test)
 
 import {
+  claimantIdFromSession,
   extendPremium,
   isPremium,
   ONE_YEAR_MS,
@@ -117,6 +118,21 @@ async function main() {
     const noUser = await processStripeEvent(store, { id: 'evt_y', type: 'checkout.session.completed', data: { object: {} } }, now);
     ok('a completed checkout with no user id does not apply', noUser.applied === false);
   }
+
+  // --- claimantIdFromSession: guests cannot claim/rename usernames ----------
+  // The anonymous plugin is always on, so a guest has a real session + user id
+  // with isAnonymous === true. Username claim/rename/check must refuse guests.
+  ok('a real account resolves to its id', claimantIdFromSession({ user: { id: 'user-1' } }) === 'user-1');
+  ok(
+    'a real account with isAnonymous false resolves to its id',
+    claimantIdFromSession({ user: { id: 'user-1', isAnonymous: false } }) === 'user-1',
+  );
+  ok(
+    'an anonymous guest resolves to null (cannot claim)',
+    claimantIdFromSession({ user: { id: 'guest-1', isAnonymous: true } }) === null,
+  );
+  ok('no session resolves to null', claimantIdFromSession(null) === null);
+  ok('a session with no user resolves to null', claimantIdFromSession({}) === null);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);

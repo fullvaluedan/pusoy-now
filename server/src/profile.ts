@@ -241,8 +241,13 @@ export function d1ProfileStore(db: D1Database): ProfileStore {
         const still = await this.getByUserId(userId);
         if (!still) return 'not-found';
         return 'rename-limit';
-      } catch {
-        return 'taken';
+      } catch (e) {
+        // Only a UNIQUE-constraint collision means the handle is taken. Any other
+        // D1 error (transient failure, timeout) must surface as a 500, not be
+        // mislabeled "that name is taken", so rethrow it.
+        const msg = String((e as Error)?.message ?? e).toLowerCase();
+        if (msg.includes('unique') || msg.includes('constraint')) return 'taken';
+        throw e;
       }
     },
     async setAvatarPref(userId, pref, now) {

@@ -102,3 +102,25 @@ export async function requireUserId(env: Env, headers: Headers): Promise<string 
   const session = await makeAuth(env).api.getSession({ headers });
   return session?.user?.id ?? null;
 }
+
+// Pure decision, split out so it is unit-testable without standing up
+// better-auth/D1. A claimant is a session that exists, has a user id, and is NOT
+// anonymous. Returns the id or null.
+export function claimantIdFromSession(
+  session: { user?: { id?: string; isAnonymous?: boolean } } | null | undefined,
+): string | null {
+  const user = session?.user;
+  if (!user?.id) return null;
+  if (user.isAnonymous === true) return null;
+  return user.id;
+}
+
+// Like requireUserId, but ONLY returns an id for a real (non-anonymous) account.
+// The anonymous plugin is always on (server/src/auth.ts), so guests get a valid
+// session with a user id and `user.isAnonymous === true`. Username claim/rename/
+// check must be gated on a genuine account, so those routes use this helper: a
+// guest resolves to null and is refused, keeping its generated name.
+export async function requireClaimantUserId(env: Env, headers: Headers): Promise<string | null> {
+  const session = await makeAuth(env).api.getSession({ headers });
+  return claimantIdFromSession(session as Parameters<typeof claimantIdFromSession>[0]);
+}

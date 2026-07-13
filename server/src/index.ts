@@ -9,7 +9,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { makeAuth, trustedOriginsFor, type Env } from './auth';
-import { d1Store, isPremium, processStripeEvent, requireUserId } from './entitlements';
+import { d1Store, isPremium, processStripeEvent, requireClaimantUserId, requireUserId } from './entitlements';
 import { constructEvent, createCheckout, stripeConfigured } from './stripe';
 import { configuredProviderIds } from './social';
 import {
@@ -165,10 +165,11 @@ app.get('/api/profile', async (c) => {
 // Rename a claimed handle (signed-in users get exactly one free change). Runs
 // the same validation + local moderation as claim, then enforces the limit at
 // the store. 409 on taken or limit-reached; 400 on invalid/inappropriate.
-// Session-gated (guests cannot claim, so they can never reach a rename).
+// Claimant-gated: guests (anonymous sessions) keep their generated name and
+// cannot rename.
 app.post('/api/username/rename', async (c) => {
-  const userId = await requireUserId(c.env, c.req.raw.headers);
-  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const userId = await requireClaimantUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'forbidden', message: 'Sign in to choose a username.' }, 403);
   const body = (await c.req.json().catch(() => ({}))) as { username?: unknown };
   const raw = typeof body.username === 'string' ? body.username : '';
   const res = await renameUsername(d1ProfileStore(c.env.DB), userId, raw, Date.now());
@@ -202,11 +203,11 @@ app.post('/api/profile/avatar-pref', async (c) => {
   return c.json({ avatarPref: pref });
 });
 
-// Inline availability check for the claim field. Session-gated so username
-// existence is not enumerable by anonymous callers.
+// Inline availability check for the claim field. Claimant-gated so guests
+// cannot probe or claim usernames (and existence is not enumerable anonymously).
 app.get('/api/username/check', async (c) => {
-  const userId = await requireUserId(c.env, c.req.raw.headers);
-  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const userId = await requireClaimantUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'forbidden', message: 'Sign in to choose a username.' }, 403);
   const raw = c.req.query('u') ?? '';
   const res = await checkUsername(d1ProfileStore(c.env.DB), raw);
   if (res.status === 'invalid') {
@@ -215,10 +216,11 @@ app.get('/api/username/check', async (c) => {
   return c.json({ available: res.status === 'available' });
 });
 
-// Claim a username (once; rename is deferred). Session-gated.
+// Claim a username (once; rename is deferred). Claimant-gated: a guest
+// (anonymous session) cannot claim and keeps its generated name.
 app.post('/api/username/claim', async (c) => {
-  const userId = await requireUserId(c.env, c.req.raw.headers);
-  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  const userId = await requireClaimantUserId(c.env, c.req.raw.headers);
+  if (!userId) return c.json({ error: 'forbidden', message: 'Sign in to choose a username.' }, 403);
   const body = (await c.req.json().catch(() => ({}))) as { username?: unknown };
   const raw = typeof body.username === 'string' ? body.username : '';
   const res = await claimUsername(d1ProfileStore(c.env.DB), userId, raw, Date.now());

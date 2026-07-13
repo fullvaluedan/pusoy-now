@@ -160,7 +160,7 @@ export default function Profile() {
 // field wired to /rename; a username with the change spent -> the handle plus a
 // "no changes left" note. The claim/rename field shares inline validation, live
 // availability, and the server's moderation message (shown inline).
-type ClaimStatus = 'idle' | 'checking' | 'available' | 'taken' | 'blocked';
+type ClaimStatus = 'idle' | 'checking' | 'available' | 'taken' | 'blocked' | 'current';
 
 interface UsernameSectionProps {
   meta: ProfileMeta | null;
@@ -196,6 +196,14 @@ function UsernameSection({ meta, onChange }: UsernameSectionProps) {
       setStatus('idle');
       // Show the rule only once the user has typed enough to be meaningful.
       if (next.length > 0) setError(usernameErrorMessage(valid.reason));
+      return;
+    }
+    // During a rename, typing your OWN current handle must not read as "taken":
+    // it is a no-op the server would accept, so show a neutral hint and keep Save
+    // disabled rather than a false error about your own name. (No effect on the
+    // initial claim, where meta.username is null.)
+    if (meta!.username && valid.username === meta!.username) {
+      setStatus('current');
       return;
     }
     setStatus('checking');
@@ -270,7 +278,13 @@ function UsernameSection({ meta, onChange }: UsernameSectionProps) {
   }
 
   const helper =
-    status === 'available' ? 'Available' : status === 'checking' ? 'Checking...' : null;
+    status === 'available'
+      ? 'Available'
+      : status === 'checking'
+        ? 'Checking...'
+        : status === 'current'
+          ? "That's already your username"
+          : null;
 
   return (
     <Card style={styles.usernameCard}>

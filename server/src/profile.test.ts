@@ -13,6 +13,7 @@ import {
   canRename,
   checkUsername,
   claimUsername,
+  d1ProfileStore,
   renameUsername,
   validateUsername,
   type ProfileRow,
@@ -182,7 +183,7 @@ async function main() {
     await claimUsername(store, 'user-2', 'beta', now);
     ok('renaming to a taken handle is rejected', (await renameUsername(store, 'user-1', 'beta', now)).status === 'taken');
     ok('renaming to an invalid handle is rejected', (await renameUsername(store, 'user-1', 'no spaces', now)).status === 'invalid');
-    const modr = await renameUsername(store, 'user-1', 'cuntface', now);
+    const modr = await renameUsername(store, 'user-1', 'fuckface', now);
     ok('renaming to an offensive handle reports inappropriate', modr.status === 'invalid' && modr.reason === 'inappropriate');
     ok('a rejected rename did not spend the change', canRename(await store.getByUserId('user-1')) === true);
     const same = await renameUsername(store, 'user-1', 'alpha', now);
@@ -208,8 +209,43 @@ async function main() {
     ok('setting a pref for a user with no profile fails', (await store.setAvatarPref('ghost', 'social', now)) === false);
   }
 
+  // --- d1 rename: DB errors are classified, not blindly mapped to 'taken' ---
+  // A UNIQUE-constraint collision is 'taken'; any other D1 error must propagate
+  // (surfacing a 500) rather than lying "that name is taken".
+  {
+    const store = d1ProfileStore(throwingDb(new Error('UNIQUE constraint failed: player_profile.username')));
+    ok('a unique-constraint violation maps to taken', (await store.renameUsername('user-1', 'newname', now)) === 'taken');
+  }
+  {
+    const store = d1ProfileStore(throwingDb(new Error('D1_ERROR: network connection reset')));
+    let threw = false;
+    try {
+      await store.renameUsername('user-1', 'newname', now);
+    } catch {
+      threw = true;
+    }
+    ok('a non-unique db error propagates (not swallowed as taken)', threw);
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
+}
+
+// A minimal D1Database whose statement.run() always throws the given error, for
+// exercising d1ProfileStore's error classification without a live D1.
+function throwingDb(err: Error): D1Database {
+  const stmt = {
+    bind() {
+      return stmt;
+    },
+    async run(): Promise<never> {
+      throw err;
+    },
+    async first(): Promise<null> {
+      return null;
+    },
+  };
+  return { prepare: () => stmt } as unknown as D1Database;
 }
 
 void main();
