@@ -1,4 +1,8 @@
 {
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-0754432090717206~9571504692",
+    "ios_app_id": "ca-app-pub-0754432090717206~2814524653"
+  },
   "expo": {
     "name": "Prends",
     "slug": "prends",
