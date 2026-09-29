@@ -89,6 +89,21 @@ export function lowestCardHolder(hands: Card[][]): number {
   return bestHand;
 }
 
+// Id of the lowest card among the given hands (3 of clubs when it is dealt).
+export function lowestCardId(hands: Card[][]): string {
+  let best: Card | null = null;
+  for (const h of hands) {
+    for (const c of h) {
+      if (
+        !best ||
+        RANK_VALUE[c.rank] < RANK_VALUE[best.rank] ||
+        (c.rank === best.rank && SUIT_VALUE[c.suit] < SUIT_VALUE[best.suit])
+      ) best = c;
+    }
+  }
+  return best!.id;
+}
+
 export function dealFour(deck: Card[]): Card[][] {
   if (deck.length !== 52) {
     throw new Error(`dealFour expected 52, got ${deck.length}`);

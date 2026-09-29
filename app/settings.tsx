@@ -6,6 +6,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { CompactHeader, Card, ListRow, ScreenContainer } from '../components/ui';
+import { useAuth } from '../lib/auth';
+import { apiUrl, authClient } from '../lib/authClient';
 import { colors, radii, spacing, typography } from '../lib/theme';
 import { AppSettings, DEFAULT_SETTINGS, loadSettings, saveSettings } from '../lib/settings';
 import type { BotLevel } from '../lib/pusoy/types';
@@ -18,7 +20,12 @@ const DIFFICULTY_OPTIONS: { level: BotLevel; label: string }[] = [
 
 export default function Settings() {
   const router = useRouter();
+  const { session, isAnonymous } = useAuth();
+  // Marketing-email opt-in only makes sense for a real (non-guest) account with
+  // an email; guests never see this toggle.
+  const signedInReal = Boolean(session) && !isAnonymous;
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [emailOptIn, setEmailOptIn] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Load settings on mount
@@ -61,6 +68,30 @@ export default function Settings() {
     },
     [settings],
   );
+
+  // Load the saved marketing-email choice for a real account. Defaults to off
+  // (a pre-ticked opt-in is not lawful consent); GET returns null until the
+  // user has ever chosen, in which case it stays off.
+  useEffect(() => {
+    if (!signedInReal) return;
+    let active = true;
+    void (async () => {
+      try {
+        const { data } = await authClient.$fetch<{ consent: { optIn?: boolean } | null }>(apiUrl('/api/consent'));
+        if (active && data?.consent) setEmailOptIn(Boolean(data.consent.optIn));
+      } catch {
+        // leave the default (off)
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [signedInReal]);
+
+  const handleEmailOptInToggle = useCallback((value: boolean) => {
+    setEmailOptIn(value);
+    void authClient.$fetch(apiUrl('/api/consent'), { method: 'POST', body: { optIn: value, source: 'settings' } });
+  }, []);
 
   if (loading) {
     return (
@@ -128,6 +159,27 @@ export default function Settings() {
           })}
         </View>
       </Card>
+
+      {/* Notifications group: the marketing-email opt-in lives here (moved out
+          of the sign-up flow and the home hub). Real accounts only. */}
+      {signedInReal ? (
+        <>
+          <Text style={[styles.groupHeading, styles.groupHeadingSpaced]}>Notifications</Text>
+          <ListRow
+            label="Email me game updates"
+            leading={<Text style={styles.rowEmoji}>✉️</Text>}
+            onPress={() => handleEmailOptInToggle(!emailOptIn)}
+            trailing={
+              <Switch
+                value={emailOptIn}
+                onValueChange={handleEmailOptInToggle}
+                trackColor={{ false: colors.textMuted, true: colors.felt }}
+                thumbColor={colors.white}
+              />
+            }
+          />
+        </>
+      ) : null}
 
       {/* Account group */}
       <Text style={[styles.groupHeading, styles.groupHeadingSpaced]}>Account</Text>

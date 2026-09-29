@@ -172,7 +172,11 @@ function DraggableCard({
           { translateX: pan.x },
           { translateY: pan.y },
         ],
-        zIndex: dragging ? 100 : index,
+        // A dragging card tops everything; a selected card floats above its
+        // unselected neighbors so its lift is actually visible (the fan overlaps
+        // ~70%, so at the base index a selected card's lift hides under the next
+        // card). Unselected cards keep their natural left-to-right stacking.
+        zIndex: dragging ? 100 : isSelected ? 40 + index : index,
       }}
       {...responder.panHandlers}
     >

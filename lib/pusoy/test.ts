@@ -4,7 +4,7 @@
 import { buildDeck, dealFour, dealN } from './deck';
 import { detectCombo, compareCombos, canPlay } from './combo';
 import { applyAction, applyTimeout, handFinishOrder, isHandOver, newHand, TURN_MS } from './engine';
-import { botChoose } from './bot';
+import { botChoose, findLegalPlays } from './bot';
 import { makeRng, NO_WOBBLE } from './rng';
 import { createLocalGame } from './localGame';
 import { parseLevel } from './level';
@@ -132,10 +132,9 @@ hs = applyAction(hs, 2, h2, {
   kind: 'play',
   combo: detectCombo([c('C', '5'), c('D', '5'), c('H', '5')])!,
 });
-// After p2 plays, only p3 still has cards. Engine sets leadPlayerIndex to 3
-// (the lone alive player) and resets leadCombo.
-ok('p3 leads next trick', hs.leadPlayerIndex === 3);
-ok('lead cleared for new trick', hs.leadCombo === null);
+// After p2 plays, only p3 still has cards, but p3 has not yet answered p2's
+// trip 5s, so the trick is still live and p3 must beat it or pass.
+ok('p3 must answer the live trick', hs.currentPlayerIndex === 3 && hs.leadCombo !== null);
 hs = applyAction(hs, 3, h3, {
   kind: 'play',
   combo: detectCombo([c('C', '6'), c('D', '6'), c('H', '6')])!,
@@ -146,6 +145,50 @@ ok('hand over, lead resets', isHandOver(hs));
 ok('p1 finished', hs.finishedOrder.includes(1));
 ok('p2 finished', hs.finishedOrder.includes(2));
 ok('p3 finished', hs.finishedOrder.includes(3));
+
+// 3b) Opening 3 of clubs is mandatory, and rules stay consistent afterwards.
+{
+  const o0 = [c('C', '3'), c('D', '3'), c('S', '4'), c('H', 'K')];
+  const o1 = [c('H', '3'), c('C', '5'), c('D', '6'), c('S', '7')];
+  const o2 = [c('S', '3'), c('C', '8'), c('D', '9'), c('S', 'J')];
+  const o3 = [c('C', '4'), c('D', '4'), c('H', '5'), c('S', '5')];
+  let st = newHand('o', ['a', 'b', 'c', 'd'], [o0, o1, o2, o3], 1, 'o1');
+  ok('3C holder opens', st.currentPlayerIndex === 0 && st.openingCardId === 'C-3');
+  let threw = false;
+  try {
+    applyAction(st, 0, o0, { kind: 'play', combo: detectCombo([c('H', 'K')])! });
+  } catch { threw = true; }
+  ok('opening play without 3C is rejected', threw);
+  ok('canPlay enforces 3C on opening', !canPlay(detectCombo([c('H', 'K')])!, null, 'C-3') && canPlay(detectCombo([c('C', '3')])!, null, 'C-3'));
+  ok('findLegalPlays on opening only offers 3C combos',
+    findLegalPlays(o0, null, 'C-3').every((p) => p.cards.some((x) => x.id === 'C-3')) &&
+    findLegalPlays(o0, null, 'C-3').length === 2); // 3C single, 3C+3D pair
+  const b = botChoose(o0, null, { level: 'expert', context: { openingCardId: 'C-3' } });
+  ok('bot opening play includes 3C', !!b && b.cards.some((x) => x.id === 'C-3'));
+  st = applyAction(st, 0, o0, { kind: 'play', combo: detectCombo([c('C', '3'), c('D', '3')])! });
+  ok('opening requirement cleared after first play', st.openingCardId === undefined);
+  // Winner goes out: next holder clockwise leads (not seat 0 / lowest index).
+  const w0 = [c('H', 'A')];
+  const w1 = [c('C', '5'), c('C', '6')];
+  const w2 = [c('C', '7'), c('C', '8')];
+  const w3 = [c('C', '9'), c('C', '10')];
+  let s2 = newHand('w', ['a', 'b', 'c', 'd'], [w0, w1, w2, w3], 1, 'w1', { openerIndex: 3 });
+  s2 = applyAction(s2, 3, w3, { kind: 'play', combo: detectCombo([c('C', '9')])! });
+  s2 = applyAction(s2, 0, w0, { kind: 'play', combo: detectCombo([c('H', 'A')])! }); // p0 out
+  s2 = applyAction(s2, 1, w1, { kind: 'pass' });
+  s2 = applyAction(s2, 2, w2, { kind: 'pass' });
+  s2 = applyAction(s2, 3, w3.slice(1), { kind: 'pass' });
+  ok('winner went out: next seat clockwise leads (p1)', s2.currentPlayerIndex === 1 && s2.leadCombo === null);
+}
+
+// 3c) Suit order for ties: clubs < spades < hearts < diamonds.
+{
+  const s = (suit: 'C' | 'S' | 'H' | 'D') => detectCombo([c(suit, '9')])!;
+  ok('S beats C', canPlay(s('S'), s('C')));
+  ok('H beats S', canPlay(s('H'), s('S')));
+  ok('D beats H', canPlay(s('D'), s('H')));
+  ok('C never beats D', !canPlay(s('C'), s('D')));
+}
 
 // 4) 2 of diamonds is unbeatable as a single (the "bomb" rule)
 console.log('2 of diamonds rule');

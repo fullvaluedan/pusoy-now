@@ -84,6 +84,7 @@ export function detectFiveCard(cards: Card[]): PlayedCombo | null {
       cards: sortCards(cards),
       length: 5,
       rankValue: RANK_VALUE[sortCards(cards)[4].rank],
+      suitValue: SUIT_VALUE[cards[0].suit],
     };
   }
   // four of a kind (4+1)
@@ -127,6 +128,8 @@ export function detectFiveCard(cards: Card[]): PlayedCombo | null {
       cards: sortCards(cards),
       length: 5,
       rankValue: RANK_VALUE[sortCards(cards)[4].rank],
+      // Equal-rank straights tie-break on the suit of the highest card.
+      suitValue: SUIT_VALUE[sortCards(cards)[4].suit],
     };
   }
   return null;
@@ -194,7 +197,7 @@ export function compareCombos(a: PlayedCombo, b: PlayedCombo): number {
   }
   // same five-card class
   if (a.rankValue !== b.rankValue) return a.rankValue - b.rankValue;
-  if (a.fiveType === 'flush' && a.suitValue !== undefined && b.suitValue !== undefined) {
+  if ((a.fiveType === 'flush' || a.fiveType === 'straight' || a.fiveType === 'straightFlush') && a.suitValue !== undefined && b.suitValue !== undefined) {
     return a.suitValue - b.suitValue;
   }
   return 0;
@@ -206,8 +209,15 @@ export function compareCombos(a: PlayedCombo, b: PlayedCombo): number {
 //  - 2♦ as a single is the "bomb" — unbeatable by any other single. Only a
 //    5-card combo can beat it.
 //  - If `lead` is null, anything goes.
-export function canPlay(play: PlayedCombo, lead: PlayedCombo | null): boolean {
-  if (lead === null) return true;
+export function canPlay(
+  play: PlayedCombo,
+  lead: PlayedCombo | null,
+  openingCardId?: string,
+): boolean {
+  if (lead === null) {
+    // The first play of a hand must contain the opening card (3 of clubs).
+    return !openingCardId || play.cards.some((c) => c.id === openingCardId);
+  }
   // 2♦ bomb: no other single can beat it. A 5-card combo CAN if it's higher.
   if (lead.length === 1 && lead.cards[0].rank === '2' && lead.cards[0].suit === 'D') {
     if (play.length === 5) {

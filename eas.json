@@ -12,7 +12,11 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_ADMOB_BANNER_ANDROID": "ca-app-pub-0754432090717206/9188361318",
+        "EXPO_PUBLIC_ADMOB_BANNER_IOS": "ca-app-pub-0754432090717206/7440165376"
+      }
     }
   },
   "submit": {

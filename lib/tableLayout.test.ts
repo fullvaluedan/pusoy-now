@@ -38,12 +38,12 @@ function compactAt(width: number, height: number): boolean {
 
 function main() {
   // --- usablePanelHeight -----------------------------------------------------
-  // Narrow phone: no side margin, so usable = height - 44 (ad) - 8 (spacing.sm).
-  ok('360x570 usable height is 518', usablePanelHeight(570, false) === 518, usablePanelHeight(570, false));
-  ok('360x640 usable height is 588', usablePanelHeight(640, false) === 588, usablePanelHeight(640, false));
-  ok('412x915 usable height is 863', usablePanelHeight(915, false) === 863, usablePanelHeight(915, false));
+  // Narrow phone: no side margin, so usable = height - 50 (ad) - 8 (spacing.sm).
+  ok('360x570 usable height is 512', usablePanelHeight(570, false) === 512, usablePanelHeight(570, false));
+  ok('360x640 usable height is 582', usablePanelHeight(640, false) === 582, usablePanelHeight(640, false));
+  ok('412x915 usable height is 857', usablePanelHeight(915, false) === 857, usablePanelHeight(915, false));
   // Wide viewport reserves the 24px top+bottom panel margin (48 total).
-  ok('wide 915 subtracts the panel margin', usablePanelHeight(915, true) === 815, usablePanelHeight(915, true));
+  ok('wide 915 subtracts the panel margin', usablePanelHeight(915, true) === 809, usablePanelHeight(915, true));
   // Very tall windows clamp to maxTableHeight (900), never taller.
   ok('usable height clamps to maxTableHeight (900)', usablePanelHeight(4000, false) === 900, usablePanelHeight(4000, false));
 

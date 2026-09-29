@@ -12,7 +12,7 @@
 //   CARD_HEIGHT_PX   === components/PlayingCard CARD_HEIGHT (card art height)
 //   AD_BANNER_H_PX   === components/AdBanner   AD_BANNER_HEIGHT (reserved row)
 const CARD_HEIGHT_PX = 92;
-const AD_BANNER_H_PX = 44;
+const AD_BANNER_H_PX = 50;
 
 import { layout, spacing } from '../../lib/theme';
 
@@ -20,8 +20,8 @@ import { layout, spacing } from '../../lib/theme';
 // which the in-progress table switches to its compact layout: smaller
 // opponent seats, a tighter center pool, and slimmer control margins, so the
 // hand fan and the Pass/Play controls always stay on-screen on short phones.
-// At 360x640 the panel resolves to ~588px (640 - 44 ad - 8), which sits under
-// this line; at 412x915 it is ~863px and stays in the roomy default layout.
+// At 360x640 the panel resolves to ~582px (640 - 50 ad - 8), which sits under
+// this line; at 412x915 it is ~857px and stays in the roomy default layout.
 export const COMPACT_PANEL_HEIGHT = 640;
 
 // Protected minimum height for the center pool region. The pool never shrinks

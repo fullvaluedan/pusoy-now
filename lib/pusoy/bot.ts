@@ -94,7 +94,11 @@ function isBombLead(lead: PlayedCombo | null): boolean {
 }
 
 // Exported: the UI uses this to auto-pass and to highlight playable cards.
-export function findLegalPlays(hand: Card[], lead: PlayedCombo | null): PlayedCombo[] {
+export function findLegalPlays(
+  hand: Card[],
+  lead: PlayedCombo | null,
+  openingCardId?: string,
+): PlayedCombo[] {
   const out: PlayedCombo[] = [];
   // A play can only ever answer a lead of the same length (the bomb is the one
   // exception, where a 5-card combo answers a single). Skipping the subset
@@ -111,7 +115,7 @@ export function findLegalPlays(hand: Card[], lead: PlayedCombo | null): PlayedCo
   if (wantSingles) {
     for (const c of hand) {
       const combo = detectCombo([c])!;
-      if (canPlay(combo, lead)) out.push(combo);
+      if (canPlay(combo, lead, openingCardId)) out.push(combo);
     }
   }
   if (wantPairs) {
@@ -119,7 +123,7 @@ export function findLegalPlays(hand: Card[], lead: PlayedCombo | null): PlayedCo
       for (let j = i + 1; j < hand.length; j++) {
         if (hand[i].rank === hand[j].rank) {
           const combo = detectCombo([hand[i], hand[j]]);
-          if (combo && canPlay(combo, lead)) out.push(combo);
+          if (combo && canPlay(combo, lead, openingCardId)) out.push(combo);
         }
       }
     }
@@ -130,7 +134,7 @@ export function findLegalPlays(hand: Card[], lead: PlayedCombo | null): PlayedCo
         for (let k = j + 1; k < hand.length; k++) {
           if (hand[i].rank === hand[j].rank && hand[j].rank === hand[k].rank) {
             const combo = detectCombo([hand[i], hand[j], hand[k]]);
-            if (combo && canPlay(combo, lead)) out.push(combo);
+            if (combo && canPlay(combo, lead, openingCardId)) out.push(combo);
           }
         }
       }
@@ -145,7 +149,7 @@ export function findLegalPlays(hand: Card[], lead: PlayedCombo | null): PlayedCo
           for (let d = c + 1; d < hand.length; d++)
             for (let e = d + 1; e < hand.length; e++) {
               const combo = detectCombo([hand[a], hand[b], hand[c], hand[d], hand[e]]);
-              if (combo && canPlay(combo, lead)) out.push(combo);
+              if (combo && canPlay(combo, lead, openingCardId)) out.push(combo);
             }
   }
   return out;
@@ -160,7 +164,7 @@ export function botChoose(
   const rng = opts.rng ?? Math.random;
   const context = opts.context ?? {};
 
-  const legal = findLegalPlays(hand, lead);
+  const legal = findLegalPlays(hand, lead, context.openingCardId);
   if (legal.length === 0) return null; // must pass
   if (legal.length === 1) return legal[0];
 

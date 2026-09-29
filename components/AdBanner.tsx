@@ -5,11 +5,12 @@
 // outside the play area. Renders nothing for premium players.
 import { StyleSheet, Text, View } from 'react-native';
 import { useEntitlements, shouldShowAds } from '../lib/entitlements';
+import { AD_BANNER_HEIGHT } from '../lib/adConfig';
 import { colors, radii, spacing, typography, withAlpha } from '../lib/theme';
 
 // Fixed height so callers can reserve exactly this much space alongside the
 // play area (see AD_BANNER_HEIGHT usage in app/game-local.tsx).
-export const AD_BANNER_HEIGHT = 44;
+export { AD_BANNER_HEIGHT };
 
 export function AdBanner() {
   const { premium } = useEntitlements();

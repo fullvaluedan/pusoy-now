@@ -220,6 +220,17 @@ export class GameRoom extends DurableObject<Env> {
     if (!this.room) return;
     const meta = ws.deserializeAttachment() as SocketMeta | null;
     if (meta) {
+      // Only mark the player disconnected if this was their LAST live socket. A
+      // reconnect briefly holds two (the new socket opens, then the OLD socket's
+      // close event is delivered): without this guard that late close would flag
+      // an actively-playing user as disconnected, so allHumansDisconnected trips,
+      // the table pauses, bots stall, and the abandon watchdog ends their live
+      // game (or auto-passes them on their own turn). Mirrors the same guard in
+      // matchmaker.ts's webSocketClose.
+      const stillConnected = this.ctx
+        .getWebSockets()
+        .some((s) => s !== ws && (s.deserializeAttachment() as SocketMeta | null)?.userId === meta.userId);
+      if (stillConnected) return;
       setConnected(this.room, meta.userId, false);
       // If it is the departed player's turn, afterProgress arms a short
       // auto-pass so the table does not stall on someone who left; either way it

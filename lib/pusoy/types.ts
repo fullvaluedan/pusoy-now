@@ -49,6 +49,9 @@ export interface HandState {
   currentPlayerIndex: number;     // whose turn
   leadPlayerIndex: number;        // who led the current trick
   leadCombo: PlayedCombo | null;  // null = opening play
+  // Id of the card the very first play of the hand MUST contain (3 of clubs,
+  // or the lowest dealt card when 3C is dead). Absent once the hand is under way.
+  openingCardId?: string;
   lastPlay: { playerIndex: number; combo: PlayedCombo } | null;
   passed: number[];               // indexes that passed this trick
   finishedOrder: number[];        // indexes in the order they emptied
@@ -98,6 +101,8 @@ export interface BotContext {
   handSizes?: number[];
   // The seat the bot is sitting in, so it can ignore itself in `handSizes`.
   seat?: number;
+  // Card the opening play must contain (see HandState.openingCardId).
+  openingCardId?: string;
 }
 
 export interface BotOptions {

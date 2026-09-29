@@ -9,7 +9,7 @@ import type {
   RoundAction,
 } from './types';
 import { canPlay, detectCombo } from './combo';
-import { lowestCardHolder } from './deck';
+import { lowestCardHolder, lowestCardId } from './deck';
 
 export const TURN_MS = 15_000;
 // Sentinel: when a HandState is created with turnMs=null, the UI should not
@@ -45,6 +45,7 @@ export function newHand(
       opener = lowestCardHolder(hands);
     }
   }
+  const openingCardId = hands[opener].some((c) => c.id === lowestCardId(hands)) ? lowestCardId(hands) : undefined;
   const turnMs = opts.turnMs === undefined ? TURN_MS : opts.turnMs;
   const now = Date.now();
   return {
@@ -54,6 +55,7 @@ export function newHand(
     currentPlayerIndex: opener,
     leadPlayerIndex: opener,
     leadCombo: null,
+    ...(openingCardId ? { openingCardId } : {}),
     lastPlay: null,
     passed: [],
     finishedOrder: [],
@@ -93,6 +95,9 @@ export function applyAction(
   } else {
     const combo = detectCombo(action.combo.cards);
     if (!combo) throw new Error('illegal combo');
+    if (state.leadCombo === null && state.openingCardId && !combo.cards.some((c) => c.id === state.openingCardId)) {
+      throw new Error('opening play must include the 3 of clubs');
+    }
     if (!canPlay(combo, state.leadCombo)) {
       throw new Error('combo does not beat lead');
     }
@@ -104,6 +109,7 @@ export function applyAction(
       remaining.splice(i, 1);
     }
     next.leadCombo = combo;
+    delete next.openingCardId;
     next.lastPlay = { playerIndex, combo };
     if (remaining.length === 0) {
       // player just emptied their hand — they finish the hand
@@ -113,49 +119,7 @@ export function applyAction(
     }
   }
 
-  // advance turn
-  const n = state.playerCount;
-  const seats = Array.from({ length: n }, (_, i) => i);
-  const aliveIndexes = seats.filter(
-    (i) => !next.finishedOrder.includes(i) && !next.passed.includes(i),
-  );
-
-  if (aliveIndexes.length === 0) {
-    // everyone is either finished or passed. trick is over. The new lead is the
-    // player who played the winning card (lastPlay.playerIndex) — unless they
-    // themselves just finished, in which case pick the next alive (i.e. with
-    // cards) player.
-    if (next.finishedOrder.length === n) {
-      // whole hand is done — caller should detect this via isHandOver.
-      next.leadCombo = null;
-      next.lastPlay = null;
-      next.passed = [];
-      next.currentPlayerIndex = 0;
-      next.leadPlayerIndex = 0;
-    } else {
-      // some players still have cards. lead the new trick with whoever holds cards.
-      next.leadCombo = null;
-      next.lastPlay = null;
-      next.passed = [];
-      // pick the lowest-index player still holding cards
-      const holders = seats.filter((i) => !next.finishedOrder.includes(i));
-      next.leadPlayerIndex = holders[0];
-      next.currentPlayerIndex = holders[0];
-    }
-  } else if (aliveIndexes.length === 1) {
-    // one player still has cards; everyone else either finished or passed.
-    // the trick is over. the lone alive player leads the next trick.
-    next.leadCombo = null;
-    next.lastPlay = null;
-    next.passed = [];
-    next.leadPlayerIndex = aliveIndexes[0];
-    next.currentPlayerIndex = aliveIndexes[0];
-  } else {
-    // 2+ alive. If the current player just played, rotate to next alive.
-    let i = (next.currentPlayerIndex + 1) % n;
-    while (aliveIndexes.indexOf(i) < 0) i = (i + 1) % n;
-    next.currentPlayerIndex = i;
-  }
+  resolveTurn(next, playerIndex);
 
   const now = Date.now();
   next.turnStartedAt = now;
@@ -163,63 +127,61 @@ export function applyAction(
   return next;
 }
 
-// Auto-action for a player whose turn has timed out.
+// Auto-action for a player whose turn has timed out (a plain pass; callers
+// must never time out an opening/leading seat -- that seat has to play, see
+// roomLogic.timeoutCurrent).
 export function applyTimeout(state: HandState, playerIndex: number): HandState {
   if (state.currentPlayerIndex !== playerIndex) return state;
-  const passed = state.passed.slice();
-  if (!passed.includes(playerIndex)) passed.push(playerIndex);
-
-  const n = state.playerCount;
-  const seats = Array.from({ length: n }, (_, i) => i);
-  const alive = seats.filter(
-    (i) => !state.finishedOrder.includes(i) && !passed.includes(i),
-  );
-  if (alive.length === 0) {
-    // everyone finished or passed.
-    const holders = seats.filter((i) => !state.finishedOrder.includes(i));
-    const next: HandState = {
-      ...state,
-      passed,
-      leadCombo: null,
-      lastPlay: null,
-    };
-    if (holders.length === 0) {
-      // whole hand done
-      next.currentPlayerIndex = 0;
-      next.leadPlayerIndex = 0;
-    } else {
-      next.leadPlayerIndex = holders[0];
-      next.currentPlayerIndex = holders[0];
-    }
-    const now = Date.now();
-    next.turnStartedAt = now;
-    next.turnDeadline = state.turnMs == null ? null : now + state.turnMs;
-    return next;
-  }
-  if (alive.length === 1) {
-    const next: HandState = {
-      ...state,
-      passed,
-      leadCombo: null,
-      lastPlay: null,
-    };
-    next.leadPlayerIndex = alive[0];
-    next.currentPlayerIndex = alive[0];
-    const now = Date.now();
-    next.turnStartedAt = now;
-    next.turnDeadline = state.turnMs == null ? null : now + state.turnMs;
-    return next;
-  }
-  let i = (playerIndex + 1) % n;
-  while (alive.indexOf(i) < 0) i = (i + 1) % n;
+  const next: HandState = { ...state, passed: state.passed.slice() };
+  if (!next.passed.includes(playerIndex)) next.passed.push(playerIndex);
+  resolveTurn(next, playerIndex);
   const now = Date.now();
-  return {
-    ...state,
-    passed,
-    currentPlayerIndex: i,
-    turnStartedAt: now,
-    turnDeadline: state.turnMs == null ? null : now + state.turnMs,
-  };
+  next.turnStartedAt = now;
+  next.turnDeadline = next.turnMs == null ? null : now + next.turnMs;
+  return next;
+}
+
+// Decide who acts next after `actor` played or passed (mutates `next`).
+//  - The trick is over when nobody who could still answer remains: everyone else
+//    has passed or gone out. The trick winner (last player to play) then leads
+//    the next trick; if the winner just went out, the next seat clockwise that
+//    still holds cards leads.
+//  - Otherwise play rotates clockwise to the next seat still in the trick.
+function resolveTurn(next: HandState, actor: number): void {
+  const n = next.playerCount;
+  const finished = (i: number) => next.finishedOrder.includes(i);
+  const alive = Array.from({ length: n }, (_, i) => i).filter(
+    (i) => !finished(i) && !next.passed.includes(i),
+  );
+  const winner = next.lastPlay ? next.lastPlay.playerIndex : null;
+
+  if (next.finishedOrder.length === n) {
+    next.leadCombo = null;
+    next.lastPlay = null;
+    next.passed = [];
+    next.currentPlayerIndex = 0;
+    next.leadPlayerIndex = 0;
+    return;
+  }
+  const trickOver = alive.length === 0 || (alive.length === 1 && alive[0] === winner);
+  if (trickOver) {
+    let leader: number;
+    if (winner !== null && !finished(winner)) {
+      leader = winner;
+    } else {
+      leader = (winner ?? actor);
+      do leader = (leader + 1) % n; while (finished(leader));
+    }
+    next.leadCombo = null;
+    next.lastPlay = null;
+    next.passed = [];
+    next.leadPlayerIndex = leader;
+    next.currentPlayerIndex = leader;
+    return;
+  }
+  let i = (actor + 1) % n;
+  while (alive.indexOf(i) < 0) i = (i + 1) % n;
+  next.currentPlayerIndex = i;
 }
 
 // Hand is over when 3 of 4 players have emptied (the 4th is the "loser" and their

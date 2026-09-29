@@ -17,18 +17,16 @@
 //
 // The guest "Playing as X" line + sign-in nudge that used to live here moved
 // to the Profile tab (U3) -- that is now the one place identity/settings
-// links live. The post-sign-in consent prompt (Round 6 U3) stays: it is rare
-// and dismissible, and is allowed to exceed the viewport on the odd render
-// where it shows.
-import { useCallback, useEffect, useRef, useState } from 'react';
+// links live. Marketing-email opt-in is NOT asked here: it lives as a toggle
+// under Settings > Notifications, not in the main hub.
+import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { PresenceChip } from '../../components/PresenceChip';
-import { Button, Card, FeltHero, IconTile, ScreenContainer } from '../../components/ui';
+import { Button, FeltHero, IconTile, ScreenContainer } from '../../components/ui';
 import { colors, radii, spacing, typography } from '../../lib/theme';
 import { useAuth } from '../../lib/auth';
 import { getLocalGuestName } from '../../lib/guest';
-import { apiUrl, authClient } from '../../lib/authClient';
 import { usePresence } from '../../lib/presence';
 import { loadStats } from '../../lib/stats';
 import { resolveHomeStatTiles, type HomeStatTiles } from '../../lib/homeStats';
@@ -53,7 +51,7 @@ const LOGO_SIZE = 44;
 export default function Home() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { session, isAnonymous, profile, user } = useAuth();
+  const { session, profile, user } = useAuth();
   const { count: onlineCount } = usePresence();
 
   const contentWidth = Math.min(width - spacing.lg * 2, MAX_CONTENT_WIDTH);
@@ -95,35 +93,6 @@ export default function Home() {
       };
     }, []),
   );
-
-  // One-time post-sign-in consent prompt (Round 6 U3): social-login users
-  // never see the signup checkbox, so on the first authenticated home render
-  // check whether they have a consent row at all. checkedRef guards this to
-  // once per signed-in session (and resets on sign-out) so it never re-fires
-  // on every render, and either answer POSTs a row so the prompt never
-  // repeats for this account. Anonymous sessions never see this at all (R5):
-  // a guest has not agreed to anything yet, so there is nothing to ask.
-  const [showConsentPrompt, setShowConsentPrompt] = useState(false);
-  const checkedConsentRef = useRef(false);
-
-  useEffect(() => {
-    if (!session || isAnonymous) {
-      checkedConsentRef.current = false;
-      setShowConsentPrompt(false);
-      return;
-    }
-    if (checkedConsentRef.current) return;
-    checkedConsentRef.current = true;
-    (async () => {
-      const { data } = await authClient.$fetch<{ consent: unknown | null }>(apiUrl('/api/consent'));
-      if (data && data.consent === null) setShowConsentPrompt(true);
-    })();
-  }, [session, isAnonymous]);
-
-  async function answerConsentPrompt(optIn: boolean) {
-    setShowConsentPrompt(false);
-    void authClient.$fetch(apiUrl('/api/consent'), { method: 'POST', body: { optIn, source: 'prompt' } });
-  }
 
   // Saved bot difficulty (Round 9 U2), reloaded on every focus so a change
   // made on the Settings screen is picked up the next time Home is shown --
@@ -259,21 +228,6 @@ export default function Home() {
           onPress={() => router.push('/how-to-play')}
           style={styles.howToPlayBtn}
         />
-
-        {showConsentPrompt ? (
-          <Card style={styles.consentCard}>
-            <Text style={styles.consentText}>Want game updates by email?</Text>
-            <View style={styles.consentRow}>
-              <Button
-                title="No thanks"
-                variant="ghost"
-                onPress={() => void answerConsentPrompt(false)}
-                style={styles.consentBtn}
-              />
-              <Button title="Yes" variant="secondary" onPress={() => void answerConsentPrompt(true)} style={styles.consentBtn} />
-            </View>
-          </Card>
-        ) : null}
       </View>
     </ScreenContainer>
   );
@@ -363,8 +317,4 @@ const styles = StyleSheet.create({
   pickerBtnText: { fontSize: 14, letterSpacing: 0 },
   // Chunky secondary row, not a bare underlined link (Round 10 U5).
   howToPlayBtn: { width: '100%' },
-  consentCard: { marginTop: spacing.md, gap: spacing.sm },
-  consentText: { ...typography.bodyBold, color: colors.textPrimary },
-  consentRow: { flexDirection: 'row', gap: spacing.sm },
-  consentBtn: { flex: 1 },
 });

@@ -252,6 +252,7 @@ function LiveTable({
   const currentSeat = hs?.currentPlayerIndex ?? null;
   const isMyTurn = hs != null && yourSeat != null && currentSeat === yourSeat;
   const lead = hs?.leadCombo ?? null;
+  const openingCardId = hs?.openingCardId;
 
   const [selected, setSelected] = useState<CardT[]>([]);
   const [sortMode, setSortMode] = useState<SortMode | null>(null);
@@ -322,8 +323,8 @@ function LiveTable({
   // Computed from the server hand (same set as handOrder, canonical order).
   const legalPlays = useMemo(() => {
     if (!isMyTurn || !serverHand) return null;
-    return findLegalPlays(serverHand, lead);
-  }, [isMyTurn, serverHand, lead]);
+    return findLegalPlays(serverHand, lead, openingCardId);
+  }, [isMyTurn, serverHand, lead, openingCardId]);
 
   // Cards that can be part of a legal play. Selection-aware: once cards are
   // selected, only plays that CONTAIN the whole selection keep cards lit.
@@ -392,7 +393,7 @@ function LiveTable({
   }, [wantAutoPass, turnKey]);
 
   const selCombo = selected.length ? detectCombo(selected) : null;
-  const selLegal = !!selCombo && canPlay(selCombo, lead);
+  const selLegal = !!selCombo && canPlay(selCombo, lead, openingCardId);
   const handCount = handOrder.length;
   const selFeedback =
     selected.length === 0
@@ -411,7 +412,7 @@ function LiveTable({
 
   const doPlay = (cards: CardT[]) => {
     const combo = detectCombo(cards);
-    if (!combo || !canPlay(combo, lead)) return;
+    if (!combo || !canPlay(combo, lead, openingCardId)) return;
     onPlay({ ...combo, cards } as PlayedCombo);
     setSelected([]);
   };
@@ -430,8 +431,8 @@ function LiveTable({
       setLocalError('Not a legal combo');
       return;
     }
-    if (!canPlay(combo, lead)) {
-      setLocalError('That combo does not beat the lead');
+    if (!canPlay(combo, lead, openingCardId)) {
+      setLocalError(lead === null ? 'Opening play must include the 3 of clubs' : 'That combo does not beat the lead');
       return;
     }
     onPlay({ ...combo, cards: selected } as PlayedCombo);
@@ -523,7 +524,7 @@ function LiveTable({
       }
     } else if (lead.length === 1) {
       const single = detectCombo([c]);
-      if (single && canPlay(single, lead)) cards = [c];
+      if (single && canPlay(single, lead, openingCardId)) cards = [c];
     } else if (lead.length === 2) {
       const pairs = (legalPlays ?? []).filter(
         (p) => p.length === 2 && p.cards[0].rank === c.rank,

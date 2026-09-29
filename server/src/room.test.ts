@@ -152,7 +152,8 @@ function main() {
     ok('opponents appear only as counts', view1.players.every((p) => typeof p.handCount === 'number'));
     // Every card seat 0 holds (all private, nothing played yet) must be absent
     // from seat 1's view.
-    const json = JSON.stringify(view1);
+    // openingCardId is public by design (the opener is visible to everyone).
+    const json = JSON.stringify({ ...view1, handState: { ...view1.handState, openingCardId: undefined } });
     const seat0Leaks = r.hands![0].filter((card) => json.includes(card.id));
     ok('none of seat 0 cards appear in seat 1 view', seat0Leaks.length === 0, seat0Leaks.map((c) => c.id));
   }
@@ -205,7 +206,7 @@ function main() {
       const choice = botChoose(hand, r.handState!.leadCombo, {
         level: 'normal',
         rng,
-        context: { seat, playedCards: r.playedCards, handSizes: r.hands!.map((h) => h.length) },
+        context: { seat, openingCardId: r.handState!.openingCardId, playedCards: r.playedCards, handSizes: r.hands!.map((h) => h.length) },
       });
       const action: RoundAction = choice ? { kind: 'play', combo: choice } : { kind: 'pass' };
       const res = applySeatAction(r, seat, action);
@@ -324,7 +325,7 @@ function main() {
         const choice = botChoose(hand, r.handState!.leadCombo, {
           level: 'normal',
           rng,
-          context: { seat, playedCards: r.playedCards, handSizes: r.hands!.map((h) => h.length) },
+          context: { seat, openingCardId: r.handState!.openingCardId, playedCards: r.playedCards, handSizes: r.hands!.map((h) => h.length) },
         });
         applySeatAction(r, seat, choice ? { kind: 'play', combo: choice } : { kind: 'pass' });
       }
@@ -408,12 +409,14 @@ function main() {
     setConnected(r, 'friend-1', false);
     ok('all humans gone is deserted', allHumansDisconnected(r) === true);
 
-    // Livelock witness: with both humans disconnected the auto path only ever
-    // passes; the leader never sheds a card no matter how many steps run.
+    // A disconnected leader can't pass on an empty table (that would let the
+    // next seat skip the 3-of-clubs opening): the timeout path plays its forced
+    // minimum instead, so the opening card is always the first play.
     const cardsBefore = r.hands![0].length + r.hands![1].length;
-    for (let i = 0; i < 50; i++) stepAutoSeat(r, makeRng(i + 1));
+    const opening = r.handState!.openingCardId;
+    stepAutoSeat(r, makeRng(1));
     const cardsAfter = r.hands![0].length + r.hands![1].length;
-    ok('a deserted hand never sheds cards (the livelock)', cardsBefore === cardsAfter && r.phase === 'playing');
+    ok('a disconnected opener plays the opening card instead of passing', cardsAfter === cardsBefore - 1 && !!opening && r.playedCards[0]?.id === opening && r.phase === 'playing');
 
     // Rejoin flips the pause condition off.
     setConnected(r, 'host-1', true);

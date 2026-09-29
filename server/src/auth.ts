@@ -13,6 +13,7 @@
 import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
 import { anonymous, captcha } from 'better-auth/plugins';
+import { expo } from '@better-auth/expo';
 import { D1Dialect } from 'kysely-d1';
 import { sendAuthEmail } from './email';
 import { generateGuestName } from './guest';
@@ -86,7 +87,14 @@ export function trustedOriginsFor(env: Env): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  return [APP_SCHEME, APPLE_ORIGIN, ...DEV_ORIGINS, ...extra];
+  // Localhost dev origins are trusted ONLY in local dev. In production
+  // BETTER_AUTH_URL is set (it is unset under `wrangler dev`), so we drop them:
+  // the CORS layer reflects these same origins with credentials:true and cookies
+  // are SameSite=none, so trusting localhost in prod would let any content a
+  // victim runs on one of those local ports make credentialed calls to the live
+  // API as the logged-in user.
+  const devOrigins = env.BETTER_AUTH_URL ? [] : DEV_ORIGINS;
+  return [APP_SCHEME, APPLE_ORIGIN, ...devOrigins, ...extra];
 }
 
 // Captcha is only wired when a Turnstile secret is present. Without it the
@@ -125,6 +133,15 @@ export function authOptions(env: Env): BetterAuthOptions {
     // before better-auth deletes the anonymous row; mergeOnLinkSafe never throws
     // so a copy failure cannot break account creation.
     plugins: [
+      // Native (Expo) integration. REQUIRED for the app: the @better-auth/expo
+      // CLIENT plugin sends an `expo-origin` header instead of a browser Origin,
+      // and this SERVER plugin rewrites the request origin from it so native
+      // auth calls (anonymous sign-in, updateUser, social) are recognized as the
+      // trusted prends:// origin and get their session cookie set correctly.
+      // Without it, native sessions did not persist -- every online action minted
+      // a fresh anonymous account (churning guest names, flaky online). No-op for
+      // web requests (they carry a real Origin and no expo-origin header).
+      expo(),
       ...(captchaPlugins(env) ?? []),
       anonymous({
         generateName: async () => generateGuestName(),

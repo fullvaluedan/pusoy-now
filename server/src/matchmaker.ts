@@ -118,12 +118,18 @@ export class Matchmaker extends DurableObject<Env> {
     for (let form = shouldForm(this.queue, now); form; form = shouldForm(this.queue, now)) {
       const players = form.players;
       const code = generateRoomCode();
+      // Remove the matched players from the in-memory queue BEFORE the cross-DO
+      // create() await. A DO's input gate is open across an await, so if we
+      // dequeued only after create() resolved, a concurrently-delivered fetch or
+      // alarm would re-read the still-queued players via shouldForm and form the
+      // SAME match into a second room. Dequeuing synchronously first makes a
+      // concurrent handler see them gone.
+      for (const p of players) dequeueUser(this.queue, p.userId);
       await this.env.GAME_ROOM.getByName(code).create(code, 4, players[0].userId, 'expert', {
         lobbyDeadlineMs: LOBBY_DEADLINE_MS,
         expectedUserIds: players.map((p) => p.userId),
       });
       for (const p of players) {
-        dequeueUser(this.queue, p.userId);
         matched.push(p.userId);
         this.sendTo(p.userId, { type: 'match', code });
         this.closeUser(p.userId);

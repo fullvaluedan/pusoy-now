@@ -10,7 +10,7 @@
 // alarms, and the D1 auto-friend / stats writes around it.
 
 import type { BotLevel, Card, HandState, PlayedCombo, RoundAction, Rng } from '../../lib/pusoy/types';
-import { buildDeck, dealN, shuffle } from '../../lib/pusoy/deck';
+import { RANK_VALUE, SUIT_VALUE, buildDeck, dealN, shuffle } from '../../lib/pusoy/deck';
 import {
   applyAction,
   applyTimeout,
@@ -271,7 +271,7 @@ export function applySeatAction(state: RoomState, seat: number, action: RoundAct
     if (action.kind === 'play') {
       const combo = detectCombo(action.combo.cards);
       if (!combo) return { status: 'error', message: 'illegal combo' };
-      if (!canPlay(combo, state.handState.leadCombo)) {
+      if (!canPlay(combo, state.handState.leadCombo, state.handState.openingCardId)) {
         return { status: 'error', message: 'combo does not beat lead' };
       }
       state.handState = applyAction(state.handState, seat, hand, action);
@@ -360,7 +360,7 @@ export function stepAutoSeat(state: RoomState, rng: Rng = Math.random): AutoStep
     const choice = botChoose(hand, state.handState.leadCombo, {
       level: state.botLevel,
       rng,
-      context: { seat, playedCards: state.playedCards, handSizes: state.hands!.map((h) => h.length) },
+      context: { seat, openingCardId: state.handState.openingCardId, playedCards: state.playedCards, handSizes: state.hands!.map((h) => h.length) },
     });
     const res = applySeatAction(state, seat, choice ? { kind: 'play', combo: choice } : { kind: 'pass' });
     if (res.status === 'error') return { acted: false, finished: false, kind: null };
@@ -388,6 +388,16 @@ export function stepAutoSeat(state: RoomState, rng: Rng = Math.random): AutoStep
 export function timeoutCurrent(state: RoomState): ActionResult {
   if (state.phase !== 'playing' || !state.handState) return { status: 'error', message: 'not playing' };
   const seat = state.handState.currentPlayerIndex;
+  if (state.handState.leadCombo === null && state.hands) {
+    // A seat that is leading can't pass: play its forced minimum instead (the
+    // opening card on the first play, else its lowest single).
+    const hand = state.hands[seat];
+    const want = state.handState.openingCardId;
+    const card =
+      hand.find((c) => c.id === want) ??
+      hand.slice().sort((a, b) => RANK_VALUE[a.rank] - RANK_VALUE[b.rank] || SUIT_VALUE[a.suit] - SUIT_VALUE[b.suit])[0];
+    if (card) return applySeatAction(state, seat, { kind: 'play', combo: detectCombo([card])! });
+  }
   state.handState = applyTimeout(state.handState, seat);
   return maybeFinish(state);
 }

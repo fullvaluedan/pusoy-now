@@ -61,7 +61,17 @@ function normalizeAvatarPref(v: unknown): AvatarPref | undefined {
 function webOrigin(env: Env, requestOrigin: string | undefined): string {
   const trusted = trustedOriginsFor(env).filter((o) => o.startsWith('http'));
   if (requestOrigin && trusted.includes(requestOrigin)) return requestOrigin;
-  return trusted.find((o) => !o.includes('localhost')) ?? trusted[0] ?? env.BETTER_AUTH_URL ?? '';
+  // Native callers send `expo-origin` (not Origin), so requestOrigin is
+  // undefined here and we fall through. Exclude localhost AND appleid.apple.com
+  // (the latter is trusted only for Apple's form_post callback, NOT a web app
+  // origin) -- otherwise room share links came out as
+  // "https://appleid.apple.com/join/CODE" (dead links). What remains is the real
+  // web app origin (prends.app).
+  return (
+    trusted.find((o) => !o.includes('localhost') && !o.includes('appleid.apple.com')) ??
+    env.BETTER_AUTH_URL ??
+    ''
+  );
 }
 
 // Reflect only trusted origins across the whole API (auth AND the custom

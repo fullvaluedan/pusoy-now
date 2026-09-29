@@ -28,6 +28,7 @@ import {
   useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   PlayingCard,
   CARD_WIDTH,
@@ -119,6 +120,13 @@ export function DealingAnimation({
   // This keeps the seats and the in-flight card inside the panel instead of
   // flinging them to window corners (the old Dimensions.get('window') defect).
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // The accumulating hand fan is anchored with an absolute `bottom` inside the
+  // overlay, which (unlike the live HandRow, a flex child of the table's
+  // SafeAreaView) does NOT respect the bottom safe-area inset -- so on a device
+  // with a gesture bar the deal fan sits `insets.bottom` px lower than the live
+  // hand, and the cards jump up when the deal ends. Adding insets.bottom to the
+  // fan's bottom cancels that. On web insets.bottom is 0, so nothing changes.
+  const insets = useSafeAreaInsets();
   // Same compact-mode budget app/game-local.tsx derives the live table's
   // `bottom` section from, so the accumulating hand's bottom offset (below)
   // matches whichever layout (roomy or compact) the live HandRow will render
@@ -289,7 +297,7 @@ export function DealingAnimation({
           styles.dealHandFan,
           {
             height: HAND_FAN_CONTAINER_HEIGHT,
-            bottom: compact ? HAND_FAN_BOTTOM_COMPACT : HAND_FAN_BOTTOM,
+            bottom: (compact ? HAND_FAN_BOTTOM_COMPACT : HAND_FAN_BOTTOM) + insets.bottom,
           },
         ]}
       >

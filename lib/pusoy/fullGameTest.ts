@@ -47,7 +47,7 @@ function simulateHand(levels: BotLevel[], rng: Rng): number[] | null {
     const choice = botChoose(hand, hs.leadCombo, {
       level: levels[seat],
       rng,
-      context: { seat, playedCards, handSizes: hands.map((h) => h.length) },
+      context: { seat, openingCardId: hs.openingCardId, playedCards, handSizes: hands.map((h) => h.length) },
     });
     if (choice) {
       hs = applyAction(hs, seat, hand, { kind: 'play', combo: choice });
@@ -78,7 +78,7 @@ while (!isHandOver(hs) && iter < maxIter) {
   const seat = hs.currentPlayerIndex;
   if (hs.finishedOrder.includes(seat)) break;
   const hand = hands[seat];
-  const choice = botChoose(hand, hs.leadCombo, { level: 'normal', rng: gameRng });
+  const choice = botChoose(hand, hs.leadCombo, { level: 'normal', rng: gameRng, context: { openingCardId: hs.openingCardId } });
   try {
     if (choice) {
       hs = applyAction(hs, seat, hand, { kind: 'play', combo: choice });
@@ -199,7 +199,7 @@ function simulateHandN(n: number, level: BotLevel, rng: Rng): number[] | null {
     const choice = botChoose(hand, hs.leadCombo, {
       level,
       rng,
-      context: { seat, playedCards, handSizes: hands.map((h) => h.length) },
+      context: { seat, openingCardId: hs.openingCardId, playedCards, handSizes: hands.map((h) => h.length) },
     });
     if (choice) {
       hs = applyAction(hs, seat, hand, { kind: 'play', combo: choice });

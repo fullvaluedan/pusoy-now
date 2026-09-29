@@ -11,7 +11,7 @@ export default function Privacy() {
   return (
     <ScreenContainer scroll>
       <CompactHeader title="Privacy Policy" />
-      <Text style={styles.date}>Effective 2026-07-11</Text>
+      <Text style={styles.date}>Effective 2026-09-29</Text>
 
       <Card style={styles.card}>
         <Text style={styles.sectionTitle}>What we collect</Text>
@@ -68,15 +68,16 @@ export default function Privacy() {
       </Card>
 
       <Card style={styles.card}>
-        <Text style={styles.sectionTitle}>What we do NOT do</Text>
-        <Text style={styles.bulletList}>
-          - No ads or ad networks
+        <Text style={styles.sectionTitle}>Advertising</Text>
+        <Text style={styles.body}>
+          The mobile apps show banner ads served by Google AdMob. AdMob may collect and use your device's advertising ID, IP address, and general device and usage information to show and measure ads. In regions such as the EU and UK we ask for your consent first, and you can change your choice at any time. You can reset or opt out of personalized ads in your device's settings (Android: Settings → Privacy → Ads; iOS: Settings → Privacy & Security → Tracking). Learn more at policies.google.com/technologies/ads.
         </Text>
+        <Text style={styles.sectionTitle}>What we do NOT do</Text>
         <Text style={styles.bulletList}>
           - No tracking pixels or analytics for marketing
         </Text>
         <Text style={styles.bulletList}>
-          - No selling or sharing your data with third parties
+          - We do not sell your personal data
         </Text>
       </Card>
 

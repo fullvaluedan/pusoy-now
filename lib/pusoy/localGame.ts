@@ -175,7 +175,7 @@ export function humanAct(
     if (!cards) throw new Error('play action requires cards');
     const combo = detectCombo(cards);
     if (!combo) throw new Error('illegal combo');
-    if (!canPlay(combo, game.handState.leadCombo)) {
+    if (!canPlay(combo, game.handState.leadCombo, game.handState.openingCardId)) {
       throw new Error('combo does not beat lead');
     }
   }
@@ -355,6 +355,7 @@ function advanceSeat(game: LocalGame, seat: number): void {
     level: game.level,
     context: {
       seat,
+      openingCardId: game.handState.openingCardId,
       playedCards: game.playedCards,
       handSizes: game.hands.map((h) => h.length),
     },

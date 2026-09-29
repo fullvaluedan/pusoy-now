@@ -101,7 +101,7 @@ function PlayingCardComponent({ card, faceDown, small, selected, dimmed, tiltDeg
       <View
         style={[
           cardBackStyle(w, h),
-          selected && { borderColor: colors.gold, borderWidth: 2, transform: [{ translateY: -10 }] },
+          selected && { borderColor: colors.gold, borderWidth: 3, transform: [{ translateY: -20 }] },
           tiltDeg !== 0 && { transform: [{ rotate: `${tiltDeg}deg` }, { translateY: -10 }] },
         ]}
       >
@@ -118,7 +118,10 @@ function PlayingCardComponent({ card, faceDown, small, selected, dimmed, tiltDeg
     <View
       style={[
         cardFaceStyle(w, h),
-        selected && { borderColor: colors.gold, borderWidth: 2, transform: [{ translateY: -16 }] },
+        // Selected reads unmistakably: a bolder gold border and a bigger lift.
+        // HandRow also raises a selected card's zIndex above its neighbors so
+        // this lift is never hidden under the next card in the fan.
+        selected && { borderColor: colors.gold, borderWidth: 3, transform: [{ translateY: -26 }] },
         tiltDeg !== 0 && { transform: [{ rotate: `${tiltDeg}deg` }, { translateY: -10 }] },
       ]}
     >

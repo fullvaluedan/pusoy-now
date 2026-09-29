@@ -33,8 +33,19 @@ export function sanitizeTotals(input: unknown): StatTotals {
 // equal/lower total is ignored) and no bucket may go backwards, since
 // cumulative totals only ever grow.
 export function shouldApplyStats(prev: StatTotals | null, next: StatTotals): boolean {
+  // Internal consistency (applies to the FIRST write too): every counted game
+  // ends in exactly one placement, so the placement buckets can never sum to
+  // MORE than the games played. Without this, a forged push like
+  // {games: prev+1, firsts: 1_000_000} passed the monotonic checks below and
+  // permanently topped the ranking with a win-rate > 1. (<= not ==, since an
+  // abandoned game can advance `games` without recording a placement.)
+  if (next.firsts + next.seconds + next.thirds + next.fourths > next.games) return false;
   if (!prev) return true;
   if (next.games <= prev.games) return false;
+  // Per-push sanity: the buckets that grew cannot have grown by more than the
+  // games that were added, so a single sync can't inject a huge placement jump.
+  if (next.firsts + next.seconds + next.thirds + next.fourths - (prev.firsts + prev.seconds + prev.thirds + prev.fourths) > next.games - prev.games)
+    return false;
   return (
     next.firsts >= prev.firsts &&
     next.seconds >= prev.seconds &&

@@ -191,7 +191,7 @@ export default function LocalGameScreen() {
     if (!game || game.phase !== 'playing') return null;
     const seat = findHumanSeat(game);
     if (game.handState.currentPlayerIndex !== seat) return null;
-    return findLegalPlays(game.hands[seat], game.handState.leadCombo);
+    return findLegalPlays(game.hands[seat], game.handState.leadCombo, game.handState.openingCardId);
     // `game` is mutated in place, so `tick` is what marks it dirty.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game, tick]);
@@ -429,6 +429,7 @@ export default function LocalGameScreen() {
   const currentSeat = game.handState.currentPlayerIndex;
   const isMyTurn = currentSeat === humanSeat;
   const lead = game.handState.leadCombo;
+  const openingCardId = game.handState.openingCardId;
   const lastPlay = game.trickHistory[0];
 
   // `legalPlays` (memoized above) is non-null exactly when it is our turn.
@@ -454,7 +455,7 @@ export default function LocalGameScreen() {
   }
 
   const selCombo = selected.length ? detectCombo(selected) : null;
-  const selLegal = !!selCombo && canPlay(selCombo, lead);
+  const selLegal = !!selCombo && canPlay(selCombo, lead, openingCardId);
   const selFeedback = selected.length === 0
     ? `${myHand.length} cards`
     : !selCombo ? 'Not a combo'
@@ -472,8 +473,8 @@ export default function LocalGameScreen() {
       setError('Not a legal combo');
       return;
     }
-    if (!canPlay(combo, lead)) {
-      setError('That combo does not beat the lead');
+    if (!canPlay(combo, lead, openingCardId)) {
+      setError(lead === null ? 'Opening play must include the 3 of clubs' : 'That combo does not beat the lead');
       return;
     }
     try {
@@ -583,7 +584,7 @@ export default function LocalGameScreen() {
       }
     } else if (lead.length === 1) {
       const single = detectCombo([c]);
-      if (single && canPlay(single, lead)) cards = [c];
+      if (single && canPlay(single, lead, openingCardId)) cards = [c];
     } else if (lead.length === 2) {
       const pairs = (legalPlays ?? []).filter(
         (p) => p.length === 2 && p.cards[0].rank === c.rank,
@@ -601,7 +602,7 @@ export default function LocalGameScreen() {
     }
     if (!cards) return;
     const combo = detectCombo(cards);
-    if (!combo || !canPlay(combo, lead)) return;
+    if (!combo || !canPlay(combo, lead, openingCardId)) return;
     setError(null);
     try {
       humanAct(game, { kind: 'play', combo: { ...combo, cards } as PlayedCombo }, cards);

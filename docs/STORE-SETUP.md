@@ -10,11 +10,11 @@ Every value here is exact and copy-paste ready. Where a field is your choice, it
 | Android package name | app.prends |
 | iOS bundle ID | app.prends |
 | Marketing / display version | 1.0.0 |
-| Android versionCode / iOS build number | 2 |
+| Android versionCode / iOS build number | 3 (Android) / 2 (iOS) |
 | EAS project | @fullvaluedan/prends (id 5978af40-b62c-42c0-ba9b-e4ccfe9e45a3) |
 | Apple Team ID | AR885BVBSK |
 | Apple Sign-in Key ID | M9DB6CL6HK |
-| Android app bundle (.aab) | https://expo.dev/artifacts/eas/ByD7NkdXCkBFEoBo8XXOPGrPA-RUO_Tkqyomq5ue2bQ.aab |
+| Android app bundle (.aab) | versionCode 3 (icon + selection + card-shift fixes): https://expo.dev/artifacts/eas/LHJFhac4zAxpqTqUDzx9esf9bsMZuxIoTUOJeT7TAws.aab |
 | iOS app (.ipa) | https://expo.dev/artifacts/eas/zi5rT_Dwucnx-79H3yq1PlQVMsw8wZTD6WH-C8kS31o.ipa |
 | Privacy policy URL | https://prends.app/privacy |
 | Terms of service URL | https://prends.app/terms |
@@ -62,7 +62,7 @@ Because this is a newer personal developer account, Google requires a Closed tes
 
 ### 3. Store listing (Main store listing)
 - App name: Prends
-- Short description (max 80 chars): `Pusoy Dos card game. Play vs smart bots or friends online. Fast, free, no ads.`
+- Short description (max 80 chars): `Pusoy Dos card game. Play vs smart bots or friends online. Fast and free.`
 - Full description: see STORE-LISTING.md (draft) or write from that.
 - App icon: 512x512 PNG (I can export one from assets/art/app-icon.png at that size if you need it).
 - Feature graphic: 1024x500 PNG (needed; I can generate).
@@ -93,10 +93,14 @@ Copy BOTH SHA-256 certificate fingerprints and send them to me:
 - "Upload key certificate" SHA-256
 I will put both into public/.well-known/assetlinks.json and redeploy so Android App Links (prends.app/join/CODE opening the app) verify.
 
-### 7. Content rating, target audience, ads declaration
-- Content rating questionnaire: it's a card game, no violence/gambling-with-real-money. Answer honestly (likely Everyone / PEGI 3). NOTE: Pusoy Dos is a card game but there is NO real-money gambling - be clear on that question or it mis-rates.
-- Target audience: 13+ (safe default given accounts/social; avoids the "designed for children" extra rules).
-- Ads: declare NO ads (v1 has none).
+### 7. Content rating, target audience, ads declaration - DONE (2026-07-14)
+- Content rating: IARC questionnaire completed, no gambling/violence declared. Result: Everyone (ESRB) / PEGI 3 / 3+ across every authority.
+- Target audience: 13-15, 16-17, 18+ selected (avoids the "designed for children" extra rules given accounts/social features).
+- Ads: "No, my app doesn't contain ads." Advertising ID declaration: "No" (the current build has no ad SDK, so it doesn't request the AD_ID manifest permission - answering "Yes" here would make Google block releases missing that permission).
+- Data safety: collects Email + Name (App functionality, required, not shared) and App activity (App interactions, same terms). Encrypted in transit: Yes. Account creation: username/password + OAuth. Delete account URL: https://prends.app/delete-account.
+- All 11 App content checklist items are complete.
+
+**IMPORTANT for the ads v1.1 update:** the "Contains ads" badge shown on the live Play Store listing is driven directly by the Ads declaration above. The moment an ad SDK ships in a build, flip BOTH declarations together before that build goes live: App content > Ads > "Yes, my app contains ads", and App content > Advertising ID > "Yes" (needed for the AD_ID manifest permission check on Android 13+ targets). Also update Data safety to declare the advertising ID and any data shared with the ad network. Flipping only one of these leaves either a false "no ads" badge or a blocked release.
 
 ---
 
@@ -144,7 +148,7 @@ Prends is a Pusoy Dos (Filipino card game, similar to Big Two) app.
 - Play solo vs AI bots with no account needed (Guest).
 - Sign in (Apple / Google / Facebook / email) to save stats and add friends.
 - Quick Match and Private rooms play online vs other people or bot-filled.
-- No real-money gambling, no ads, no tracking.
+- No real-money gambling, no tracking.
 To test online play, use Quick Match on the Home screen; empty seats fill with bots after ~30s.
 Account deletion: in-app (Profile > Settings > Delete account) and at https://prends.app/delete-account.
 ```

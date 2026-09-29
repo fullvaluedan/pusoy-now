@@ -31,6 +31,9 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "app.prends",
+      "permissions": [
+        "com.google.android.gms.permission.AD_ID"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -57,7 +60,14 @@
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-0754432090717206~9571504692",
+          "iosAppId": "ca-app-pub-0754432090717206~2814524653"
+        }
+      ]
     ],
     "extra": {
       "router": {},

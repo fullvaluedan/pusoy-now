@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
-import { Button, Checkbox, CompactHeader, Field, ScreenContainer } from '../components/ui';
+import { Button, CompactHeader, Field, ScreenContainer } from '../components/ui';
 import { colors, providerBrand, radii, spacing, typography } from '../lib/theme';
 import { useAuth, type SocialProvider } from '../lib/auth';
 import { validateResetEmail, validateSignIn, validateSignUp } from '../lib/authForms';
@@ -79,7 +79,6 @@ export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [marketingConsent, setMarketingConsent] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -157,17 +156,11 @@ export default function SignIn() {
         const res = await signUpEmail({ name, email, password });
         if (res.status === 'error') {
           setError(res.message);
-        } else {
-          if (res.status === 'signed-in') router.replace('/');
+        } else if (res.status === 'signed-in') {
+          router.replace('/');
           // 'verification-pending' flips the whole screen to the pending view.
-          // Fire-and-forget consent capture: this 401s silently if there is no
-          // session yet (verification still pending) - the post-sign-in prompt
-          // on home is the safety net for that case, so signup never blocks on
-          // this call either way.
-          void authClient.$fetch(apiUrl('/api/consent'), {
-            method: 'POST',
-            body: { optIn: marketingConsent, source: 'signup' },
-          });
+          // (Marketing-email opt-in is no longer asked here -- it lives as a
+          // toggle under Settings > Notifications.)
         }
       } finally {
         setBusy(null);
@@ -307,15 +300,6 @@ export default function SignIn() {
         <Text style={styles.guestNotice}>
           Playing as a guest? Your stats come with you when you create an account.
         </Text>
-      ) : null}
-
-      {mode === 'sign-up' ? (
-        <Checkbox
-          checked={marketingConsent}
-          onToggle={setMarketingConsent}
-          label="Email me game updates and events. Unsubscribe anytime."
-          style={styles.consentCheckbox}
-        />
       ) : null}
 
       <Button

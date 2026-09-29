@@ -16,7 +16,7 @@ import { apiUrl, authClient } from '../lib/authClient';
 const HERO_IMG = require('../assets/art/paywall-hero.png');
 const BADGE_IMG = require('../assets/art/premium-badge.png');
 
-const BENEFITS = ['No ads', 'Support development'];
+const BENEFITS = ['Ad-free play', 'Support development'];
 
 export default function Paywall() {
   const router = useRouter();
@@ -68,7 +68,7 @@ export default function Paywall() {
           resizeMode="contain"
           accessibilityLabel="Premium badge"
         />
-        <Text style={styles.price}>$9.99 a year, no ads</Text>
+        <Text style={styles.price}>$9.99 a year, ad-free</Text>
       </View>
 
       <Card style={styles.card}>
